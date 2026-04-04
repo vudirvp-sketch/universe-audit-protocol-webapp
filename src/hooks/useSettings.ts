@@ -1,78 +1,132 @@
-// Settings hook for managing API key in localStorage
+// Settings hook for managing LLM provider and API key in localStorage
 import { create } from 'zustand';
+import type { LLMProvider } from '@/lib/llm-client';
 
-const API_KEY_STORAGE_KEY = 'universe-audit-api-key';
+const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
 
-interface SettingsState {
+export interface AppSettings {
+  provider: LLMProvider;
   apiKey: string | null;
-  isLoaded: boolean;
-  
-  // Actions
-  loadApiKey: () => void;
-  setApiKey: (key: string | null) => void;
-  clearApiKey: () => void;
+  model: string | null;
 }
 
-export const useSettings = create<SettingsState>((set) => ({
+interface SettingsState extends AppSettings {
+  isLoaded: boolean;
+
+  // Actions
+  loadSettings: () => void;
+  setProvider: (provider: LLMProvider) => void;
+  setApiKey: (key: string | null) => void;
+  setModel: (model: string | null) => void;
+  updateSettings: (settings: Partial<AppSettings>) => void;
+  clearSettings: () => void;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  provider: 'zai',
   apiKey: null,
+  model: null,
+};
+
+export const useSettings = create<SettingsState>((set, get) => ({
+  ...DEFAULT_SETTINGS,
   isLoaded: false,
-  
-  loadApiKey: () => {
+
+  loadSettings: () => {
     if (typeof window === 'undefined') return;
-    
+
     try {
-      const storedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-      set({ 
-        apiKey: storedKey || null, 
-        isLoaded: true 
-      });
-    } catch {
-      // localStorage might not be available
-      set({ apiKey: null, isLoaded: true });
-    }
-  },
-  
-  setApiKey: (key: string | null) => {
-    if (typeof window === 'undefined') return;
-    
-    try {
-      if (key) {
-        localStorage.setItem(API_KEY_STORAGE_KEY, key);
+      const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Partial<AppSettings>;
+        set({
+          provider: parsed.provider || DEFAULT_SETTINGS.provider,
+          apiKey: parsed.apiKey || null,
+          model: parsed.model || null,
+          isLoaded: true,
+        });
       } else {
-        localStorage.removeItem(API_KEY_STORAGE_KEY);
+        set({ ...DEFAULT_SETTINGS, isLoaded: true });
       }
-      set({ apiKey: key });
     } catch {
-      // localStorage might not be available
-      console.error('Failed to save API key to localStorage');
+      set({ ...DEFAULT_SETTINGS, isLoaded: true });
     }
   },
-  
-  clearApiKey: () => {
+
+  setProvider: (provider: LLMProvider) => {
+    const state = get();
+    const newSettings = { ...state, provider, model: null }; // Reset model when provider changes
+    saveToStorage(newSettings);
+    set(newSettings);
+  },
+
+  setApiKey: (apiKey: string | null) => {
+    const state = get();
+    const newSettings = { ...state, apiKey };
+    saveToStorage(newSettings);
+    set(newSettings);
+  },
+
+  setModel: (model: string | null) => {
+    const state = get();
+    const newSettings = { ...state, model };
+    saveToStorage(newSettings);
+    set(newSettings);
+  },
+
+  updateSettings: (settings: Partial<AppSettings>) => {
+    const state = get();
+    const newSettings = { ...state, ...settings };
+    saveToStorage(newSettings);
+    set(newSettings);
+  },
+
+  clearSettings: () => {
     if (typeof window === 'undefined') return;
-    
     try {
-      localStorage.removeItem(API_KEY_STORAGE_KEY);
-      set({ apiKey: null });
+      localStorage.removeItem(SETTINGS_STORAGE_KEY);
+      set({ ...DEFAULT_SETTINGS });
     } catch {
-      console.error('Failed to clear API key from localStorage');
+      console.error('Failed to clear settings from localStorage');
     }
   },
 }));
 
-// Hook that auto-loads API key on mount (client-side only)
-export const useApiKey = () => {
-  const { apiKey, isLoaded, loadApiKey, setApiKey, clearApiKey } = useSettings();
-  
+// Helper to save to localStorage
+function saveToStorage(settings: AppSettings) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
+      provider: settings.provider,
+      apiKey: settings.apiKey,
+      model: settings.model,
+    }));
+  } catch {
+    console.error('Failed to save settings to localStorage');
+  }
+}
+
+// Hook that auto-loads settings on mount (client-side only)
+export const useAppSettings = () => {
+  const { provider, apiKey, model, isLoaded, loadSettings, setProvider, setApiKey, setModel, updateSettings, clearSettings } = useSettings();
+
   // Load on first use
   if (!isLoaded && typeof window !== 'undefined') {
-    loadApiKey();
+    loadSettings();
   }
-  
+
   return {
+    provider,
     apiKey,
+    model,
     isLoaded,
+    setProvider,
     setApiKey,
-    clearApiKey,
+    setModel,
+    updateSettings,
+    clearSettings,
   };
 };
+
+// Backwards compatibility alias
+export const useApiKey = useAppSettings;

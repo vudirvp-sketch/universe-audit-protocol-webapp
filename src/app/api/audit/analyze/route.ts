@@ -1,6 +1,6 @@
 // Universe Audit Protocol v10.0 - Full Audit Analysis API
 import { NextRequest, NextResponse } from 'next/server';
-import { getZAIClient } from '@/lib/zai-client';
+import { getLLMClient, type LLMProvider } from '@/lib/llm-client';
 import { 
   AUDIT_SYSTEM_PROMPT,
   getCombinedAnalysisPrompt,
@@ -42,7 +42,9 @@ interface AnalyzeRequest {
   narrative: string;
   mediaType: MediaType;
   authorAnswers?: AuthorProfileAnswers;
+  provider?: LLMProvider | null;
   apiKey?: string | null;
+  model?: string | null;
 }
 
 interface AnalyzeResponse {
@@ -66,7 +68,7 @@ interface AnalyzeResponse {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as AnalyzeRequest;
-    const { narrative, mediaType, authorAnswers, apiKey } = body;
+    const { narrative, mediaType, authorAnswers, provider, apiKey, model } = body;
     
     if (!narrative || typeof narrative !== 'string') {
       return NextResponse.json(
@@ -82,8 +84,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Use provided API key or fall back to environment variable
-    const zai = await getZAIClient(apiKey);
+    // Use provided LLM provider and API key
+    const llm = await getLLMClient(provider, apiKey, model);
     
     // Initialize response object
     const response: AnalyzeResponse = {
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest) {
     };
     
     // Step 1: Determine Audit Mode
-    const modeCompletion = await zai.chat.completions.create({
+    const modeCompletion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: AUDIT_SYSTEM_PROMPT },
         { role: 'user', content: getAuditModePrompt(narrative) }
@@ -129,7 +131,7 @@ export async function POST(request: NextRequest) {
       response.authorProfile = classifyAuthorProfile(authorAnswers);
     } else {
       // Try to infer from narrative
-      const authorCompletion = await zai.chat.completions.create({
+      const authorCompletion = await llm.chat.completions.create({
         messages: [
           { role: 'system', content: 'You analyze author working styles. Return only JSON.' },
           { role: 'user', content: `Based on this narrative style, estimate author profile answers (all 7 questions):\n\n${narrative.slice(0, 2000)}` }
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 3: Extract Skeleton
-    const skeletonCompletion = await zai.chat.completions.create({
+    const skeletonCompletion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: 'You extract narrative structure. Return only JSON.' },
         { role: 'user', content: getSkeletonExtractionPrompt(narrative, mediaType) }
@@ -200,7 +202,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 4: Quick Screening
-    const screeningCompletion = await zai.chat.completions.create({
+    const screeningCompletion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: 'You perform quick narrative screening. Return only JSON.' },
         { role: 'user', content: getScreeningPrompt(narrative) }
@@ -267,7 +269,7 @@ export async function POST(request: NextRequest) {
       .map(i => `${i.id}: ${i.text} [${i.tag}]`)
       .join('\n');
     
-    const l1Completion = await zai.chat.completions.create({
+    const l1Completion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: AUDIT_SYSTEM_PROMPT },
         { role: 'user', content: getL1EvaluationPrompt(narrative, response.skeleton!, mediaType, l1Checklist) }
@@ -324,7 +326,7 @@ export async function POST(request: NextRequest) {
       .map(i => `${i.id}: ${i.text}`)
       .join('\n');
     
-    const l2Completion = await zai.chat.completions.create({
+    const l2Completion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: AUDIT_SYSTEM_PROMPT },
         { role: 'user', content: getL2EvaluationPrompt(narrative, response.skeleton!, response.gateResults.L1!.score, l2Checklist) }
@@ -375,7 +377,7 @@ export async function POST(request: NextRequest) {
     // Step 7: L3 Evaluation (only if L2 passed)
     const griefContext = JSON.stringify(response.griefMatrix, null, 2);
     
-    const l3Completion = await zai.chat.completions.create({
+    const l3Completion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: AUDIT_SYSTEM_PROMPT },
         { role: 'user', content: getL3EvaluationPrompt(narrative, response.skeleton!, response.gateResults.L2!.score, griefContext) }
@@ -428,7 +430,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Step 8: L4 Evaluation (only if L3 passed)
-    const l4Completion = await zai.chat.completions.create({
+    const l4Completion = await llm.chat.completions.create({
       messages: [
         { role: 'system', content: AUDIT_SYSTEM_PROMPT },
         { role: 'user', content: getL4EvaluationPrompt(narrative, response.skeleton!, response.gateResults.L3!.score) }

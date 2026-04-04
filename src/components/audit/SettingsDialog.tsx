@@ -14,58 +14,101 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Settings, Eye, EyeOff, Key, ExternalLink, Check, Trash2 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
+import {
+  LLM_PROVIDERS,
+  AVAILABLE_PROVIDERS,
+  type LLMProvider,
+} from '@/lib/llm-client';
 
 interface SettingsDialogProps {
-  onApiKeyChange?: (key: string | null) => void;
+  onSettingsChange?: (settings: { provider: LLMProvider; apiKey: string | null; model: string | null }) => void;
 }
 
-export function SettingsDialog({ onApiKeyChange }: SettingsDialogProps) {
-  const { apiKey, isLoaded, setApiKey, clearApiKey, loadApiKey } = useSettings();
+export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
+  const { provider, apiKey, model, isLoaded, setProvider, setApiKey, setModel, loadSettings, clearSettings } = useSettings();
   const [open, setOpen] = React.useState(false);
-  const [inputValue, setInputValue] = React.useState('');
+  const [inputKey, setInputKey] = React.useState('');
+  const [inputModel, setInputModel] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
-  // Load API key on mount
+  // Load settings on mount
   React.useEffect(() => {
     if (!isLoaded) {
-      loadApiKey();
+      loadSettings();
     }
-  }, [isLoaded, loadApiKey]);
+  }, [isLoaded, loadSettings]);
 
-  // Sync input with stored key when dialog opens
+  // Sync inputs with stored settings when dialog opens
   React.useEffect(() => {
     if (open) {
-      setInputValue(apiKey || '');
+      setInputKey(apiKey || '');
+      setInputModel(model || '');
       setSaved(false);
     }
-  }, [open, apiKey]);
+  }, [open, apiKey, model]);
+
+  // Update model input when provider changes
+  React.useEffect(() => {
+    if (open) {
+      const defaultModel = LLM_PROVIDERS[provider]?.defaultModel || '';
+      setInputModel(model || defaultModel);
+    }
+  }, [provider, open, model]);
+
+  const handleProviderChange = (newProvider: LLMProvider) => {
+    setProvider(newProvider);
+    const defaultModel = LLM_PROVIDERS[newProvider]?.defaultModel || '';
+    setInputModel(defaultModel);
+    setModel(null);
+  };
 
   const handleSave = () => {
-    const trimmedKey = inputValue.trim();
-    
+    const trimmedKey = inputKey.trim();
+    const trimmedModel = inputModel.trim();
+
     if (trimmedKey) {
       setApiKey(trimmedKey);
-      onApiKeyChange?.(trimmedKey);
     } else {
-      clearApiKey();
-      onApiKeyChange?.(null);
+      setApiKey(null);
     }
-    
+
+    if (trimmedModel) {
+      setModel(trimmedModel);
+    } else {
+      setModel(null);
+    }
+
+    onSettingsChange?.({
+      provider,
+      apiKey: trimmedKey || null,
+      model: trimmedModel || null,
+    });
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
 
   const handleClear = () => {
-    setInputValue('');
-    clearApiKey();
-    onApiKeyChange?.(null);
+    setInputKey('');
+    setInputModel('');
+    clearSettings();
+    onSettingsChange?.({ provider: 'zai', apiKey: null, model: null });
     setSaved(false);
   };
 
   const hasKey = !!apiKey;
+  const currentProvider = LLM_PROVIDERS[provider];
+  const hasFreeTier = ['google', 'groq', 'huggingface', 'openrouter', 'together'].includes(provider);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -74,18 +117,67 @@ export function SettingsDialog({ onApiKeyChange }: SettingsDialogProps) {
           <Settings className="h-5 w-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Settings
+            LLM Settings
           </DialogTitle>
           <DialogDescription>
-            Configure your AI SDK API key for the audit analysis.
+            Choose your AI provider and configure the API key.
           </DialogDescription>
         </DialogHeader>
-        
-        <div className="space-y-4 py-4">
+
+        <div className="space-y-5 py-4">
+          {/* Provider Selection */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              AI Provider
+            </Label>
+            <Select value={provider} onValueChange={(v) => handleProviderChange(v as LLMProvider)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select provider" />
+              </SelectTrigger>
+              <SelectContent className="max-h-[300px]">
+                {AVAILABLE_PROVIDERS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    <div className="flex items-center gap-2">
+                      <span>{p.name}</span>
+                      {p.hasFreeTier && (
+                        <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-1.5 py-0.5 rounded">
+                          FREE
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasFreeTier && (
+              <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                <Zap className="h-3 w-3" />
+                This provider has a free tier!
+              </p>
+            )}
+          </div>
+
+          {/* Model Selection */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              Model
+            </Label>
+            <Input
+              placeholder={currentProvider?.defaultModel || 'model-name'}
+              value={inputModel}
+              onChange={(e) => setInputModel(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Default: {currentProvider?.defaultModel}
+            </p>
+          </div>
+
           {/* API Key Input */}
           <div className="space-y-2">
             <Label htmlFor="api-key" className="flex items-center gap-2">
@@ -96,9 +188,13 @@ export function SettingsDialog({ onApiKeyChange }: SettingsDialogProps) {
               <Input
                 id="api-key"
                 type={showKey ? 'text' : 'password'}
-                placeholder="Enter your API key..."
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                placeholder={
+                  currentProvider?.apiKeyPrefix
+                    ? `${currentProvider.apiKeyPrefix}...`
+                    : 'Enter your API key...'
+                }
+                value={inputKey}
+                onChange={(e) => setInputKey(e.target.value)}
                 className="pr-10"
               />
               <Button
@@ -122,21 +218,118 @@ export function SettingsDialog({ onApiKeyChange }: SettingsDialogProps) {
             <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
               <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               <AlertDescription className="text-green-700 dark:text-green-300 text-sm">
-                API key is configured
+                {currentProvider?.name} API key configured
               </AlertDescription>
             </Alert>
           )}
 
           {/* Instructions */}
-          <div className="rounded-lg bg-muted p-4 space-y-2">
-            <h4 className="text-sm font-medium">How to get your API key:</h4>
-            <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>Sign up for an AI SDK account</li>
-              <li>Navigate to the API keys section in your dashboard</li>
-              <li>Create a new API key and copy it here</li>
-            </ol>
-            <p className="text-xs text-muted-foreground mt-2">
-              Your API key is stored locally in your browser and is never sent to any server except the AI API.
+          <div className="rounded-lg bg-muted p-4 space-y-3">
+            <h4 className="text-sm font-medium">How to get an API key:</h4>
+
+            <div className="text-sm text-muted-foreground space-y-2">
+              {provider === 'google' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Google AI Studio</a></li>
+                  <li>Create a new API key</li>
+                  <li>Free tier: 15 RPM, 1M tokens/day</li>
+                </ol>
+              )}
+
+              {provider === 'groq' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://console.groq.com/keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Groq Console</a></li>
+                  <li>Create an API key (starts with gsk_)</li>
+                  <li>Very fast inference, generous free tier</li>
+                </ol>
+              )}
+
+              {provider === 'openrouter' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">OpenRouter</a></li>
+                  <li>Create an API key</li>
+                  <li>Access to many models, some free</li>
+                </ol>
+              )}
+
+              {provider === 'huggingface' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Hugging Face Settings</a></li>
+                  <li>Create an Access Token</li>
+                  <li>Free inference API (rate limited)</li>
+                </ol>
+              )}
+
+              {provider === 'together' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://api.together.xyz/settings/api-keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Together AI</a></li>
+                  <li>Create an API key</li>
+                  <li>$1 free credit on signup</li>
+                </ol>
+              )}
+
+              {provider === 'openai' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">OpenAI Platform</a></li>
+                  <li>Create an API key (starts with sk-)</li>
+                  <li>Pay-as-you-go pricing</li>
+                </ol>
+              )}
+
+              {provider === 'anthropic' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Anthropic Console</a></li>
+                  <li>Create an API key (starts with sk-ant-)</li>
+                  <li>Pay-as-you-go pricing</li>
+                </ol>
+              )}
+
+              {provider === 'mistral' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://console.mistral.ai/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Mistral Console</a></li>
+                  <li>Create an API key</li>
+                </ol>
+              )}
+
+              {provider === 'deepseek' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://platform.deepseek.com/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">DeepSeek Platform</a></li>
+                  <li>Create an API key</li>
+                  <li>Very competitive pricing</li>
+                </ol>
+              )}
+
+              {provider === 'qwen' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://dashscope.console.aliyun.com/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Alibaba DashScope</a></li>
+                  <li>Create an API key</li>
+                </ol>
+              )}
+
+              {provider === 'kimi' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://platform.moonshot.cn/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Moonshot Platform</a></li>
+                  <li>Create an API key</li>
+                </ol>
+              )}
+
+              {provider === 'xai' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Go to <a href="https://console.x.ai/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">xAI Console</a></li>
+                  <li>Create an API key</li>
+                </ol>
+              )}
+
+              {provider === 'zai' && (
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Contact Z.AI for API access</li>
+                  <li>Enter your API key here</li>
+                </ol>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground pt-2 border-t">
+              Your API key is stored locally in your browser and never shared with third parties.
             </p>
           </div>
         </div>
@@ -145,7 +338,7 @@ export function SettingsDialog({ onApiKeyChange }: SettingsDialogProps) {
           <Button
             variant="outline"
             onClick={handleClear}
-            disabled={!inputValue && !hasKey}
+            disabled={!inputKey && !hasKey}
             className="w-full sm:w-auto"
           >
             <Trash2 className="h-4 w-4 mr-2" />

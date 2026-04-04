@@ -33,6 +33,7 @@ import {
   Key,
 } from 'lucide-react';
 import type { MediaType, AuthorProfileAnswers } from '@/lib/audit/types';
+import type { LLMProvider } from '@/lib/llm-client';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -59,14 +60,14 @@ export default function Home() {
   } = useAuditState();
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
-  const { apiKey, loadApiKey, isLoaded } = useSettings();
+  const { provider, apiKey, model, loadSettings, isLoaded } = useSettings();
 
-  // Load API key on mount
+  // Load settings on mount
   React.useEffect(() => {
     if (!isLoaded) {
-      loadApiKey();
+      loadSettings();
     }
-  }, [isLoaded, loadApiKey]);
+  }, [isLoaded, loadSettings]);
 
   // Toggle theme
   React.useEffect(() => {
@@ -89,12 +90,16 @@ export default function Home() {
           narrative: inputText,
           mediaType,
           authorAnswers,
+          provider,
           apiKey,
+          model,
         } as {
           narrative: string;
           mediaType: MediaType;
           authorAnswers?: AuthorProfileAnswers;
+          provider?: LLMProvider | null;
           apiKey?: string | null;
+          model?: string | null;
         }),
       });
 

@@ -84,3 +84,58 @@ Fix broken API key settings functionality. The user added API key settings UI, b
 ### Build Status
 ✅ TypeScript compilation passed
 ✅ Next.js build successful
+
+---
+## Task ID: multi-provider-support - Super Z
+### Work Task
+Add support for multiple LLM providers (OpenAI, Google Gemini, Mistral, DeepSeek, Qwen, Kimi, Groq, OpenRouter, HuggingFace, Together AI, xAI, Anthropic).
+
+### Solution Implemented
+1. **Created universal LLM client** (`src/lib/llm-client.ts`):
+   - 13 supported providers
+   - Provider-specific API formats (Gemini, HuggingFace, Anthropic)
+   - OpenAI-compatible interface for all
+   - Environment variable fallback support
+
+2. **Updated Settings UI** (`src/components/audit/SettingsDialog.tsx`):
+   - Provider dropdown with FREE tier badges
+   - Model input field
+   - Provider-specific instructions with direct links
+
+3. **Updated state management** (`src/hooks/useSettings.ts`):
+   - Stores provider, apiKey, model
+   - Backward compatible
+
+4. **Updated API routes**:
+   - All 3 routes now accept provider, apiKey, model
+
+### Supported Providers
+| Provider | Free Tier | Default Model |
+|----------|-----------|---------------|
+| Z.AI | ❌ | default |
+| OpenAI | ❌ | gpt-4o-mini |
+| Google Gemini | ✅ | gemini-2.0-flash |
+| Anthropic | ❌ | claude-3-5-sonnet |
+| Mistral AI | ❌ | mistral-large-latest |
+| DeepSeek | ❌ | deepseek-chat |
+| Alibaba Qwen | ❌ | qwen-turbo |
+| Moonshot Kimi | ❌ | moonshot-v1-8k |
+| Groq | ✅ | llama-3.3-70b-versatile |
+| OpenRouter | ✅ | anthropic/claude-3.5-sonnet |
+| Hugging Face | ✅ | meta-llama/Llama-3.2-3B-Instruct |
+| Together AI | ✅ | meta-llama/Llama-3.2-3B-Instruct-Turbo |
+| xAI (Grok) | ❌ | grok-beta |
+
+### Files Changed
+- `src/lib/llm-client.ts` (NEW) - Universal LLM client
+- `src/lib/zai-client.ts` (DEPRECATED) - Replaced by llm-client.ts
+- `src/hooks/useSettings.ts` - Added provider/model storage
+- `src/components/audit/SettingsDialog.tsx` - Provider selection UI
+- `src/app/api/audit/analyze/route.ts` - Multi-provider support
+- `src/app/api/audit/screening/route.ts` - Multi-provider support
+- `src/app/api/audit/skeleton/route.ts` - Multi-provider support
+- `src/app/page.tsx` - Pass provider/model to API
+
+### Build Status
+✅ TypeScript compilation passed
+✅ Next.js build successful

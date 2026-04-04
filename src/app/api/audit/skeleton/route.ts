@@ -1,13 +1,19 @@
 // Universe Audit Protocol v10.0 - Skeleton Extraction API
 import { NextRequest, NextResponse } from 'next/server';
-import { getZAIClient } from '@/lib/zai-client';
+import { getLLMClient, type LLMProvider } from '@/lib/llm-client';
 import { getSkeletonExtractionPrompt } from '@/lib/audit/prompts';
 import type { MediaType, Skeleton, GriefStage } from '@/lib/audit/types';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { narrative, mediaType, apiKey } = body as { narrative: string; mediaType: MediaType; apiKey?: string | null };
+    const { narrative, mediaType, provider, apiKey, model } = body as { 
+      narrative: string; 
+      mediaType: MediaType; 
+      provider?: LLMProvider | null;
+      apiKey?: string | null;
+      model?: string | null;
+    };
     
     if (!narrative || typeof narrative !== 'string') {
       return NextResponse.json(
@@ -23,12 +29,12 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Use provided API key or fall back to environment variable
-    const zai = await getZAIClient(apiKey);
+    // Use provided LLM provider and API key
+    const llm = await getLLMClient(provider, apiKey, model);
     
     const prompt = getSkeletonExtractionPrompt(narrative, mediaType);
     
-    const completion = await zai.chat.completions.create({
+    const completion = await llm.chat.completions.create({
       messages: [
         {
           role: 'system',
