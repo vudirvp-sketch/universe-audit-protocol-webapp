@@ -39,7 +39,7 @@ interface HumanReadableReportProps {
 }
 
 function HumanReadableReport({ report }: HumanReadableReportProps) {
-  const { humanReadable } = report;
+  const { humanReadable, jsonData } = report;
 
   return (
     <ScrollArea className="h-[600px] pr-4">
@@ -239,7 +239,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-4xl font-bold">
-                  {humanReadable.finalScore}/{humanReadable.jsonData.audit_meta.applicable_items}
+                  {humanReadable.finalScore}/{jsonData.audit_meta.applicable_items}
                 </div>
                 <div className="text-lg text-muted-foreground">{humanReadable.finalPercentage}%</div>
               </div>

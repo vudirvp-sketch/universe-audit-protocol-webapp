@@ -1,6 +1,6 @@
 // Universe Audit Protocol v10.0 - Full Audit Analysis API
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import { getZAIClient } from '@/lib/zai-client';
 import { 
   AUDIT_SYSTEM_PROMPT,
   getCombinedAnalysisPrompt,
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Use provided API key or fall back to environment variable
-    const zai = await ZAI.create();
+    const zai = await getZAIClient(apiKey);
     
     // Initialize response object
     const response: AnalyzeResponse = {
@@ -524,10 +524,10 @@ export async function POST(request: NextRequest) {
           confidence: response.authorProfile?.confidence || 'low',
         },
         skeleton: {
-          thematic_law: response.skeleton?.thematicLaw,
-          root_trauma: response.skeleton?.rootTrauma,
-          hamartia: response.skeleton?.hamartia,
-          dominant_grief_stage: response.skeleton?.emotionalEngine,
+          thematic_law: response.skeleton?.thematicLaw || null,
+          root_trauma: response.skeleton?.rootTrauma || null,
+          hamartia: response.skeleton?.hamartia || null,
+          dominant_grief_stage: response.skeleton?.emotionalEngine || null,
         },
         gate_results: {
           L1_score: `${response.gateResults.L1?.score || 0}%`,

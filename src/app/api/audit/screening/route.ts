@@ -1,6 +1,6 @@
 // Universe Audit Protocol v10.0 - Quick Screening API
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import { getZAIClient } from '@/lib/zai-client';
 import { getScreeningPrompt } from '@/lib/audit/prompts';
 import type { ScreeningResult } from '@/lib/audit/types';
 
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Use provided API key or fall back to environment variable
-    const zai = await ZAI.create();
+    const zai = await getZAIClient(apiKey);
     
     const prompt = getScreeningPrompt(narrative);
     

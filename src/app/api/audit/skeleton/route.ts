@@ -1,6 +1,6 @@
 // Universe Audit Protocol v10.0 - Skeleton Extraction API
 import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import { getZAIClient } from '@/lib/zai-client';
 import { getSkeletonExtractionPrompt } from '@/lib/audit/prompts';
 import type { MediaType, Skeleton, GriefStage } from '@/lib/audit/types';
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Use provided API key or fall back to environment variable
-    const zai = await ZAI.create();
+    const zai = await getZAIClient(apiKey);
     
     const prompt = getSkeletonExtractionPrompt(narrative, mediaType);
     

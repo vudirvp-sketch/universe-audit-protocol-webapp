@@ -45,3 +45,42 @@ Successfully implemented a complete Next.js 15 web application for auditing fict
 - Two-pass output: Human-readable markdown + structured JSON
 
 All code passed ESLint validation with no errors.
+
+---
+## Task ID: api-key-fix - Super Z
+### Work Task
+Fix broken API key settings functionality. The user added API key settings UI, but the API routes were not properly using the provided API key.
+
+### Problem Analysis
+1. **Root Cause**: The SDK `z-ai-web-dev-sdk` does NOT support programmatic API key passing. `ZAI.create()` loads config only from file system (`~/.z-ai-config`).
+2. **Symptom**: User could save API key in settings, but it was never used - the SDK ignored it.
+
+### Solution Implemented
+1. **Created custom ZAI client** (`src/lib/zai-client.ts`):
+   - Supports runtime API key via parameter
+   - Falls back to `ZAI_API_KEY` environment variable
+   - Compatible interface with SDK (`chat.completions.create()`)
+
+2. **Updated 3 API routes**:
+   - `src/app/api/audit/analyze/route.ts`
+   - `src/app/api/audit/screening/route.ts`
+   - `src/app/api/audit/skeleton/route.ts`
+   - Changed from `ZAI.create()` to `getZAIClient(apiKey)`
+
+3. **Fixed TypeScript errors**:
+   - `types.ts`: Added `| null` to setter parameters
+   - `ReportDisplay.tsx`: Fixed `jsonData` access
+   - `page.tsx`: Removed redundant `phase !== 'idle'` checks
+
+### Files Changed
+- `src/lib/zai-client.ts` (NEW)
+- `src/app/api/audit/analyze/route.ts`
+- `src/app/api/audit/screening/route.ts`
+- `src/app/api/audit/skeleton/route.ts`
+- `src/lib/audit/types.ts`
+- `src/components/audit/ReportDisplay.tsx`
+- `src/app/page.tsx`
+
+### Build Status
+✅ TypeScript compilation passed
+✅ Next.js build successful

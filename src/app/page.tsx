@@ -242,8 +242,7 @@ export default function Home() {
                 <AuditProgress />
 
                 {/* Quick Stats */}
-                {phase !== 'idle' && (
-                  <Card>
+                <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="text-sm">Configuration</CardTitle>
                     </CardHeader>
@@ -262,11 +261,9 @@ export default function Home() {
                       </div>
                     </CardContent>
                   </Card>
-                )}
 
                 {/* Skeleton Quick View */}
-                {phase !== 'idle' && (
-                  <Button
+                <Button
                     variant="outline"
                     className="w-full"
                     onClick={() => reset()}
@@ -275,7 +272,6 @@ export default function Home() {
                     <RotateCcw className="h-4 w-4 mr-2" />
                     Start New Audit
                   </Button>
-                )}
               </div>
             </ResizablePanel>
 
