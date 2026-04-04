@@ -7,7 +7,7 @@ import type { MediaType, Skeleton, GriefStage } from '@/lib/audit/types';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { narrative, mediaType } = body as { narrative: string; mediaType: MediaType };
+    const { narrative, mediaType, apiKey } = body as { narrative: string; mediaType: MediaType; apiKey?: string | null };
     
     if (!narrative || typeof narrative !== 'string') {
       return NextResponse.json(
@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const zai = await ZAI.create();
+    // Use provided API key or fall back to environment variable
+    const zai = await ZAI.create(apiKey || undefined);
     
     const prompt = getSkeletonExtractionPrompt(narrative, mediaType);
     

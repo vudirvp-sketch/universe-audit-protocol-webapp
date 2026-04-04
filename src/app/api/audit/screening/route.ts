@@ -7,7 +7,7 @@ import type { ScreeningResult } from '@/lib/audit/types';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { narrative } = body as { narrative: string };
+    const { narrative, apiKey } = body as { narrative: string; apiKey?: string | null };
     
     if (!narrative || typeof narrative !== 'string') {
       return NextResponse.json(
@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const zai = await ZAI.create();
+    // Use provided API key or fall back to environment variable
+    const zai = await ZAI.create(apiKey || undefined);
     
     const prompt = getScreeningPrompt(narrative);
     

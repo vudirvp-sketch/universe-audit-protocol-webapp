@@ -42,6 +42,7 @@ interface AnalyzeRequest {
   narrative: string;
   mediaType: MediaType;
   authorAnswers?: AuthorProfileAnswers;
+  apiKey?: string | null;
 }
 
 interface AnalyzeResponse {
@@ -65,7 +66,7 @@ interface AnalyzeResponse {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as AnalyzeRequest;
-    const { narrative, mediaType, authorAnswers } = body;
+    const { narrative, mediaType, authorAnswers, apiKey } = body;
     
     if (!narrative || typeof narrative !== 'string') {
       return NextResponse.json(
@@ -81,7 +82,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const zai = await ZAI.create();
+    // Use provided API key or fall back to environment variable
+    const zai = await ZAI.create(apiKey || undefined);
     
     // Initialize response object
     const response: AnalyzeResponse = {
