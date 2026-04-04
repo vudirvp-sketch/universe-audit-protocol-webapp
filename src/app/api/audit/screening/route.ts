@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Use provided API key or fall back to environment variable
-    const zai = await ZAI.create(apiKey || undefined);
+    const zai = await ZAI.create();
     
     const prompt = getScreeningPrompt(narrative);
     
