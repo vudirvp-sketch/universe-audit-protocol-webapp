@@ -23,6 +23,7 @@ export type AuditPhase =
   | 'L1_evaluation' 
   | 'L2_evaluation' 
   | 'L3_evaluation' 
+  | 'self_audit'      // §13 Self-Audit
   | 'L4_evaluation' 
   | 'complete' 
   | 'failed';
