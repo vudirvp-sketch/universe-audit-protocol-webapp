@@ -5,34 +5,25 @@
  */
 
 import { validateIssue, createIssue } from '../src/lib/audit/issue-schema';
-import type { Issue, Axes } from '../src/lib/audit/types';
+import type { Issue, Axes } from '../src/lib/audit/issue-schema';
 
 describe('Issue Schema Validation', () => {
   const validAxes: Axes = { criticality: 7, risk: 5, time_cost: 4 };
   
   const validPatches = {
     conservative: { 
-      type: 'conservative' as const,
       description: 'Minimal fix', 
       impact: 'Quick resolution',
-      risks: ['Minor risk'],
-      tests: ['Verify fix works'],
-      sideEffects: []
+      sideEffects: ['Minor risk']
     },
     compromise: { 
-      type: 'compromise' as const,
       description: 'Balanced fix', 
       impact: 'Moderate improvement',
-      risks: ['Moderate risk'],
-      tests: ['Verify balance'],
       sideEffects: ['Related changes needed']
     },
     radical: { 
-      type: 'radical' as const,
       description: 'Complete restructure', 
       impact: 'Full resolution',
-      risks: ['Major risk', 'Breaking changes'],
-      tests: ['Full regression test'],
       sideEffects: ['Wide-ranging impact']
     }
   };
@@ -45,15 +36,20 @@ describe('Issue Schema Validation', () => {
         severity: 'critical',
         axes: validAxes,
         diagnosis: 'Critical structural issue detected',
-        patches: validPatches,
-        recommended: 'compromise'
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'compromise',
+        reasoning: 'Test reasoning'
       };
 
       const result = validateIssue(validIssue);
 
-      expect(result).not.toBeNull();
-      expect(result?.id).toBe('ISSUE-01');
-      expect(result?.valid).toBe(true);
+      expect(result.valid).toBe(true);
+      expect(result.missingFields.length).toBe(0);
+      expect(result.invalidFields.length).toBe(0);
     });
 
     test('Issue missing id field is invalid', () => {
@@ -62,13 +58,19 @@ describe('Issue Schema Validation', () => {
         severity: 'critical',
         axes: validAxes,
         diagnosis: 'Test',
-        patches: validPatches,
-        recommended: 'conservative'
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
       } as Issue;
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('id');
     });
 
     test('Issue missing location field is invalid', () => {
@@ -77,13 +79,19 @@ describe('Issue Schema Validation', () => {
         severity: 'critical',
         axes: validAxes,
         diagnosis: 'Test',
-        patches: validPatches,
-        recommended: 'conservative'
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
       } as Issue;
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('location');
     });
 
     test('Issue missing diagnosis field is invalid', () => {
@@ -92,13 +100,19 @@ describe('Issue Schema Validation', () => {
         location: '§1.1 + L1',
         severity: 'critical',
         axes: validAxes,
-        patches: validPatches,
-        recommended: 'conservative'
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
       } as Issue;
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('diagnosis');
     });
 
     test('Issue missing axes is invalid', () => {
@@ -107,13 +121,19 @@ describe('Issue Schema Validation', () => {
         location: '§1.1 + L1',
         severity: 'critical',
         diagnosis: 'Test',
-        patches: validPatches,
-        recommended: 'conservative'
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
       } as Issue;
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('axes');
     });
 
     test('Issue missing patches is invalid', () => {
@@ -123,15 +143,17 @@ describe('Issue Schema Validation', () => {
         severity: 'critical',
         axes: validAxes,
         diagnosis: 'Test',
-        recommended: 'conservative'
+        recommended: 'conservative',
+        reasoning: 'Test'
       } as Issue;
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('patches');
     });
 
-    test('Issue missing conservative patch is invalid', () => {
+    test('Issue missing radical patch is invalid', () => {
       const invalidIssue: Issue = {
         id: 'ISSUE-01',
         location: '§1.1 + L1',
@@ -139,16 +161,18 @@ describe('Issue Schema Validation', () => {
         axes: validAxes,
         diagnosis: 'Test',
         patches: {
-          conservative: validPatches.conservative,
-          compromise: validPatches.compromise,
-          // Missing radical patch
-        } as any,
-        recommended: 'conservative'
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: undefined as any
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
       };
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('patches.radical');
     });
 
     test('Issue missing recommended field is invalid', () => {
@@ -158,12 +182,18 @@ describe('Issue Schema Validation', () => {
         severity: 'critical',
         axes: validAxes,
         diagnosis: 'Test',
-        patches: validPatches
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        reasoning: 'Test'
       } as Issue;
 
       const result = validateIssue(invalidIssue);
 
-      expect(result).toBeNull();
+      expect(result.valid).toBe(false);
+      expect(result.missingFields).toContain('recommended');
     });
 
     test('Issue with invalid severity is handled', () => {
@@ -173,33 +203,37 @@ describe('Issue Schema Validation', () => {
         severity: 'invalid' as any,
         axes: validAxes,
         diagnosis: 'Test',
-        patches: validPatches,
-        recommended: 'conservative'
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
       };
 
       const result = validateIssue(invalidIssue);
 
-      // Should either fail or normalize the severity
-      expect(result?.valid || result === null).toBe(true);
+      // Should flag severity as invalid
+      expect(result.invalidFields).toContain('severity');
     });
   });
 
   describe('createIssue', () => {
     test('Creates valid issue from partial input', () => {
-      const partialInput = {
+      const result = createIssue({
         id: 'ISSUE-TEST',
         location: '§2.1 + L2',
-        severity: 'major' as const,
+        severity: 'major',
         axes: { criticality: 5, risk: 4, time_cost: 3 },
         diagnosis: 'Test diagnosis',
         patches: validPatches
-      };
-
-      const result = createIssue(partialInput);
+      });
 
       expect(result).toBeDefined();
       expect(result.id).toBe('ISSUE-TEST');
       expect(result.recommended).toBeDefined();
+      expect(result.reasoning).toBeDefined();
     });
 
     test('Generates default values for missing optional fields', () => {
@@ -216,11 +250,12 @@ describe('Issue Schema Validation', () => {
 
       expect(result.recommended).toBeDefined();
       expect(['conservative', 'compromise', 'radical']).toContain(result.recommended);
+      expect(result.reasoning).toBeDefined();
     });
   });
 
   describe('Axes validation', () => {
-    test('Axes values must be in valid range', () => {
+    test('Axes values must be in valid range (1-10)', () => {
       const validAxesValues = [
         { criticality: 1, risk: 1, time_cost: 1 },
         { criticality: 5, risk: 5, time_cost: 5 },
@@ -234,13 +269,40 @@ describe('Issue Schema Validation', () => {
           severity: 'critical',
           axes,
           diagnosis: 'Test',
-          patches: validPatches,
-          recommended: 'conservative'
+          patches: {
+            conservative: { type: 'conservative', ...validPatches.conservative },
+            compromise: { type: 'compromise', ...validPatches.compromise },
+            radical: { type: 'radical', ...validPatches.radical }
+          },
+          recommended: 'conservative',
+          reasoning: 'Test'
         };
 
         const result = validateIssue(issue);
-        expect(result).not.toBeNull();
+        expect(result.valid).toBe(true);
       });
+    });
+
+    test('Axes values out of range are invalid', () => {
+      const invalidAxes = { criticality: 15, risk: 5, time_cost: 5 };
+
+      const issue: Issue = {
+        id: 'ISSUE-AXES-INVALID',
+        location: '§1.1 + L1',
+        severity: 'critical',
+        axes: invalidAxes,
+        diagnosis: 'Test',
+        patches: {
+          conservative: { type: 'conservative', ...validPatches.conservative },
+          compromise: { type: 'compromise', ...validPatches.compromise },
+          radical: { type: 'radical', ...validPatches.radical }
+        },
+        recommended: 'conservative',
+        reasoning: 'Test'
+      };
+
+      const result = validateIssue(issue);
+      expect(result.invalidFields).toContain('axes.criticality_out_of_range');
     });
   });
 });
