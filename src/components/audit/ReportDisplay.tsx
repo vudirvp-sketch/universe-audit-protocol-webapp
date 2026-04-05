@@ -18,7 +18,12 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
-import type { AuditReport } from '@/lib/audit/types';
+import type { AuditReport, LegacySkeleton } from '@/lib/audit/types';
+
+// Type guard for LegacySkeleton
+function isLegacySkeleton(skeleton: unknown): skeleton is LegacySkeleton {
+  return skeleton !== null && typeof skeleton === 'object' && 'thematicLaw' in skeleton;
+}
 
 const CLASSIFICATION_COLORS = {
   cult_masterpiece: 'bg-purple-500 text-white',
@@ -103,21 +108,41 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {[
-                { label: 'Thematic Law', value: humanReadable.skeleton.thematicLaw },
-                { label: 'Root Trauma', value: humanReadable.skeleton.rootTrauma },
-                { label: 'Hamartia', value: humanReadable.skeleton.hamartia },
-                { label: '3 Pillars', value: humanReadable.skeleton.pillars?.join(' → ') },
-                { label: 'Emotional Engine', value: humanReadable.skeleton.emotionalEngine },
-                { label: 'Author Prohibition', value: humanReadable.skeleton.authorProhibition },
-                { label: 'Target Experience', value: humanReadable.skeleton.targetExperience },
-                { label: 'Central Question', value: humanReadable.skeleton.centralQuestion },
-              ].map((item) => (
-                <div key={item.label}>
-                  <Label className="text-xs text-muted-foreground">{item.label}</Label>
-                  <p className="text-sm">{item.value || <span className="text-muted-foreground italic">Not extracted</span>}</p>
-                </div>
-              ))}
+              {isLegacySkeleton(humanReadable.skeleton) ? (
+                // Legacy skeleton format
+                <>
+                  {[
+                    { label: 'Thematic Law', value: humanReadable.skeleton.thematicLaw },
+                    { label: 'Root Trauma', value: humanReadable.skeleton.rootTrauma },
+                    { label: 'Hamartia', value: humanReadable.skeleton.hamartia },
+                    { label: '3 Pillars', value: humanReadable.skeleton.pillars?.join(' → ') },
+                    { label: 'Emotional Engine', value: humanReadable.skeleton.emotionalEngine },
+                    { label: 'Author Prohibition', value: humanReadable.skeleton.authorProhibition },
+                    { label: 'Target Experience', value: humanReadable.skeleton.targetExperience },
+                    { label: 'Central Question', value: humanReadable.skeleton.centralQuestion },
+                  ].map((item) => (
+                    <div key={item.label}>
+                      <Label className="text-xs text-muted-foreground">{item.label}</Label>
+                      <p className="text-sm">{item.value || <span className="text-muted-foreground italic">Not extracted</span>}</p>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                // New skeleton format
+                <>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant={humanReadable.skeleton.status === 'COMPLETE' ? 'default' : 'destructive'}>
+                      {humanReadable.skeleton.status}
+                    </Badge>
+                  </div>
+                  {humanReadable.skeleton.elements.map((element) => (
+                    <div key={element.id}>
+                      <Label className="text-xs text-muted-foreground">{element.name}</Label>
+                      <p className="text-sm">{element.value || <span className="text-muted-foreground italic">Not extracted</span>}</p>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </CardContent>
         </Card>

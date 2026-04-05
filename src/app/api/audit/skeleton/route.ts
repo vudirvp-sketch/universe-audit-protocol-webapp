@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getLLMClient, type LLMProvider } from '@/lib/llm-client';
 import { getSkeletonExtractionPrompt } from '@/lib/audit/prompts';
-import type { MediaType, Skeleton, GriefStage } from '@/lib/audit/types';
+import type { MediaType, LegacySkeleton, GriefStage } from '@/lib/audit/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,7 +54,7 @@ For emotionalEngine, use only: denial, anger, bargaining, depression, acceptance
     const responseText = completion.choices[0]?.message?.content || '';
     
     // Parse the JSON response
-    let skeleton: Skeleton;
+    let skeleton: LegacySkeleton;
     try {
       // Try to extract JSON from the response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);

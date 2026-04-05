@@ -323,7 +323,11 @@ export const MARY_SUE_THRESHOLD = 3; // ≤3/8 = acceptable
 // Helper function to get level from block
 export function getLevelFromBlock(block: string): 'L1' | 'L2' | 'L3' | 'L4' | 'L1/L2' | 'L1/L3' | 'L2/L3' | 'L2/L4' {
   const item = MASTER_CHECKLIST.find(i => i.block === block);
-  return item?.level || 'L1';
+  const level = item?.level;
+  if (level && level !== 'L0') {
+    return level as 'L1' | 'L2' | 'L3' | 'L4' | 'L1/L2' | 'L1/L3' | 'L2/L3' | 'L2/L4';
+  }
+  return 'L1';
 }
 
 // Helper to check if tag is applicable to media type

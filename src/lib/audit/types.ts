@@ -91,6 +91,7 @@ export interface GateResult {
   gateName: string;
   status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped';
   score: number;          // 0-100
+  passed?: boolean;       // Legacy compatibility
   conditions: {
     id: string;
     passed: boolean;
@@ -103,6 +104,13 @@ export interface GateResult {
     level?: string;
     [key: string]: unknown;
   };
+  // Legacy properties for UI compatibility
+  level?: 'L1' | 'L2' | 'L3' | 'L4';
+  applicableItems?: number;
+  passedItems?: number;
+  failedItems?: number;
+  insufficientDataItems?: number;
+  fixList?: FixItem[];
 }
 
 // ============================================================================
@@ -250,6 +258,18 @@ export interface Skeleton {
   weaknesses?: WeaknessResult[];
   blockers?: string[];
   canProceedToL1?: boolean;
+}
+
+// Legacy skeleton format for API compatibility
+export interface LegacySkeleton {
+  thematicLaw: string | null;
+  rootTrauma: string | null;
+  hamartia: string | null;
+  pillars: [string | null, string | null, string | null];
+  emotionalEngine: GriefStage | null;
+  authorProhibition: string | null;
+  targetExperience: string | null;
+  centralQuestion: string | null;
 }
 
 export interface WeaknessResult {
@@ -459,7 +479,7 @@ export interface AuditReport {
   humanReadable: {
     auditMode: AuditMode;
     authorProfile: AuthorProfile;
-    skeleton: Skeleton;
+    skeleton: Skeleton | LegacySkeleton;
     screening: ScreeningResult;
     gates: {
       L1: GateResult | null;
@@ -607,7 +627,7 @@ export interface AuditState {
   setAuthorProfile: (profile: AuthorProfile | null) => void;
   setSkeleton: (skeleton: Skeleton | null) => void;
   setScreeningResult: (result: ScreeningResult | null) => void;
-  setGateResult: (level: AuditLevel, result: GateResult) => void;
+  setGateResult: (level: 'L1' | 'L2' | 'L3' | 'L4', result: GateResult) => void;
   setChecklist: (checklist: ChecklistItem[]) => void;
   updateChecklistItem: (id: string, updates: Partial<ChecklistItem>) => void;
   setGriefMatrix: (matrix: GriefArchitectureMatrix | null) => void;
@@ -633,6 +653,14 @@ export interface AuthorQuestion {
   text: string;
   weight: number;
   isKeySignal: boolean;
+}
+
+// Vitality Criteria for living world assessment
+export interface VitalityCriteria {
+  id: number;
+  name: string;
+  test: string;
+  passed: boolean | null;
 }
 
 // ============================================================================

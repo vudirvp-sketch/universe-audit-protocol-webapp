@@ -122,7 +122,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
     );
   }
 
-  const passed = result.passed;
+  const passed = result.passed ?? result.status === 'passed';
   const score = result.score;
 
   return (
@@ -181,7 +181,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         </div>
 
         {/* Fix List (if failed) */}
-        {!passed && result.fixList.length > 0 && (
+        {!passed && result.fixList && result.fixList.length > 0 && (
           <Accordion type="single" collapsible>
             <AccordionItem value="fixes">
               <AccordionTrigger className="hover:no-underline">

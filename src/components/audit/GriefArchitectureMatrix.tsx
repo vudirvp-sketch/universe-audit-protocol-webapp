@@ -21,11 +21,14 @@ import type { GriefStage, GriefLevel, GriefMatrixCell } from '@/lib/audit/types'
 const GRIEF_LEVELS: GriefLevel[] = ['character', 'location', 'mechanic', 'act'];
 const GRIEF_STAGE_KEYS: GriefStage[] = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'];
 
-const LEVEL_LABELS: Record<GriefLevel, string> = {
+const LEVEL_LABELS: Partial<Record<GriefLevel, string>> = {
   character: 'Character',
   location: 'Location',
   mechanic: 'Mechanic/Action',
   act: 'Narrative Act',
+  world: 'World',
+  society: 'Society',
+  scene: 'Scene',
 };
 
 const CONFIDENCE_COLORS = {
@@ -197,7 +200,7 @@ export function GriefArchitectureMatrix() {
                             className={`p-3 rounded-md border ${CONFIDENCE_COLORS[confidence]}`}
                           >
                             <div className="flex items-center justify-between mb-2">
-                              <Label className="text-sm font-medium">{LEVEL_LABELS[level]}</Label>
+                              <Label className="text-sm font-medium">{LEVEL_LABELS[level] || level}</Label>
                               <Badge className={`text-xs ${CONFIDENCE_BADGE_COLORS[confidence]}`}>
                                 {confidence}
                               </Badge>

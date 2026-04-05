@@ -104,10 +104,30 @@ export function evaluateGate(
     });
   }
   
+  // Build conditions for each checklist item
+  const conditions = checklist
+    .filter(i => i.applicable && i.level.includes(level))
+    .map(item => ({
+      id: item.id,
+      passed: item.status === 'PASS',
+      message: `${item.id}: ${item.status}`
+    }));
+  
   return {
-    level,
+    gateId: `GATE-${level}`,
+    gateName: `Level ${level} Gate`,
+    status: passedGate ? 'passed' : 'failed',
     score,
     passed: passedGate,
+    conditions,
+    halt: !passedGate,
+    fixes: fixList.map(f => f.description),
+    metadata: {
+      level,
+      breakdown: {}
+    },
+    // Legacy properties for UI compatibility
+    level,
     applicableItems: total,
     passedItems: passed,
     failedItems: failed,
@@ -360,7 +380,7 @@ export function generatePriorityActions(
   const actions: string[] = [];
   
   // L1 actions first
-  if (gateResults.L1 && !gateResults.L1.passed) {
+  if (gateResults.L1 && !gateResults.L1.passed && gateResults.L1.fixList) {
     const topFixes = gateResults.L1.fixList.slice(0, 2);
     topFixes.forEach(fix => {
       actions.push(`[L1] ${fix.description.slice(0, 60)}...`);
@@ -368,7 +388,7 @@ export function generatePriorityActions(
   }
   
   // L2 actions
-  if (gateResults.L2 && !gateResults.L2.passed && actions.length < 3) {
+  if (gateResults.L2 && !gateResults.L2.passed && actions.length < 3 && gateResults.L2.fixList) {
     const topFix = gateResults.L2.fixList[0];
     if (topFix) {
       actions.push(`[L2] ${topFix.description.slice(0, 60)}...`);

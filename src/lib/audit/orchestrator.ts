@@ -62,7 +62,7 @@ export interface AuditState {
   phase: AuditPhase;
   input: AuditInput;
   validation_result?: ValidationResult;
-  audit_mode_config?: ModeExecutionConfig & { mode: AuditMode };
+  audit_mode_config?: ModeExecutionConfig;
   author_profile_result?: AuthorProfileResult;
   skeleton?: SkeletonExtractionResult;
   screening_result?: ScreeningResult;
@@ -203,10 +203,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   state.phase = 'mode_detection';
   
   if (input.audit_mode) {
-    state.audit_mode_config = {
-      mode: input.audit_mode,
-      ...getModeExecutionConfig(input.audit_mode)
-    };
+    state.audit_mode_config = getModeExecutionConfig(input.audit_mode);
   } else {
     // Derive mode from concept
     const detectedMode = detectAuditMode({
@@ -217,10 +214,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
       hasIntentionalAmbiguity: false,
       kishōScore: 0.3
     });
-    state.audit_mode_config = {
-      mode: detectedMode,
-      ...getModeExecutionConfig(detectedMode)
-    };
+    state.audit_mode_config = getModeExecutionConfig(detectedMode);
   }
 
   // === STEP 2: AUTHOR PROFILE ROUTING ===
