@@ -499,6 +499,115 @@ export function formatDiagnosticsReport(data: {
 }
 
 // ============================================================================
+// DIAGNOSTICS GENERATOR (for orchestrator)
+// ============================================================================
+
+/**
+ * Result type for generateDiagnostics function
+ */
+export interface DiagnosticResult {
+  protocolHealth: 'healthy' | 'degraded' | 'critical';
+  issues: DiagnosticIssue[];
+  recommendations: string[];
+  metrics: {
+    gatesPassed: number;
+    gatesTotal: number;
+    issuesFound: number;
+    criticalIssues: number;
+  };
+}
+
+export interface DiagnosticIssue {
+  id: string;
+  type: 'logic' | 'schema' | 'integration' | 'performance';
+  severity: 'critical' | 'major' | 'minor' | 'cosmetic';
+  description: string;
+  location: string;
+  suggestedFix: string;
+}
+
+/**
+ * Generates diagnostics from audit state
+ * Used by orchestrator to produce diagnostic results
+ */
+export function generateDiagnostics(state: unknown): DiagnosticResult {
+  const auditState = state as Record<string, unknown>;
+  
+  const issues: DiagnosticIssue[] = [];
+  const recommendations: string[] = [];
+  
+  // Count gates
+  let gatesPassed = 0;
+  let gatesTotal = 4;
+  
+  const gates = auditState.gateResults || auditState;
+  if (typeof gates === 'object' && gates !== null) {
+    const gateObj = gates as Record<string, unknown>;
+    if (gateObj.gate_L1 && typeof gateObj.gate_L1 === 'object') {
+      const g1 = gateObj.gate_L1 as Record<string, unknown>;
+      if (g1.status === 'passed') gatesPassed++;
+    }
+    if (gateObj.gate_L2 && typeof gateObj.gate_L2 === 'object') {
+      const g2 = gateObj.gate_L2 as Record<string, unknown>;
+      if (g2.status === 'passed') gatesPassed++;
+    }
+    if (gateObj.gate_L3 && typeof gateObj.gate_L3 === 'object') {
+      const g3 = gateObj.gate_L3 as Record<string, unknown>;
+      if (g3.status === 'passed') gatesPassed++;
+    }
+    if (gateObj.gate_L4 && typeof gateObj.gate_L4 === 'object') {
+      const g4 = gateObj.gate_L4 as Record<string, unknown>;
+      if (g4.status === 'passed') gatesPassed++;
+    }
+  }
+  
+  // Count issues
+  const stateIssues = auditState.issues;
+  let issuesFound = 0;
+  let criticalIssues = 0;
+  
+  if (Array.isArray(stateIssues)) {
+    issuesFound = stateIssues.length;
+    criticalIssues = stateIssues.filter((i: Record<string, unknown>) => 
+      i.severity === 'critical'
+    ).length;
+  }
+  
+  // Determine health
+  let protocolHealth: DiagnosticResult['protocolHealth'];
+  if (criticalIssues > 0 || gatesPassed < 2) {
+    protocolHealth = 'critical';
+    recommendations.push('Address critical issues before proceeding');
+  } else if (gatesPassed < 4 || issuesFound > 5) {
+    protocolHealth = 'degraded';
+    recommendations.push('Review flagged issues for quality improvements');
+  } else {
+    protocolHealth = 'healthy';
+    recommendations.push('Audit complete - narrative shows strong structure');
+  }
+  
+  // Add generic recommendations
+  if (issuesFound > 0) {
+    recommendations.push(`Review ${issuesFound} identified issues`);
+  }
+  if (criticalIssues > 0) {
+    recommendations.push(`Prioritize ${criticalIssues} critical issues`);
+  }
+  
+  return {
+    protocolHealth,
+    issues,
+    recommendations,
+    metrics: {
+      gatesPassed,
+      gatesTotal,
+      issuesFound,
+      criticalIssues
+    }
+  };
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
