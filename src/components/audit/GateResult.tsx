@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Wrench,
   AlertCircle,
+  BarChart3,
 } from 'lucide-react';
 import type { GateResult as GateResultType, FixItem } from '@/lib/audit/types';
 import { GATE_THRESHOLD } from '@/lib/audit/protocol-data';
@@ -179,6 +180,63 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
             <div className="text-xs text-muted-foreground">No Data</div>
           </div>
         </div>
+
+        {/* BLOCK-LEVEL BREAKDOWN (RULE_8) */}
+        {result.metadata?.breakdown && Object.keys(result.metadata.breakdown).length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Block-Level Breakdown
+            </h4>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(result.metadata.breakdown).map(([block, blockScore]) => (
+                <div 
+                  key={block} 
+                  className={`flex justify-between text-sm p-2 rounded border ${
+                    typeof blockScore === 'string' && blockScore.includes('FAIL') 
+                      ? 'bg-red-500/10 border-red-500/30' 
+                      : typeof blockScore === 'string' && blockScore.includes('PASS')
+                      ? 'bg-green-500/10 border-green-500/30'
+                      : 'bg-muted border-border'
+                  }`}
+                >
+                  <span className="font-mono text-xs">{block}</span>
+                  <span className="font-mono text-xs font-medium">{String(blockScore)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Conditions Breakdown */}
+        {result.conditions && result.conditions.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Conditions</h4>
+            <div className="space-y-1 max-h-40 overflow-y-auto">
+              {result.conditions.slice(0, 10).map((condition) => (
+                <div 
+                  key={condition.id} 
+                  className={`flex items-center gap-2 text-xs p-2 rounded ${
+                    condition.passed ? 'bg-green-500/10' : 'bg-red-500/10'
+                  }`}
+                >
+                  {condition.passed ? (
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <XCircle className="h-3 w-3 text-red-500" />
+                  )}
+                  <span className="font-mono">{condition.id}</span>
+                  <span className="text-muted-foreground truncate flex-1">{condition.message}</span>
+                </div>
+              ))}
+              {result.conditions.length > 10 && (
+                <p className="text-xs text-muted-foreground text-center">
+                  +{result.conditions.length - 10} more conditions...
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Fix List (if failed) */}
         {!passed && result.fixList && result.fixList.length > 0 && (

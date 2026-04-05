@@ -615,6 +615,12 @@ export interface AuditState {
   checklist: ChecklistItem[];
   griefMatrix: GriefArchitectureMatrix | null;
   report: AuditReport | null;
+  // New state for v10.0 integration
+  issues: Issue[];
+  whatForChains: ChainResult[];
+  generativeOutput: GenerativeOutput | null;
+  nextActions: NextAction[];
+  finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null;
   isLoading: boolean;
   error: string | null;
   
@@ -632,6 +638,13 @@ export interface AuditState {
   updateChecklistItem: (id: string, updates: Partial<ChecklistItem>) => void;
   setGriefMatrix: (matrix: GriefArchitectureMatrix | null) => void;
   setReport: (report: AuditReport | null) => void;
+  // New actions for v10.0 integration
+  setIssues: (issues: Issue[]) => void;
+  addIssue: (issue: Issue) => void;
+  setWhatForChains: (chains: ChainResult[]) => void;
+  setGenerativeOutput: (output: GenerativeOutput | null) => void;
+  setNextActions: (actions: NextAction[]) => void;
+  setFinalScore: (score: { total: string; percentage: number; by_level: Record<string, number> } | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;

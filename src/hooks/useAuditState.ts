@@ -12,7 +12,11 @@ import type {
   GateResult,
   ChecklistItem,
   GriefArchitectureMatrix,
-  AuditReport
+  AuditReport,
+  Issue,
+  ChainResult,
+  GenerativeOutput,
+  NextAction
 } from '@/lib/audit/types';
 import { MASTER_CHECKLIST } from '@/lib/audit/protocol-data';
 import { filterByMediaType } from '@/lib/audit/scoring-algorithm';
@@ -36,6 +40,12 @@ const initialState = {
   checklist: [...MASTER_CHECKLIST] as ChecklistItem[],
   griefMatrix: null as GriefArchitectureMatrix | null,
   report: null as AuditReport | null,
+  // New state for v10.0 integration
+  issues: [] as Issue[],
+  whatForChains: [] as ChainResult[],
+  generativeOutput: null as GenerativeOutput | null,
+  nextActions: [] as NextAction[],
+  finalScore: null as { total: string; percentage: number; by_level: Record<string, number> } | null,
   isLoading: false,
   error: null as string | null,
 };
@@ -86,6 +96,21 @@ export const useAuditState = create<AuditState>((set, get) => ({
   setGriefMatrix: (griefMatrix: GriefArchitectureMatrix | null) => set({ griefMatrix }),
   
   setReport: (report: AuditReport | null) => set({ report }),
+  
+  // New setters for v10.0 integration
+  setIssues: (issues: Issue[]) => set({ issues }),
+  
+  addIssue: (issue: Issue) => set(state => ({
+    issues: [...state.issues, issue]
+  })),
+  
+  setWhatForChains: (whatForChains: ChainResult[]) => set({ whatForChains }),
+  
+  setGenerativeOutput: (generativeOutput: GenerativeOutput | null) => set({ generativeOutput }),
+  
+  setNextActions: (nextActions: NextAction[]) => set({ nextActions }),
+  
+  setFinalScore: (finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null) => set({ finalScore }),
   
   setLoading: (isLoading: boolean) => set({ isLoading }),
   

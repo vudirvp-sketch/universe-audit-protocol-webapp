@@ -8,6 +8,9 @@ import { ChecklistDisplay } from '@/components/audit/ChecklistDisplay';
 import { GriefArchitectureMatrix } from '@/components/audit/GriefArchitectureMatrix';
 import { GateResults } from '@/components/audit/GateResult';
 import { ReportDisplay } from '@/components/audit/ReportDisplay';
+import { IssueList } from '@/components/audit/IssueList';
+import { WhatForChains } from '@/components/audit/WhatForChains';
+import { GenerativeOutputDisplay } from '@/components/audit/GenerativeOutput';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,6 +34,8 @@ import {
   RotateCcw,
   Settings,
   Key,
+  AlertTriangle,
+  Link2,
 } from 'lucide-react';
 import type { MediaType, AuthorProfileAnswers } from '@/lib/audit/types';
 import type { LLMProvider } from '@/lib/llm-client';
@@ -46,6 +51,9 @@ export default function Home() {
     authorAnswers,
     isLoading,
     error,
+    issues,
+    whatForChains,
+    generativeOutput,
     setPhase,
     setLoading,
     setError,
@@ -56,6 +64,11 @@ export default function Home() {
     setChecklist,
     setGriefMatrix,
     setReport,
+    setIssues,
+    setWhatForChains,
+    setGenerativeOutput,
+    setNextActions,
+    setFinalScore,
     reset,
   } = useAuditState();
 
@@ -122,6 +135,9 @@ export default function Home() {
       if (data.screeningResult) {
         setScreeningResult(data.screeningResult);
       }
+      if (data.screening_result) {
+        setScreeningResult(data.screening_result);
+      }
       if (data.gateResults) {
         if (data.gateResults.L1) setGateResult('L1', data.gateResults.L1);
         if (data.gateResults.L2) setGateResult('L2', data.gateResults.L2);
@@ -137,11 +153,30 @@ export default function Home() {
       if (data.report) {
         setReport(data.report);
       }
+      // New v10.0 state updates
+      if (data.issues) {
+        setIssues(data.issues);
+      }
+      if (data.what_for_chains) {
+        setWhatForChains(data.what_for_chains);
+      }
+      if (data.generative_output) {
+        setGenerativeOutput(data.generative_output);
+      }
+      if (data.next_actions) {
+        setNextActions(data.next_actions);
+      }
+      if (data.final_score) {
+        setFinalScore(data.final_score);
+      }
 
       // Set phase based on results
       if (data.error) {
         setPhase('failed');
         setError(data.error);
+      } else if (data.status === 'blocked') {
+        setPhase('blocked');
+        setError(data.error || data.reason);
       } else {
         setPhase('complete');
       }
@@ -286,20 +321,37 @@ export default function Home() {
             <ResizablePanel defaultSize={75}>
               <div className="p-4 h-full overflow-auto">
                 <Tabs defaultValue="report" className="h-full">
-                  <TabsList className="mb-4">
-                    <TabsTrigger value="report" className="flex items-center gap-2">
+                  <TabsList className="mb-4 flex-wrap h-auto gap-1">
+                    <TabsTrigger value="report" className="flex items-center gap-1">
                       <FileText className="h-4 w-4" />
                       Report
                     </TabsTrigger>
-                    <TabsTrigger value="gates" className="flex items-center gap-2">
+                    <TabsTrigger value="gates" className="flex items-center gap-1">
                       <BarChart3 className="h-4 w-4" />
                       Gates
                     </TabsTrigger>
-                    <TabsTrigger value="checklist" className="flex items-center gap-2">
+                    <TabsTrigger value="issues" className="flex items-center gap-1">
+                      <AlertTriangle className="h-4 w-4" />
+                      Issues
+                      {issues.length > 0 && (
+                        <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
+                          {issues.length}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="chains" className="flex items-center gap-1">
+                      <Link2 className="h-4 w-4" />
+                      Chains
+                    </TabsTrigger>
+                    <TabsTrigger value="generative" className="flex items-center gap-1">
+                      <Sparkles className="h-4 w-4" />
+                      Generated
+                    </TabsTrigger>
+                    <TabsTrigger value="checklist" className="flex items-center gap-1">
                       <ListChecks className="h-4 w-4" />
                       Checklist
                     </TabsTrigger>
-                    <TabsTrigger value="grief" className="flex items-center gap-2">
+                    <TabsTrigger value="grief" className="flex items-center gap-1">
                       <Heart className="h-4 w-4" />
                       Grief Matrix
                     </TabsTrigger>
@@ -311,6 +363,18 @@ export default function Home() {
 
                   <TabsContent value="gates" className="h-full">
                     <GateResults />
+                  </TabsContent>
+
+                  <TabsContent value="issues" className="h-full">
+                    <IssueList issues={issues} />
+                  </TabsContent>
+
+                  <TabsContent value="chains" className="h-full">
+                    <WhatForChains chains={whatForChains} />
+                  </TabsContent>
+
+                  <TabsContent value="generative" className="h-full">
+                    <GenerativeOutputDisplay output={generativeOutput} />
                   </TabsContent>
 
                   <TabsContent value="checklist" className="h-full">
