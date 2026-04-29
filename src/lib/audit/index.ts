@@ -26,3 +26,6 @@ export * from './generative-templates';
 
 // TIER 3 — Diagnostics
 export * from './diagnostics';
+
+// TIER 4 — Client Pipeline (Phase 1: wrapper around orchestrator; Phase 2: AuditStepRunner)
+export * from './pipeline';

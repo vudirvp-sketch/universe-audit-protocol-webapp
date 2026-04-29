@@ -1,5 +1,6 @@
 // Universal LLM API client supporting multiple providers
-// Allows runtime configuration of provider and API key
+// Routes all requests through a CORS proxy (Cloudflare Worker) for browser compatibility
+// No process.env references — all config comes from client-side settings
 
 // ============================================================================
 // TYPES
@@ -27,8 +28,14 @@ export interface LLMProviderConfig {
   apiKeyPrefix?: string;
   defaultModel: string;
   headers?: Record<string, string>;
-  transformRequest?: (body: ChatCompletionOptions) => Record<string, unknown>;
-  transformResponse?: (response: unknown) => ChatCompletionResponse;
+}
+
+export interface ProxyRequest {
+  provider: LLMProvider;
+  apiKey: string;
+  targetUrl: string;
+  headers?: Record<string, string>;
+  payload: string; // JSON stringified request body for the provider
 }
 
 export interface LLMClientConfig {
@@ -36,6 +43,7 @@ export interface LLMClientConfig {
   apiKey: string;
   model?: string;
   baseUrl?: string; // For custom providers
+  proxyUrl?: string; // CORS proxy URL (Cloudflare Worker)
 }
 
 export interface ChatMessage {
@@ -72,7 +80,34 @@ export interface ChatCompletionResponse {
 }
 
 // ============================================================================
-// PROVIDER CONFIGURATIONS
+// PROVIDER URL MAPPING
+// ============================================================================
+
+/**
+ * Get the target API URL for a given provider and model.
+ * The proxy uses this URL to forward the request.
+ */
+export function getProviderUrl(provider: LLMProvider, model: string): string {
+  switch (provider) {
+    case 'openai':      return 'https://api.openai.com/v1/chat/completions';
+    case 'anthropic':   return 'https://api.anthropic.com/v1/messages';
+    case 'google':      return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    case 'deepseek':    return 'https://api.deepseek.com/v1/chat/completions';
+    case 'groq':        return 'https://api.groq.com/openai/v1/chat/completions';
+    case 'openrouter':  return 'https://openrouter.ai/api/v1/chat/completions';
+    case 'mistral':     return 'https://api.mistral.ai/v1/chat/completions';
+    case 'qwen':        return 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+    case 'kimi':        return 'https://api.moonshot.cn/v1/chat/completions';
+    case 'xai':         return 'https://api.x.ai/v1/chat/completions';
+    case 'together':    return 'https://api.together.xyz/v1/chat/completions';
+    case 'huggingface': return `https://api-inference.huggingface.co/models/${model}`;
+    case 'zai':         return 'https://api.z.ai/v1/chat/completions';
+    default:            return ''; // Custom provider URL entered by user
+  }
+}
+
+// ============================================================================
+// PROVIDER CONFIGURATIONS (display info only — request transformation is in the proxy)
 // ============================================================================
 
 export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
@@ -95,74 +130,12 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://api.anthropic.com/v1',
     apiKeyPrefix: 'sk-ant-',
     defaultModel: 'claude-3-5-sonnet-20241022',
-    transformRequest: (body) => ({
-      model: body.model || 'claude-3-5-sonnet-20241022',
-      max_tokens: body.max_tokens || 4096,
-      messages: body.messages.map(m => ({
-        role: m.role === 'system' ? 'user' : m.role,
-        content: m.content,
-      })),
-      system: body.messages.find(m => m.role === 'system')?.content,
-    }),
-    transformResponse: (response: unknown) => {
-      const r = response as Record<string, unknown>;
-      return {
-        id: String(r.id || 'unknown'),
-        object: 'chat.completion',
-        created: Date.now(),
-        model: String(r.model || 'claude'),
-        choices: [{
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: String((r.content as Array<Record<string, unknown>>)?.[0]?.text || ''),
-          },
-          finish_reason: 'stop',
-        }],
-      };
-    },
   },
 
   google: {
     name: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     defaultModel: 'gemini-2.0-flash',
-    transformRequest: (body) => ({
-      contents: body.messages
-        .filter(m => m.role !== 'system')
-        .map(m => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
-        })),
-      systemInstruction: body.messages.find(m => m.role === 'system')?.content
-        ? { parts: [{ text: body.messages.find(m => m.role === 'system')!.content }] }
-        : undefined,
-      generationConfig: {
-        temperature: body.temperature || 0.7,
-        maxOutputTokens: body.max_tokens || 2048,
-      },
-    }),
-    transformResponse: (response: unknown) => {
-      const r = response as Record<string, unknown>;
-      const candidates = (r.candidates as Array<Record<string, unknown>>) || [];
-      const content = candidates[0]?.content as Record<string, unknown> | undefined;
-      const parts = content?.parts as Array<Record<string, unknown>> | undefined;
-      const text = parts?.[0]?.text as string | undefined;
-      return {
-        id: 'gemini-' + Date.now(),
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'gemini',
-        choices: [{
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: text || '',
-          },
-          finish_reason: 'stop',
-        }],
-      };
-    },
   },
 
   mistral: {
@@ -205,7 +178,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://openrouter.ai/api/v1',
     defaultModel: 'anthropic/claude-3.5-sonnet',
     headers: {
-      'HTTP-Referer': 'https://universe-audit-protocol.vercel.app',
+      'HTTP-Referer': 'https://universe-audit-protocol.pages.dev',
       'X-Title': 'Universe Audit Protocol',
     },
   },
@@ -214,31 +187,6 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     name: 'Hugging Face',
     baseUrl: 'https://api-inference.huggingface.co/models',
     defaultModel: 'meta-llama/Llama-3.2-3B-Instruct',
-    transformRequest: (body) => ({
-      inputs: body.messages.map(m => `${m.role}: ${m.content}`).join('\n'),
-      parameters: {
-        temperature: body.temperature || 0.7,
-        max_new_tokens: body.max_tokens || 2048,
-        return_full_text: false,
-      },
-    }),
-    transformResponse: (response: unknown) => {
-      const r = response as Array<Record<string, unknown>>;
-      return {
-        id: 'hf-' + Date.now(),
-        object: 'chat.completion',
-        created: Date.now(),
-        model: 'huggingface',
-        choices: [{
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: String(r?.[0]?.generated_text || ''),
-          },
-          finish_reason: 'stop',
-        }],
-      };
-    },
   },
 
   together: {
@@ -261,84 +209,226 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
 };
 
 // ============================================================================
+// PROVIDER-SPECIFIC REQUEST BUILDERS
+// ============================================================================
+
+/**
+ * Build the request body for a given provider.
+ * The client always builds the body in the provider's native format.
+ * The proxy only handles auth header injection.
+ */
+function buildProviderRequestBody(
+  provider: LLMProvider,
+  options: ChatCompletionOptions,
+  effectiveModel: string
+): string {
+  switch (provider) {
+    case 'anthropic': {
+      // Anthropic Messages API format
+      const systemMessage = options.messages.find(m => m.role === 'system');
+      const nonSystemMessages = options.messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'assistant' : 'user',
+          content: m.content,
+        }));
+      return JSON.stringify({
+        model: effectiveModel,
+        max_tokens: options.max_tokens || 4096,
+        messages: nonSystemMessages,
+        system: systemMessage?.content,
+      });
+    }
+
+    case 'google': {
+      // Google Gemini API format
+      const systemContent = options.messages.find(m => m.role === 'system')?.content;
+      return JSON.stringify({
+        contents: options.messages
+          .filter(m => m.role !== 'system')
+          .map(m => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.content }],
+          })),
+        ...(systemContent
+          ? { systemInstruction: { parts: [{ text: systemContent }] } }
+          : {}),
+        generationConfig: {
+          temperature: options.temperature ?? 0.7,
+          maxOutputTokens: options.max_tokens || 2048,
+        },
+      });
+    }
+
+    case 'huggingface': {
+      // HuggingFace Inference API format
+      return JSON.stringify({
+        inputs: options.messages.map(m => `${m.role}: ${m.content}`).join('\n'),
+        parameters: {
+          temperature: options.temperature ?? 0.7,
+          max_new_tokens: options.max_tokens || 2048,
+          return_full_text: false,
+        },
+      });
+    }
+
+    default: {
+      // OpenAI-compatible format (openai, deepseek, groq, openrouter, mistral, zai, etc.)
+      return JSON.stringify({
+        model: effectiveModel,
+        messages: options.messages,
+        temperature: options.temperature ?? 0.7,
+        max_tokens: options.max_tokens,
+        stream: false,
+      });
+    }
+  }
+}
+
+/**
+ * Transform provider-specific response into the standard ChatCompletionResponse format.
+ * This runs client-side after receiving the raw response from the proxy.
+ */
+function normalizeProviderResponse(
+  provider: LLMProvider,
+  responseData: unknown
+): ChatCompletionResponse {
+  switch (provider) {
+    case 'anthropic': {
+      const r = responseData as Record<string, unknown>;
+      return {
+        id: String(r.id || 'unknown'),
+        object: 'chat.completion',
+        created: Date.now(),
+        model: String(r.model || 'claude'),
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: String((r.content as Array<Record<string, unknown>>)?.[0]?.text || ''),
+          },
+          finish_reason: r.stop_reason === 'end_turn' ? 'stop' : String(r.stop_reason || 'stop'),
+        }],
+      };
+    }
+
+    case 'google': {
+      const r = responseData as Record<string, unknown>;
+      const candidates = (r.candidates as Array<Record<string, unknown>>) || [];
+      const content = candidates[0]?.content as Record<string, unknown> | undefined;
+      const parts = content?.parts as Array<Record<string, unknown>> | undefined;
+      const text = parts?.[0]?.text as string | undefined;
+      const finishReason = candidates[0]?.finishReason as string | undefined;
+      return {
+        id: 'gemini-' + Date.now(),
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'gemini',
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: text || '',
+          },
+          finish_reason: finishReason === 'STOP' ? 'stop' : (finishReason || 'stop'),
+        }],
+      };
+    }
+
+    case 'huggingface': {
+      const r = responseData as Array<Record<string, unknown>>;
+      return {
+        id: 'hf-' + Date.now(),
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'huggingface',
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: String(r?.[0]?.generated_text || ''),
+          },
+          finish_reason: 'stop',
+        }],
+      };
+    }
+
+    default: {
+      // OpenAI-compatible response — return as-is
+      return responseData as ChatCompletionResponse;
+    }
+  }
+}
+
+// ============================================================================
 // CLIENT FACTORY
 // ============================================================================
 
 /**
- * Creates an LLM API client for the specified provider
+ * Creates an LLM API client that routes requests through the CORS proxy.
+ * All requests go through the proxy — no direct browser-to-provider calls.
  */
 export function createLLMClient(config: LLMClientConfig) {
   const providerConfig = LLM_PROVIDERS[config.provider];
-  const baseUrl = config.baseUrl || providerConfig.baseUrl;
   const model = config.model || providerConfig.defaultModel;
 
   /**
-   * Make a chat completion request
+   * Make a chat completion request via the CORS proxy
    */
   async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse> {
     const effectiveModel = options.model || model;
-    let url: string;
-    let requestBody: Record<string, unknown>;
-    let headers: Record<string, string>;
 
-    // Handle provider-specific request formatting
-    switch (config.provider) {
-      case 'google':
-        // Google Gemini uses different URL structure
-        url = `${baseUrl}/models/${effectiveModel}:generateContent?key=${config.apiKey}`;
-        requestBody = providerConfig.transformRequest!(options);
-        headers = { 'Content-Type': 'application/json' };
-        break;
+    // Determine target URL
+    let targetUrl: string;
+    if (config.provider === 'custom' && config.baseUrl) {
+      targetUrl = `${config.baseUrl}/chat/completions`;
+    } else {
+      targetUrl = getProviderUrl(config.provider, effectiveModel);
+    }
 
-      case 'huggingface':
-        // Hugging Face uses model in URL
-        url = `${baseUrl}/${effectiveModel}`;
-        requestBody = providerConfig.transformRequest!(options);
-        headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
-        };
-        break;
+    if (!targetUrl) {
+      throw new Error(`No target URL for provider "${config.provider}". Set baseUrl in settings.`);
+    }
 
-      default:
-        // OpenAI-compatible API
-        url = `${baseUrl}/chat/completions`;
-        requestBody = providerConfig.transformRequest
-          ? providerConfig.transformRequest(options)
-          : {
-              model: effectiveModel,
-              messages: options.messages,
-              temperature: options.temperature ?? 0.7,
-              max_tokens: options.max_tokens,
-              stream: false,
-            };
-        headers = {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
-          ...(providerConfig.headers || {}),
-        };
+    // Build the request body in the provider's native format
+    const payload = buildProviderRequestBody(config.provider, options, effectiveModel);
+
+    // Build the proxy request
+    const proxyRequest: ProxyRequest = {
+      provider: config.provider,
+      apiKey: config.apiKey,
+      targetUrl,
+      payload,
+    };
+
+    // Determine proxy URL
+    const proxyUrl = config.proxyUrl || '';
+
+    if (!proxyUrl) {
+      throw new Error(
+        'CORS proxy URL is not configured. Set it in Settings → Proxy URL. ' +
+        'Deploy the Worker from the worker/ directory first.'
+      );
     }
 
     try {
-      const response = await fetch(url, {
+      const response = await fetch(proxyUrl, {
         method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyRequest),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`${providerConfig.name} API error (${response.status}): ${errorText}`);
+        throw new Error(`${providerConfig.name} proxy error (${response.status}): ${errorText}`);
       }
 
       const responseData = await response.json();
 
-      // Transform response if needed
-      if (providerConfig.transformResponse) {
-        return providerConfig.transformResponse(responseData);
-      }
+      // Normalize provider-specific response into standard format
+      const normalized = normalizeProviderResponse(config.provider, responseData);
 
-      return responseData as ChatCompletionResponse;
+      return normalized;
 
     } catch (error) {
       console.error(`${providerConfig.name} chat completion error:`, error);
@@ -361,50 +451,39 @@ export function createLLMClient(config: LLMClientConfig) {
   };
 }
 
+// ============================================================================
+// API KEY VALIDATION (client-side only, no server calls)
+// ============================================================================
+
 /**
- * Get LLM client with fallback to environment variables
+ * Validate API key format for a provider.
+ * Pure client-side validation — checks prefix, length, non-empty.
+ * Returns an object with validation result and optional error message.
  */
-export async function getLLMClient(
-  provider?: LLMProvider | null,
-  apiKey?: string | null,
-  model?: string | null
-) {
-  // Default provider
-  const effectiveProvider = provider || 'zai';
-
-  // API key priority: parameter > env variable (provider-specific) > generic env
-  const key = apiKey
-    || (typeof process !== 'undefined' && (
-      process.env[`${effectiveProvider.toUpperCase()}_API_KEY`]
-      || process.env[`${effectiveProvider.toUpperCase()}_KEY`]
-      || process.env.LLM_API_KEY
-      || process.env.ZAI_API_KEY
-    ))
-    || null;
-
-  if (!key) {
-    const providerName = LLM_PROVIDERS[effectiveProvider].name;
-    throw new Error(
-      `API key required for ${providerName}. ` +
-      `Provide it in settings or set ${effectiveProvider.toUpperCase()}_API_KEY environment variable.`
-    );
+export function validateApiKey(provider: LLMProvider, apiKey: string): { valid: boolean; error?: string } {
+  if (!apiKey || apiKey.trim().length === 0) {
+    return { valid: false, error: 'API ключ не указан' };
   }
 
-  return createLLMClient({
-    provider: effectiveProvider,
-    apiKey: key,
-    model: model || undefined,
-  });
+  if (apiKey.length < 10) {
+    return { valid: false, error: 'API ключ слишком короткий' };
+  }
+
+  const config = LLM_PROVIDERS[provider];
+  if (config.apiKeyPrefix && !apiKey.startsWith(config.apiKeyPrefix)) {
+    // Warning but not blocking — some providers accept multiple key formats
+    return {
+      valid: true,
+      error: `Ключ для ${config.name} обычно начинается с "${config.apiKeyPrefix}"`,
+    };
+  }
+
+  return { valid: true };
 }
 
-/**
- * Validate API key format for a provider
- */
-export function validateApiKey(provider: LLMProvider, apiKey: string): boolean {
-  const config = LLM_PROVIDERS[provider];
-  if (!config.apiKeyPrefix) return true; // No prefix requirement
-  return apiKey.startsWith(config.apiKeyPrefix) || apiKey.length > 10; // Relax validation
-}
+// ============================================================================
+// PROVIDER INFO HELPERS
+// ============================================================================
 
 /**
  * Get provider display info

@@ -1,13 +1,34 @@
-// Settings hook for managing LLM provider and API key in localStorage
+// Settings hook for managing LLM provider, API key, and proxy URL in localStorage
+// All config is client-side — no environment variables or server-side references
 import { create } from 'zustand';
 import type { LLMProvider } from '@/lib/llm-client';
 
 const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
 
+// Provider-specific default RPM limits (requests per minute)
+const PROVIDER_RPM_DEFAULTS: Record<string, number> = {
+  zai: 10,
+  openai: 60,
+  anthropic: 60,
+  google: 15,
+  mistral: 30,
+  deepseek: 30,
+  qwen: 30,
+  kimi: 30,
+  groq: 30,
+  openrouter: 60,
+  huggingface: 10,
+  together: 30,
+  xai: 30,
+  custom: 10,
+};
+
 export interface AppSettings {
   provider: LLMProvider;
   apiKey: string | null;
   model: string | null;
+  proxyUrl: string;
+  rpmLimit: number;
 }
 
 interface SettingsState extends AppSettings {
@@ -18,14 +39,21 @@ interface SettingsState extends AppSettings {
   setProvider: (provider: LLMProvider) => void;
   setApiKey: (key: string | null) => void;
   setModel: (model: string | null) => void;
+  setProxyUrl: (url: string) => void;
+  setRpmLimit: (limit: number) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   clearSettings: () => void;
 }
+
+// Default proxy URL — REPLACE <your-subdomain> with your actual Cloudflare Workers subdomain
+const DEFAULT_PROXY_URL = 'https://audit-proxy.<your-subdomain>.workers.dev';
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: 'zai',
   apiKey: null,
   model: null,
+  proxyUrl: DEFAULT_PROXY_URL,
+  rpmLimit: PROVIDER_RPM_DEFAULTS.zai,
 };
 
 export const useSettings = create<SettingsState>((set, get) => ({
@@ -39,10 +67,13 @@ export const useSettings = create<SettingsState>((set, get) => ({
       const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored) as Partial<AppSettings>;
+        const provider = parsed.provider || DEFAULT_SETTINGS.provider;
         set({
-          provider: parsed.provider || DEFAULT_SETTINGS.provider,
+          provider,
           apiKey: parsed.apiKey || null,
           model: parsed.model || null,
+          proxyUrl: parsed.proxyUrl || DEFAULT_PROXY_URL,
+          rpmLimit: parsed.rpmLimit || PROVIDER_RPM_DEFAULTS[provider] || DEFAULT_SETTINGS.rpmLimit,
           isLoaded: true,
         });
       } else {
@@ -55,7 +86,12 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
   setProvider: (provider: LLMProvider) => {
     const state = get();
-    const newSettings = { ...state, provider, model: null }; // Reset model when provider changes
+    const newSettings = {
+      ...state,
+      provider,
+      model: null, // Reset model when provider changes
+      rpmLimit: PROVIDER_RPM_DEFAULTS[provider] || state.rpmLimit,
+    };
     saveToStorage(newSettings);
     set(newSettings);
   },
@@ -70,6 +106,20 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setModel: (model: string | null) => {
     const state = get();
     const newSettings = { ...state, model };
+    saveToStorage(newSettings);
+    set(newSettings);
+  },
+
+  setProxyUrl: (proxyUrl: string) => {
+    const state = get();
+    const newSettings = { ...state, proxyUrl };
+    saveToStorage(newSettings);
+    set(newSettings);
+  },
+
+  setRpmLimit: (rpmLimit: number) => {
+    const state = get();
+    const newSettings = { ...state, rpmLimit };
     saveToStorage(newSettings);
     set(newSettings);
   },
@@ -100,6 +150,8 @@ function saveToStorage(settings: AppSettings) {
       provider: settings.provider,
       apiKey: settings.apiKey,
       model: settings.model,
+      proxyUrl: settings.proxyUrl,
+      rpmLimit: settings.rpmLimit,
     }));
   } catch {
     console.error('Failed to save settings to localStorage');
@@ -108,7 +160,11 @@ function saveToStorage(settings: AppSettings) {
 
 // Hook that auto-loads settings on mount (client-side only)
 export const useAppSettings = () => {
-  const { provider, apiKey, model, isLoaded, loadSettings, setProvider, setApiKey, setModel, updateSettings, clearSettings } = useSettings();
+  const {
+    provider, apiKey, model, proxyUrl, rpmLimit, isLoaded,
+    loadSettings, setProvider, setApiKey, setModel, setProxyUrl, setRpmLimit,
+    updateSettings, clearSettings,
+  } = useSettings();
 
   // Load on first use
   if (!isLoaded && typeof window !== 'undefined') {
@@ -119,10 +175,14 @@ export const useAppSettings = () => {
     provider,
     apiKey,
     model,
+    proxyUrl,
+    rpmLimit,
     isLoaded,
     setProvider,
     setApiKey,
     setModel,
+    setProxyUrl,
+    setRpmLimit,
     updateSettings,
     clearSettings,
   };

@@ -37,8 +37,8 @@ import {
   AlertTriangle,
   Link2,
 } from 'lucide-react';
-import type { MediaType, AuthorProfileAnswers } from '@/lib/audit/types';
-import type { LLMProvider } from '@/lib/llm-client';
+import type { MediaType, AuthorProfileAnswers, AuditPhase } from '@/lib/audit/types';
+import { runAuditPipeline, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -73,7 +73,7 @@ export default function Home() {
   } = useAuditState();
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
-  const { provider, apiKey, model, loadSettings, isLoaded } = useSettings();
+  const { provider, apiKey, model, proxyUrl, loadSettings, isLoaded } = useSettings();
 
   // Load settings on mount
   React.useEffect(() => {
@@ -87,96 +87,81 @@ export default function Home() {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
-  // Run full audit analysis
+  // Run full audit analysis via client-side pipeline
   const runFullAudit = async () => {
     if (!inputText.trim()) return;
+
+    if (!apiKey) {
+      setError('API ключ не указан. Откройте настройки и введите API ключ.');
+      setPhase('failed');
+      return;
+    }
+
+    if (!proxyUrl) {
+      setError('URL прокси не указан. Откройте настройки и введите URL вашего Cloudflare Worker.');
+      setPhase('failed');
+      return;
+    }
 
     setLoading(true);
     setError(null);
     setPhase('skeleton_extraction');
 
     try {
-      const response = await fetch('/api/audit/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await runAuditPipeline(
+        {
           narrative: inputText,
           mediaType,
           authorAnswers,
+        },
+        {
           provider,
           apiKey,
           model,
-        } as {
-          narrative: string;
-          mediaType: MediaType;
-          authorAnswers?: AuthorProfileAnswers;
-          provider?: LLMProvider | null;
-          apiKey?: string | null;
-          model?: string | null;
-        }),
-      });
+          proxyUrl,
+        },
+        (phase: AuditPhase, state: PipelineState) => {
+          // Per-step progress callback
+          setPhase(phase);
+        },
+      );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Audit failed');
+      // Update state with pipeline results
+      if (result.authorProfile) {
+        setAuthorProfile(result.authorProfile as any);
       }
-
-      // Update state with results
-      if (data.auditMode) {
-        // setAuditMode(data.auditMode); // Already set
+      if (result.skeleton) {
+        setSkeleton(result.skeleton as any);
       }
-      if (data.authorProfile) {
-        setAuthorProfile(data.authorProfile);
+      if (result.screeningResult) {
+        setScreeningResult(result.screeningResult as any);
       }
-      if (data.skeleton) {
-        setSkeleton(data.skeleton);
+      if (result.gateResults) {
+        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1 as any);
+        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2 as any);
+        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3 as any);
+        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4 as any);
       }
-      if (data.screeningResult) {
-        setScreeningResult(data.screeningResult);
+      if (result.issues && result.issues.length > 0) {
+        setIssues(result.issues as any);
       }
-      if (data.screening_result) {
-        setScreeningResult(data.screening_result);
+      if (result.whatForChains && result.whatForChains.length > 0) {
+        setWhatForChains(result.whatForChains as any);
       }
-      if (data.gateResults) {
-        if (data.gateResults.L1) setGateResult('L1', data.gateResults.L1);
-        if (data.gateResults.L2) setGateResult('L2', data.gateResults.L2);
-        if (data.gateResults.L3) setGateResult('L3', data.gateResults.L3);
-        if (data.gateResults.L4) setGateResult('L4', data.gateResults.L4);
+      if (result.generativeOutput) {
+        setGenerativeOutput(result.generativeOutput as any);
       }
-      if (data.checklist) {
-        setChecklist(data.checklist);
+      if (result.nextActions && result.nextActions.length > 0) {
+        setNextActions(result.nextActions as any);
       }
-      if (data.griefMatrix) {
-        setGriefMatrix(data.griefMatrix);
-      }
-      if (data.report) {
-        setReport(data.report);
-      }
-      // New v10.0 state updates
-      if (data.issues) {
-        setIssues(data.issues);
-      }
-      if (data.what_for_chains) {
-        setWhatForChains(data.what_for_chains);
-      }
-      if (data.generative_output) {
-        setGenerativeOutput(data.generative_output);
-      }
-      if (data.next_actions) {
-        setNextActions(data.next_actions);
-      }
-      if (data.final_score) {
-        setFinalScore(data.final_score);
+      if (result.finalScore) {
+        setFinalScore(result.finalScore as any);
       }
 
-      // Set phase based on results
-      if (data.error) {
-        setPhase('failed');
-        setError(data.error);
-      } else if (data.status === 'blocked') {
-        setPhase('blocked');
-        setError(data.error || data.reason);
+      // Set phase based on result
+      if (result.error) {
+        setPhase(result.phase === 'blocked' ? 'blocked' : 'failed');
+        setError(result.error);
       } else {
         setPhase('complete');
       }

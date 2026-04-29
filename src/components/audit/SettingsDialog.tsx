@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe } from 'lucide-react';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, Server } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import {
   LLM_PROVIDERS,
@@ -34,10 +34,11 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
-  const { provider, apiKey, model, isLoaded, setProvider, setApiKey, setModel, loadSettings, clearSettings } = useSettings();
+  const { provider, apiKey, model, proxyUrl, isLoaded, setProvider, setApiKey, setModel, setProxyUrl, loadSettings, clearSettings } = useSettings();
   const [open, setOpen] = React.useState(false);
   const [inputKey, setInputKey] = React.useState('');
   const [inputModel, setInputModel] = React.useState('');
+  const [inputProxyUrl, setInputProxyUrl] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
 
@@ -53,9 +54,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     if (open) {
       setInputKey(apiKey || '');
       setInputModel(model || '');
+      setInputProxyUrl(proxyUrl || '');
       setSaved(false);
     }
-  }, [open, apiKey, model]);
+  }, [open, apiKey, model, proxyUrl]);
 
   // Update model input when provider changes
   React.useEffect(() => {
@@ -75,6 +77,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const handleSave = () => {
     const trimmedKey = inputKey.trim();
     const trimmedModel = inputModel.trim();
+    const trimmedProxyUrl = inputProxyUrl.trim();
 
     if (trimmedKey) {
       setApiKey(trimmedKey);
@@ -86,6 +89,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setModel(trimmedModel);
     } else {
       setModel(null);
+    }
+
+    if (trimmedProxyUrl) {
+      setProxyUrl(trimmedProxyUrl);
     }
 
     onSettingsChange?.({
@@ -101,6 +108,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const handleClear = () => {
     setInputKey('');
     setInputModel('');
+    setInputProxyUrl('');
     clearSettings();
     onSettingsChange?.({ provider: 'zai', apiKey: null, model: null });
     setSaved(false);
@@ -211,6 +219,24 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 )}
               </Button>
             </div>
+          </div>
+
+          {/* Proxy URL */}
+          <div className="space-y-2">
+            <Label htmlFor="proxy-url" className="flex items-center gap-2">
+              <Server className="h-4 w-4" />
+              Proxy URL
+            </Label>
+            <Input
+              id="proxy-url"
+              type="url"
+              placeholder="https://audit-proxy.your-subdomain.workers.dev"
+              value={inputProxyUrl}
+              onChange={(e) => setInputProxyUrl(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              URL вашего Cloudflare Worker CORS-прокси. Развёртывается из директории worker/
+            </p>
           </div>
 
           {/* Status indicator */}
