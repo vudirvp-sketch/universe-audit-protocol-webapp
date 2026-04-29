@@ -28,20 +28,25 @@ export type AuthorProfileType = 'gardener' | 'hybrid' | 'architect';
 
 export type AuditLevel = 'L0' | 'L1' | 'L2' | 'L3' | 'L4';
 
-export type AuditPhase = 
-  | 'idle' 
-  | 'mode_selection' 
-  | 'author_profile' 
-  | 'skeleton_extraction' 
-  | 'screening' 
-  | 'L1_evaluation' 
-  | 'L2_evaluation' 
-  | 'L3_evaluation' 
+export type AuditPhase =
+  | 'idle'
+  | 'input_validation'
+  | 'mode_detection'
+  | 'author_profile'
+  | 'skeleton_extraction'
+  | 'screening'
+  | 'L1_evaluation'
+  | 'L2_evaluation'
+  | 'L3_evaluation'
   | 'self_audit'
-  | 'L4_evaluation' 
-  | 'complete' 
+  | 'L4_evaluation'
+  | 'issue_generation'
+  | 'generative_modules'
+  | 'final_output'
+  | 'complete'
   | 'failed'
-  | 'blocked';
+  | 'blocked'
+  | 'cancelled';
 
 export type Severity = 'critical' | 'major' | 'minor' | 'cosmetic';
 

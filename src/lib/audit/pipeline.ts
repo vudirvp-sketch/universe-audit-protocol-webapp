@@ -1,13 +1,12 @@
 /**
  * Audit Pipeline — Client-side entry point for running the full audit.
  *
- * Phase 1: This module wraps the existing orchestrator (runFullAudit) and
- * adapts it for client-side execution. The LLM client is created from
- * user settings and passed through, even though the current orchestrator
- * uses keyword-based logic. Phase 2 will replace the internals with
- * the AuditStepRunner / AuditStep architecture from COMPLETION_PLAN §2.
- *
  * This module is the ONLY place page.tsx should call to start an audit.
+ * It wraps the orchestrator (runFullAudit) and adapts it for browser execution.
+ *
+ * Phase 1: Orchestrator uses keyword-based logic; LLM client is created
+ * but not yet consumed inside orchestrator steps.
+ * Phase 2: Will replace orchestrator internals with AuditStepRunner + real LLM calls.
  */
 
 import { createLLMClient, type LLMClient, type LLMProvider } from '@/lib/llm-client';
@@ -56,6 +55,59 @@ export interface PipelineState {
   blockedAt: string | null;
   error: string | null;
   elapsedMs: number;
+  stepTimings: Partial<Record<AuditPhase, number>>;
+}
+
+/**
+ * Mapping from orchestrator-internal phase names to the canonical AuditPhase type.
+ * Orchestrator uses its own phase names; we translate them to the Zustand store's
+ * AuditPhase values so the UI can render correct progress.
+ */
+const ORCHESTRATOR_PHASE_MAP: Record<string, AuditPhase> = {
+  'input_validation':    'input_validation',
+  'mode_detection':      'mode_detection',
+  'author_profile':      'author_profile',
+  'skeleton_extraction': 'skeleton_extraction',
+  'screening':           'screening',
+  'gate_L1':             'L1_evaluation',
+  'gate_L2':             'L2_evaluation',
+  'gate_L3':             'L3_evaluation',
+  'gate_L4':             'L4_evaluation',
+  'issue_generation':    'issue_generation',
+  'generative_modules':  'generative_modules',
+  'final_output':        'final_output',
+  'complete':            'complete',
+  'blocked':             'blocked',
+};
+
+function mapOrchestratorPhase(phase: string): AuditPhase {
+  return ORCHESTRATOR_PHASE_MAP[phase] || 'idle';
+}
+
+/**
+ * Create an empty pipeline state for initial progress callbacks.
+ */
+function createEmptyPipelineState(): PipelineState {
+  return {
+    auditMode: null,
+    authorProfile: null,
+    skeleton: null,
+    screeningResult: null,
+    gateResults: { L1: null, L2: null, L3: null, L4: null },
+    checklist: [],
+    griefMatrix: null,
+    report: null,
+    issues: [],
+    whatForChains: [],
+    generativeOutput: null,
+    nextActions: [],
+    finalScore: null,
+    phase: 'idle',
+    blockedAt: null,
+    error: null,
+    elapsedMs: 0,
+    stepTimings: {},
+  };
 }
 
 /**
@@ -64,16 +116,23 @@ export interface PipelineState {
  * @param input - The audit input (narrative, media type, etc.)
  * @param llmClientOrConfig - Either an LLMClient instance or settings to create one
  * @param onProgress - Callback for per-step progress updates
+ * @param abortSignal - Optional AbortSignal for cancelling the pipeline
  * @returns The final pipeline state
  */
 export async function runAuditPipeline(
   input: AuditInput,
   llmClientOrConfig: LLMClient | { provider: LLMProvider; apiKey: string; model?: string | null; proxyUrl?: string },
   onProgress?: (phase: AuditPhase, state: PipelineState) => void,
+  abortSignal?: AbortSignal,
 ): Promise<PipelineState> {
   const startTime = Date.now();
 
-  // Create or use LLM client
+  // Check for cancellation before starting
+  if (abortSignal?.aborted) {
+    return { ...createEmptyPipelineState(), phase: 'cancelled' };
+  }
+
+  // Create or reuse LLM client
   // Phase 1: LLM client is created but not yet used by the orchestrator.
   // Phase 2: The AuditStepRunner will use it for each pipeline step.
   let llmClient: LLMClient;
@@ -96,34 +155,27 @@ export async function runAuditPipeline(
     author_answers: input.authorAnswers,
   };
 
-  // Notify: starting
-  const emptyState: PipelineState = {
-    auditMode: null,
-    authorProfile: null,
-    skeleton: null,
-    screeningResult: null,
-    gateResults: { L1: null, L2: null, L3: null, L4: null },
-    checklist: [],
-    griefMatrix: null,
-    report: null,
-    issues: [],
-    whatForChains: [],
-    generativeOutput: null,
-    nextActions: [],
-    finalScore: null,
-    phase: 'idle',
-    blockedAt: null,
-    error: null,
-    elapsedMs: 0,
-  };
-  onProgress?.('skeleton_extraction', emptyState);
+  // Notify: starting input validation
+  const emptyState = createEmptyPipelineState();
+  onProgress?.('input_validation', { ...emptyState, phase: 'input_validation' });
+
+  // Check cancellation before orchestrator
+  if (abortSignal?.aborted) {
+    return { ...createEmptyPipelineState(), phase: 'cancelled' };
+  }
 
   // Run the orchestrator
   // Phase 1: Uses the existing keyword-based orchestrator
   // Phase 2: Will use the sequential AuditStepRunner with real LLM calls
   const result: OrchestratorState = await runFullAudit(orchestratorInput);
 
+  // Check cancellation after orchestrator
+  if (abortSignal?.aborted) {
+    return { ...createEmptyPipelineState(), phase: 'cancelled' };
+  }
+
   // Map orchestrator result to pipeline state
+  const mappedPhase = mapOrchestratorPhase(result.phase);
   const pipelineState: PipelineState = {
     auditMode: result.audit_mode_config?.mode || null,
     authorProfile: result.author_profile_result || null,
@@ -143,41 +195,15 @@ export async function runAuditPipeline(
     generativeOutput: result.generative_output || null,
     nextActions: result.next_actions || [],
     finalScore: result.final_score || null,
-    phase: mapOrchestratorPhase(result.phase),
+    phase: mappedPhase,
     blockedAt: result.phase === 'blocked' ? result.error || 'unknown' : null,
     error: result.error || null,
     elapsedMs: Date.now() - startTime,
+    stepTimings: {},
   };
 
-  // Notify: complete
-  onProgress?.(pipelineState.phase, pipelineState);
+  // Final progress callback
+  onProgress?.(mappedPhase, pipelineState);
 
   return pipelineState;
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-/**
- * Map orchestrator phase names to the Zustand store AuditPhase type
- */
-function mapOrchestratorPhase(phase: string): AuditPhase {
-  const phaseMap: Record<string, AuditPhase> = {
-    'input_validation': 'skeleton_extraction',
-    'mode_detection': 'mode_selection',
-    'author_profile': 'author_profile',
-    'skeleton_extraction': 'skeleton_extraction',
-    'screening': 'screening',
-    'gate_L1': 'L1_evaluation',
-    'gate_L2': 'L2_evaluation',
-    'gate_L3': 'L3_evaluation',
-    'gate_L4': 'L4_evaluation',
-    'issue_generation': 'complete',
-    'generative_modules': 'complete',
-    'final_output': 'complete',
-    'complete': 'complete',
-    'blocked': 'blocked',
-  };
-  return phaseMap[phase] || 'idle';
 }

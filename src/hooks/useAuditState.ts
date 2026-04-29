@@ -135,7 +135,8 @@ export const selectHasPassedGate = (level: 'L1' | 'L2' | 'L3' | 'L4') => (state:
 export const selectOverallProgress = (state: AuditState) => {
   const phases: AuditPhase[] = [
     'idle',
-    'mode_selection',
+    'input_validation',
+    'mode_detection',
     'author_profile',
     'skeleton_extraction',
     'screening',
@@ -143,6 +144,9 @@ export const selectOverallProgress = (state: AuditState) => {
     'L2_evaluation',
     'L3_evaluation',
     'L4_evaluation',
+    'issue_generation',
+    'generative_modules',
+    'final_output',
     'complete',
     'failed',
   ];

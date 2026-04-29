@@ -342,9 +342,10 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   }
 
   // KISHŌ mode: Ten-repainting test at L3
+  // PHASE_2_TODO: Implement actual ten-repainting test via LLM prompt.
   if (state.audit_mode_config?.requireTenRepaintingTest) {
-    // Ten-repainting test would go here
-    // For now, assume it passes
+    // Ten-repainting test is not yet implemented via LLM.
+    // Skipping for now — Phase 2 will add the real test.
   }
 
   const l3Sections = getAuditSections().filter(s => s.level === 'L3');
@@ -475,25 +476,28 @@ function getPriorityArray(profile: AuthorProfile): string[] {
 }
 
 function performScreening(concept: string): ScreeningResult {
-  // Simplified screening - in production would use LLM
+  // PHASE_2_TODO: Replace keyword matching with LLM-based screening.
+  // Current implementation uses Russian keywords per Language Contract (Finding 1):
+  // English keyword matching (includes('theme'), includes('character')) is FORBIDDEN.
   const lowerConcept = concept.toLowerCase();
   let no_count = 0;
   const flags: string[] = [];
 
-  // Check for key elements
-  if (!lowerConcept.includes('theme') && !lowerConcept.includes('law')) {
+  // Check for key structural elements using Russian keywords
+  // (user narrative is in Russian per Language Contract)
+  if (!lowerConcept.includes('закон') && !lowerConcept.includes('правило') && !lowerConcept.includes('тематическ')) {
     no_count++;
-    flags.push('§0: No thematic law detected');
+    flags.push('§0: Тематический закон не обнаружен');
   }
 
-  if (!lowerConcept.includes('character') && !lowerConcept.includes('protagonist')) {
+  if (!lowerConcept.includes('персонаж') && !lowerConcept.includes('герой') && !lowerConcept.includes('протагонист')) {
     no_count++;
-    flags.push('§3: No clear protagonist');
+    flags.push('§3: Нет явного протагониста');
   }
 
-  if (!lowerConcept.includes('conflict') && !lowerConcept.includes('struggle')) {
+  if (!lowerConcept.includes('конфликт') && !lowerConcept.includes('борьба') && !lowerConcept.includes('противост')) {
     no_count++;
-    flags.push('§6: No clear conflict');
+    flags.push('§6: Нет явного конфликта');
   }
 
   return {
@@ -509,30 +513,35 @@ function executeGateWithBreakdown(
   sections: AuditSection[],
   threshold: number
 ): GateResult {
-  // Calculate score based on sections
-  const passedSections = sections.length; // In production, would evaluate each
-  const score = (passedSections / Math.max(sections.length, 1)) * 100;
+  // PHASE_2_STUB: This function always returns 100% (all sections pass).
+  // Phase 2 will replace this with real LLM-based gate evaluation.
+  // The score is artificially 100% because keyword matching cannot evaluate
+  // whether a narrative section actually satisfies protocol criteria.
+  //
+  // IMPORTANT: This means ALL gates currently pass. Once Phase 2 implements
+  // real LLM evaluation, gates will start producing meaningful scores.
+  const score = 100;
 
   // RULE_8: Build block-level breakdown
   const breakdown: Record<string, string> = {};
   for (const section of sections) {
-    breakdown[section.id] = 'PASS'; // In production, would show actual scores
+    breakdown[section.id] = 'PASS'; // PHASE_2_STUB: Always PASS until LLM integration
   }
 
   const conditions = sections.map(s => ({
     id: s.id,
     passed: true,
-    message: `${s.content} - passed`
+    message: `${s.content} — пройдено`
   }));
 
   return {
     gateId: `GATE-${level}`,
-    gateName: `Level ${level} Gate`,
+    gateName: `Уровень ${level}`,
     status: score >= threshold ? 'passed' : 'failed',
     score,
     conditions,
     halt: score < threshold,
-    fixes: score < threshold ? [`Fix ${level} issues before proceeding`] : [],
+    fixes: score < threshold ? [`Исправьте проблемы уровня ${level} перед продолжением`] : [],
     metadata: { breakdown, level }
   };
 }
@@ -628,6 +637,8 @@ function generateIssuesFromCultPotential(result: CultEvaluationResult): Issue[] 
 }
 
 function analyzeGriefStages(concept: string, dominantStage?: string): GriefPresence[] {
+  // PHASE_2_TODO: Replace keyword matching with LLM-based grief analysis.
+  // Russian keywords per Language Contract (Finding 1).
   const stages = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'] as const;
   const levels = ['world', 'society', 'character', 'scene'] as const;
   
@@ -636,13 +647,13 @@ function analyzeGriefStages(concept: string, dominantStage?: string): GriefPrese
   
   for (const stage of stages) {
     for (const level of levels) {
-      // Simple keyword detection - in production would use NLP
+      // Russian keywords for grief stage detection (Finding 1: English keywords forbidden)
       const stageKeywords: Record<string, string[]> = {
-        denial: ['refuse', 'deny', 'reject', 'ignore', 'pretend'],
-        anger: ['rage', 'fury', 'angry', 'hate', 'blame'],
-        bargaining: ['deal', 'bargain', 'negotiate', 'compromise', 'trade'],
-        depression: ['sad', 'grief', 'sorrow', 'despair', 'hopeless'],
-        acceptance: ['accept', 'peace', 'understand', 'release', 'let go']
+        denial: ['отрицан', 'отверга', 'игнорир', 'притворя', 'не вер'],
+        anger: ['гнев', 'ярость', 'злость', 'ненавист', 'обвиня'],
+        bargaining: ['сделк', 'торг', 'компромисс', 'договор', 'менять'],
+        depression: ['горе', 'печаль', 'отчаян', 'тоска', 'безнадёж'],
+        acceptance: ['приняти', 'смирен', 'покой', 'пониман', 'освобожд']
       };
       
       const hasStage = stageKeywords[stage].some(kw => lowerConcept.includes(kw));
@@ -651,7 +662,7 @@ function analyzeGriefStages(concept: string, dominantStage?: string): GriefPrese
         stage,
         level,
         present: hasStage,
-        description: hasStage ? `Detected ${stage} at ${level} level` : undefined
+        description: hasStage ? `Обнаружена стадия ${stage} на уровне ${level}` : undefined
       });
     }
   }
@@ -660,13 +671,14 @@ function analyzeGriefStages(concept: string, dominantStage?: string): GriefPrese
 }
 
 function extractElementsForChain(concept: string): string[] {
-  // Extract key narrative elements for chain analysis
+  // PHASE_2_TODO: Replace keyword matching with LLM-based element extraction.
+  // Russian keywords per Language Contract (Finding 1).
   const elements: string[] = [];
   const lowerConcept = concept.toLowerCase();
   
-  if (lowerConcept.includes('theme')) elements.push('thematic_law');
-  if (lowerConcept.includes('character')) elements.push('protagonist_goal');
-  if (lowerConcept.includes('conflict')) elements.push('central_conflict');
+  if (lowerConcept.includes('закон') || lowerConcept.includes('тематическ') || lowerConcept.includes('правило')) elements.push('thematic_law');
+  if (lowerConcept.includes('персонаж') || lowerConcept.includes('герой') || lowerConcept.includes('протагонист')) elements.push('protagonist_goal');
+  if (lowerConcept.includes('конфликт') || lowerConcept.includes('борьба') || lowerConcept.includes('противост')) elements.push('central_conflict');
   
   return elements.length > 0 ? elements : ['narrative_core'];
 }

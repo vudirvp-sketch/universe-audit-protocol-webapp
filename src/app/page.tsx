@@ -37,7 +37,7 @@ import {
   AlertTriangle,
   Link2,
 } from 'lucide-react';
-import type { MediaType, AuthorProfileAnswers, AuditPhase } from '@/lib/audit/types';
+import type { MediaType, AuthorProfileAnswers, AuditPhase, AuthorProfile, Skeleton, ScreeningResult, GateResult, Issue, ChainResult, GenerativeOutput, NextAction } from '@/lib/audit/types';
 import { runAuditPipeline, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings } from '@/hooks/useSettings';
@@ -73,6 +73,7 @@ export default function Home() {
   } = useAuditState();
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
+  const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const { provider, apiKey, model, proxyUrl, loadSettings, isLoaded } = useSettings();
 
   // Load settings on mount
@@ -88,7 +89,7 @@ export default function Home() {
   }, [theme]);
 
   // Run full audit analysis via client-side pipeline
-  const runFullAudit = async () => {
+  const startAudit = async () => {
     if (!inputText.trim()) return;
 
     if (!apiKey) {
@@ -103,16 +104,20 @@ export default function Home() {
       return;
     }
 
+    // Create abort controller for cancellation support
+    const controller = new AbortController();
+    setAbortController(controller);
+
     setLoading(true);
     setError(null);
-    setPhase('skeleton_extraction');
+    setPhase('input_validation');
 
     try {
       const result = await runAuditPipeline(
         {
           narrative: inputText,
           mediaType,
-          authorAnswers,
+          authorAnswers: authorAnswers ?? undefined,
         },
         {
           provider,
@@ -121,41 +126,42 @@ export default function Home() {
           proxyUrl,
         },
         (phase: AuditPhase, state: PipelineState) => {
-          // Per-step progress callback
+          // Per-step progress callback — update Zustand store in real time
           setPhase(phase);
         },
+        controller.signal,
       );
 
-      // Update state with pipeline results
+      // Update state with pipeline results using properly typed setters
       if (result.authorProfile) {
-        setAuthorProfile(result.authorProfile as any);
+        setAuthorProfile(result.authorProfile as AuthorProfile);
       }
       if (result.skeleton) {
-        setSkeleton(result.skeleton as any);
+        setSkeleton(result.skeleton as Skeleton);
       }
       if (result.screeningResult) {
-        setScreeningResult(result.screeningResult as any);
+        setScreeningResult(result.screeningResult as ScreeningResult);
       }
       if (result.gateResults) {
-        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1 as any);
-        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2 as any);
-        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3 as any);
-        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4 as any);
+        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1 as GateResult);
+        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2 as GateResult);
+        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3 as GateResult);
+        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4 as GateResult);
       }
       if (result.issues && result.issues.length > 0) {
-        setIssues(result.issues as any);
+        setIssues(result.issues as Issue[]);
       }
       if (result.whatForChains && result.whatForChains.length > 0) {
-        setWhatForChains(result.whatForChains as any);
+        setWhatForChains(result.whatForChains as ChainResult[]);
       }
       if (result.generativeOutput) {
-        setGenerativeOutput(result.generativeOutput as any);
+        setGenerativeOutput(result.generativeOutput as GenerativeOutput);
       }
       if (result.nextActions && result.nextActions.length > 0) {
-        setNextActions(result.nextActions as any);
+        setNextActions(result.nextActions as NextAction[]);
       }
       if (result.finalScore) {
-        setFinalScore(result.finalScore as any);
+        setFinalScore(result.finalScore as { total: string; percentage: number; by_level: Record<string, number> });
       }
 
       // Set phase based on result
@@ -167,19 +173,35 @@ export default function Home() {
       }
 
     } catch (err) {
-      console.error('Audit error:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-      setPhase('failed');
+      // Check if cancelled
+      if (abortController?.signal.aborted) {
+        setPhase('cancelled');
+        setError(null);
+      } else {
+        console.error('Audit error:', err);
+        setError(err instanceof Error ? err.message : 'Неизвестная ошибка');
+        setPhase('failed');
+      }
     } finally {
       setLoading(false);
+      setAbortController(null);
     }
   };
 
-  // Auto-start audit when phase changes to mode_selection
-  React.useEffect(() => {
-    if (phase === 'mode_selection' && inputText.trim()) {
-      runFullAudit();
+  // Cancel running audit
+  const cancelAudit = () => {
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
     }
+  };
+
+  // Auto-start audit when phase changes to mode_detection trigger
+  React.useEffect(() => {
+    if (phase === 'mode_detection' && inputText.trim() && !isLoading) {
+      startAudit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
   return (
@@ -190,14 +212,14 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Sparkles className="h-6 w-6 text-amber-500" />
             <div>
-              <h1 className="text-xl font-bold">Universe Audit Protocol</h1>
+              <h1 className="text-xl font-bold">Протокол Аудита Вселенной</h1>
               <p className="text-xs text-muted-foreground">v10.0</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="hidden sm:flex">
               <BookOpen className="h-3 w-3 mr-1" />
-              52 Items
+              52 критерия
             </Badge>
             <Button
               variant="ghost"
@@ -229,20 +251,21 @@ export default function Home() {
           /* Input Form Phase */
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">Audit Your Universe</h2>
+              <h2 className="text-3xl font-bold mb-2">Аудит вашей вселенной</h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
-                The Universe Audit Protocol evaluates fictional worlds through 4 hierarchical levels:
-                Mechanism, Body, Psyche, and Meta. Each level requires ≥60% score to proceed.
+                Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня:
+                Механизм, Тело, Психика и Мета. Каждый уровень требует порогового балла для прохождения
+                (60% для конфликтного режима, 50% для кирё, 55% для гибридного).
               </p>
             </div>
 
             {/* Protocol Overview Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {[
-                { level: 'L1', name: 'Mechanism', question: 'Does the world work as a system?', icon: '⚙️' },
-                { level: 'L2', name: 'Body', question: 'Is there embodiment?', icon: '🫀' },
-                { level: 'L3', name: 'Psyche', question: 'Does it work as a symptom?', icon: '🧠' },
-                { level: 'L4', name: 'Meta', question: 'Does it ask about real life?', icon: '🪞' },
+                { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', icon: '⚙️' },
+                { level: 'L2', name: 'Тело', question: 'Есть ли воплощённость?', icon: '🫀' },
+                { level: 'L3', name: 'Психика', question: 'Работает ли как симптом?', icon: '🧠' },
+                { level: 'L4', name: 'Мета', question: 'Спрашивает ли о реальной жизни?', icon: '🪞' },
               ].map((item) => (
                 <Card key={item.level} className="text-center">
                   <CardHeader className="pb-2">
@@ -269,34 +292,45 @@ export default function Home() {
                 {/* Quick Stats */}
                 <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Configuration</CardTitle>
+                      <CardTitle className="text-sm">Конфигурация</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Media:</span>
+                        <span className="text-muted-foreground">Медиа:</span>
                         <Badge variant="outline">{mediaType}</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Mode:</span>
-                        <Badge variant="outline">{auditMode || 'detecting'}</Badge>
+                        <span className="text-muted-foreground">Режим:</span>
+                        <Badge variant="outline">{auditMode || 'определение...'}</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Input:</span>
-                        <span>{inputText.length} chars</span>
+                        <span className="text-muted-foreground">Ввод:</span>
+                        <span>{inputText.length} символов</span>
                       </div>
                     </CardContent>
                   </Card>
 
-                {/* Skeleton Quick View */}
-                <Button
+                {/* Cancel / Reset Buttons */}
+                <div className="space-y-2">
+                  {isLoading && (
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={cancelAudit}
+                    >
+                      Отменить аудит
+                    </Button>
+                  )}
+                  <Button
                     variant="outline"
                     className="w-full"
                     onClick={() => reset()}
                     disabled={isLoading}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
-                    Start New Audit
+                    Новый аудит
                   </Button>
+                </div>
               </div>
             </ResizablePanel>
 
@@ -309,15 +343,15 @@ export default function Home() {
                   <TabsList className="mb-4 flex-wrap h-auto gap-1">
                     <TabsTrigger value="report" className="flex items-center gap-1">
                       <FileText className="h-4 w-4" />
-                      Report
+                      Отчёт
                     </TabsTrigger>
                     <TabsTrigger value="gates" className="flex items-center gap-1">
                       <BarChart3 className="h-4 w-4" />
-                      Gates
+                      Гейты
                     </TabsTrigger>
                     <TabsTrigger value="issues" className="flex items-center gap-1">
                       <AlertTriangle className="h-4 w-4" />
-                      Issues
+                      Проблемы
                       {issues.length > 0 && (
                         <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
                           {issues.length}
@@ -326,19 +360,19 @@ export default function Home() {
                     </TabsTrigger>
                     <TabsTrigger value="chains" className="flex items-center gap-1">
                       <Link2 className="h-4 w-4" />
-                      Chains
+                      Цепочки
                     </TabsTrigger>
                     <TabsTrigger value="generative" className="flex items-center gap-1">
                       <Sparkles className="h-4 w-4" />
-                      Generated
+                      Генерация
                     </TabsTrigger>
                     <TabsTrigger value="checklist" className="flex items-center gap-1">
                       <ListChecks className="h-4 w-4" />
-                      Checklist
+                      Чеклист
                     </TabsTrigger>
                     <TabsTrigger value="grief" className="flex items-center gap-1">
                       <Heart className="h-4 w-4" />
-                      Grief Matrix
+                      Горе-матрица
                     </TabsTrigger>
                   </TabsList>
 
@@ -380,10 +414,10 @@ export default function Home() {
       <footer className="border-t py-4">
         <div className="container flex items-center justify-between text-sm text-muted-foreground">
           <p>
-            Universe Audit Protocol v10.0 — Based on the Russian protocol &quot;АУДИТ_ВСЕЛЕННОЙ_v10.0.md&quot;
+            Протокол Аудита Вселенной v10.0 — На основе протокола &quot;АУДИТ_ВСЕЛЕННОЙ_v10.0.md&quot;
           </p>
           <div className="flex items-center gap-4">
-            <span>4 Levels • 52 Items • 60% Gate Threshold</span>
+            <span>4 уровня • 52 критерия • Порог зависит от режима</span>
           </div>
         </div>
       </footer>

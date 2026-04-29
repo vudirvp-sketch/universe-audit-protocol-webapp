@@ -70,7 +70,7 @@ export function AuditForm() {
 
   const handleStartAudit = () => {
     if (!inputText.trim()) return;
-    setPhase('mode_selection');
+    setPhase('mode_detection');
   };
 
   return (

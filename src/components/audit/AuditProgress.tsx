@@ -23,17 +23,22 @@ interface PhaseInfo {
 }
 
 const PHASES: PhaseInfo[] = [
-  { id: 'idle', name: 'Ready', description: 'Enter your narrative to begin' },
-  { id: 'mode_selection', name: 'Mode Selection', description: 'Determining audit mode' },
-  { id: 'author_profile', name: 'Author Profile', description: 'Analyzing author profile' },
-  { id: 'skeleton_extraction', name: 'Skeleton', description: 'Extracting narrative skeleton' },
-  { id: 'screening', name: 'Screening', description: 'Quick 7-question screening' },
-  { id: 'L1_evaluation', name: 'L1: Mechanism', description: 'System coherence check' },
-  { id: 'L2_evaluation', name: 'L2: Body', description: 'Embodiment & consequences' },
-  { id: 'L3_evaluation', name: 'L3: Psyche', description: 'Psychological depth check' },
-  { id: 'L4_evaluation', name: 'L4: Meta', description: 'Meta-narrative layer' },
-  { id: 'complete', name: 'Complete', description: 'Audit finished' },
-  { id: 'failed', name: 'Failed', description: 'Gate failure - fix required' },
+  { id: 'idle', name: 'Готов', description: 'Введите нарратив для начала' },
+  { id: 'input_validation', name: 'Валидация', description: 'Проверка ввода' },
+  { id: 'mode_detection', name: 'Определение режима', description: 'Определение режима аудита' },
+  { id: 'author_profile', name: 'Профиль автора', description: 'Анализ профиля автора' },
+  { id: 'skeleton_extraction', name: 'Скелет', description: 'Извлечение скелета нарратива' },
+  { id: 'screening', name: 'Скрининг', description: 'Быстрый 7-вопросный скрининг' },
+  { id: 'L1_evaluation', name: 'L1: Механизм', description: 'Проверка системной связности' },
+  { id: 'L2_evaluation', name: 'L2: Тело', description: 'Воплощённость и последствия' },
+  { id: 'L3_evaluation', name: 'L3: Психика', description: 'Проверка психологической глубины' },
+  { id: 'L4_evaluation', name: 'L4: Мета', description: 'Мета-нарративный уровень' },
+  { id: 'issue_generation', name: 'Проблемы', description: 'Генерация проблем и цепочек' },
+  { id: 'generative_modules', name: 'Генерация', description: 'Генеративные модули' },
+  { id: 'final_output', name: 'Итог', description: 'Финальная диагностика' },
+  { id: 'complete', name: 'Завершено', description: 'Аудит завершён' },
+  { id: 'failed', name: 'Ошибка', description: 'Гейт не пройден — требуется исправление' },
+  { id: 'blocked', name: 'Заблокировано', description: 'Аудит остановлен' },
 ];
 
 export function AuditProgress() {
