@@ -23,22 +23,9 @@ import {
 } from 'lucide-react';
 import type { ChecklistItem, ChecklistItemStatus } from '@/lib/audit/types';
 import { GATE_THRESHOLD } from '@/lib/audit/protocol-data';
+import { t } from '@/lib/i18n/ru';
 
-const BLOCK_NAMES: Record<string, string> = {
-  A: 'Structure',
-  B: 'Connectedness',
-  C: 'Vitality',
-  D: 'Characters',
-  E: 'Systems & Logic',
-  F: 'New Elements',
-  G: 'Cult Status',
-  H: 'Scenes',
-  I: 'Thematic Physics',
-  J: 'Grief Architecture',
-  K: 'Meta-integration',
-  L: 'Narrative Infrastructure',
-  M: 'Finale & Authorship',
-};
+const BLOCK_NAMES: Record<string, string> = t.checklist.blockNames;
 
 const STATUS_ICONS: Record<ChecklistItemStatus, React.ReactNode> = {
   PASS: <CheckCircle2 className="h-4 w-4 text-green-500" />,
@@ -78,7 +65,7 @@ function ChecklistItemRow({ item, onStatusChange, onEvidenceChange }: ChecklistI
             </Badge>
           </div>
           <p className="text-sm mt-1">{item.text}</p>
-          
+
           {/* Status Selection */}
           <div className="flex items-center gap-4 mt-2">
             {(['PASS', 'FAIL', 'INSUFFICIENT_DATA'] as const).map((status) => (
@@ -99,19 +86,19 @@ function ChecklistItemRow({ item, onStatusChange, onEvidenceChange }: ChecklistI
           {(item.status === 'PASS' || item.status === 'FAIL') && (
             <div className="mt-3 space-y-2">
               <Label className="text-xs text-muted-foreground">
-                Evidence {item.status === 'PASS' && '(required)'}
+                {item.status === 'PASS' ? t.checklist.evidenceRequired : t.checklist.evidence}
               </Label>
               <Textarea
-                placeholder="Cite specific text or describe evidence..."
+                placeholder={t.checklist.evidencePlaceholder}
                 value={item.evidence || ''}
                 onChange={(e) => onEvidenceChange(e.target.value)}
                 className="min-h-[60px] text-sm"
               />
               {item.status === 'PASS' && (
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Functional Role</Label>
+                  <Label className="text-xs text-muted-foreground">{t.checklist.functionalRole}</Label>
                   <Textarea
-                    placeholder="Explain how this serves the criterion functionally..."
+                    placeholder={t.checklist.functionalRolePlaceholder}
                     value={item.functionalRole || ''}
                     onChange={(e) => onEvidenceChange(e.target.value)}
                     className="min-h-[40px] text-sm"
@@ -124,7 +111,7 @@ function ChecklistItemRow({ item, onStatusChange, onEvidenceChange }: ChecklistI
           {/* INSUFFICIENT_DATA message */}
           {item.status === 'INSUFFICIENT_DATA' && (
             <div className="mt-2 p-2 rounded bg-yellow-500/10 text-xs text-yellow-700 dark:text-yellow-300">
-              Cannot determine from available text. More information needed.
+              {t.checklist.insufficientDataMsg}
             </div>
           )}
         </div>
@@ -144,7 +131,7 @@ function ChecklistBlock({ block, items, onUpdateItem }: ChecklistBlockProps) {
   const failed = items.filter((i) => i.status === 'FAIL').length;
   const insufficient = items.filter((i) => i.status === 'INSUFFICIENT_DATA').length;
   const total = items.length;
-  
+
   const score = total > 0 ? Math.round((passed / total) * 100) : 0;
   const isPassing = score >= GATE_THRESHOLD;
 
@@ -162,7 +149,7 @@ function ChecklistBlock({ block, items, onUpdateItem }: ChecklistBlockProps) {
             </span>
             {failed > 0 && (
               <Badge variant="destructive" className="text-xs">
-                {failed} fail
+                {failed} {t.checklist.fail}
               </Badge>
             )}
             {insufficient > 0 && (
@@ -205,15 +192,15 @@ export function ChecklistDisplay() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg">Checklist</CardTitle>
+            <CardTitle className="text-lg">{t.checklist.title}</CardTitle>
             <CardDescription>
-              52 items across 13 blocks
+              {t.checklist.description}
             </CardDescription>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold">{overallScore}%</div>
             <div className="text-xs text-muted-foreground">
-              {passed} / {total} passed
+              {t.checklist.passedCount.replace('{passed}', String(passed)).replace('{total}', String(total))}
             </div>
           </div>
         </div>

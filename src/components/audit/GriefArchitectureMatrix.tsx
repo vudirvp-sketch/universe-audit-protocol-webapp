@@ -17,18 +17,19 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { GriefStage, GriefLevel, GriefMatrixCell } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
 
 const GRIEF_LEVELS: GriefLevel[] = ['character', 'location', 'mechanic', 'act'];
 const GRIEF_STAGE_KEYS: GriefStage[] = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'];
 
 const LEVEL_LABELS: Partial<Record<GriefLevel, string>> = {
-  character: 'Character',
-  location: 'Location',
-  mechanic: 'Mechanic/Action',
-  act: 'Narrative Act',
-  world: 'World',
-  society: 'Society',
-  scene: 'Scene',
+  character: t.grief.levelLabels.character,
+  location: t.grief.levelLabels.location,
+  mechanic: t.grief.levelLabels.mechanic,
+  act: t.grief.levelLabels.act,
+  world: t.grief.levelLabels.world,
+  society: t.grief.levelLabels.society,
+  scene: t.grief.levelLabels.scene,
 };
 
 const CONFIDENCE_COLORS = {
@@ -93,14 +94,14 @@ export function GriefArchitectureMatrix() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg">Grief Architecture Matrix</CardTitle>
+            <CardTitle className="text-lg">{t.grief.title}</CardTitle>
             <CardDescription>
-              5 stages × 4 levels of materialization
+              {t.grief.description}
             </CardDescription>
           </div>
           {griefMatrix?.dominantStage && (
             <Badge className={isDominantStageValid() ? 'bg-green-500' : 'bg-yellow-500'}>
-              Dominant: {GRIEF_STAGES[griefMatrix.dominantStage].nameEn}
+              {t.grief.dominant} {GRIEF_STAGES[griefMatrix.dominantStage].nameRu}
             </Badge>
           )}
         </div>
@@ -108,13 +109,13 @@ export function GriefArchitectureMatrix() {
       <CardContent>
         {/* Dominant Stage Selector */}
         <div className="mb-4 space-y-2">
-          <Label className="text-sm font-medium">Dominant Grief Stage</Label>
+          <Label className="text-sm font-medium">{t.grief.dominantStage}</Label>
           <Select
             value={griefMatrix?.dominantStage || ''}
             onValueChange={(v) => handleDominantStageChange(v as GriefStage)}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select dominant stage..." />
+              <SelectValue placeholder={t.grief.dominantStagePlaceholder} />
             </SelectTrigger>
             <SelectContent>
               {GRIEF_STAGE_KEYS.map((stage) => {
@@ -122,7 +123,7 @@ export function GriefArchitectureMatrix() {
                 return (
                   <SelectItem key={stage} value={stage}>
                     <div className="flex items-center gap-2">
-                      <span>{GRIEF_STAGES[stage].nameEn}</span>
+                      <span>{GRIEF_STAGES[stage].nameRu}</span>
                       <Badge variant="outline" className="text-xs">
                         {filled}/{total}
                       </Badge>
@@ -133,7 +134,7 @@ export function GriefArchitectureMatrix() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            The dominant stage must have all 4 levels filled
+            {t.grief.dominantStageHint}
           </p>
         </div>
 
@@ -150,7 +151,7 @@ export function GriefArchitectureMatrix() {
                     value={stage}
                     className={`text-xs ${isDominant ? 'bg-primary/20' : ''}`}
                   >
-                    {GRIEF_STAGES[stage].nameEn}
+                    {GRIEF_STAGES[stage].nameRu}
                     <Badge
                       variant="outline"
                       className={`ml-1 text-xs ${filled === total ? 'bg-green-500/20' : ''}`}
@@ -173,18 +174,18 @@ export function GriefArchitectureMatrix() {
                     <div className={`p-3 rounded-md border ${isDominant ? 'border-primary/50 bg-primary/5' : 'border-muted'}`}>
                       <div className="flex items-center gap-2 mb-2">
                         <Badge variant={isDominant ? 'default' : 'outline'}>
-                          {stageInfo.nameEn}
+                          {stageInfo.nameRu}
                         </Badge>
-                        <Badge variant="outline">{stageInfo.nameRu}</Badge>
+                        <Badge variant="outline">{stageInfo.nameEn}</Badge>
                         {isDominant && (
-                          <Badge className="bg-primary">DOMINANT</Badge>
+                          <Badge className="bg-primary">{t.grief.dominant}</Badge>
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground">
-                        <strong>Materialization:</strong> {stageInfo.materialization}
+                        <strong>{t.grief.materialization}</strong> {stageInfo.materialization}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        <strong>Verification:</strong> {stageInfo.verificationQuestion}
+                        <strong>{t.grief.verification}</strong> {stageInfo.verificationQuestion}
                       </p>
                     </div>
 
@@ -205,9 +206,9 @@ export function GriefArchitectureMatrix() {
                                 {confidence}
                               </Badge>
                             </div>
-                            
+
                             <Textarea
-                              placeholder={`Who/what embodies ${stage} at this level?`}
+                              placeholder={t.grief.cellPlaceholder.replace('{stage}', stageInfo.nameRu)}
                               value={cell?.character || ''}
                               onChange={(e) =>
                                 handleCellUpdate(stage, level, {
@@ -217,18 +218,18 @@ export function GriefArchitectureMatrix() {
                               }
                               className="min-h-[60px] text-sm mb-2"
                             />
-                            
+
                             <Textarea
-                              placeholder="Evidence from narrative..."
+                              placeholder={t.grief.evidencePlaceholder}
                               value={cell?.evidence || ''}
                               onChange={(e) =>
                                 handleCellUpdate(stage, level, { evidence: e.target.value })
                               }
                               className="min-h-[40px] text-sm"
                             />
-                            
+
                             <div className="flex items-center gap-2 mt-2">
-                              <Label className="text-xs text-muted-foreground">Confidence:</Label>
+                              <Label className="text-xs text-muted-foreground">{t.grief.confidence}</Label>
                               {(['high', 'medium', 'low', 'absent'] as const).map((c) => (
                                 <Badge
                                   key={c}

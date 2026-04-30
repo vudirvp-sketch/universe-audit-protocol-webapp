@@ -94,7 +94,7 @@ export function AuditProgress() {
           {error && (
             <Badge variant="destructive" className="flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
-              Ошибка
+              {t.errors.error}
             </Badge>
           )}
         </div>

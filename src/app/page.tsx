@@ -95,13 +95,13 @@ export default function Home() {
     if (!inputText.trim()) return;
 
     if (!apiKey) {
-      setError('API ключ не указан. Откройте настройки и введите API ключ.');
+      setError(t.errors.noApiKey);
       setPhase('failed');
       return;
     }
 
     if (!proxyUrl) {
-      setError('URL прокси не указан. Откройте настройки и введите URL вашего Cloudflare Worker.');
+      setError(t.errors.proxy);
       setPhase('failed');
       return;
     }
@@ -182,7 +182,7 @@ export default function Home() {
         setError(null);
       } else {
         console.error('Audit error:', err);
-        setError(err instanceof Error ? err.message : 'Неизвестная ошибка');
+        setError(err instanceof Error ? err.message : t.errors.unknown);
         setPhase('failed');
       }
     } finally {
@@ -207,14 +207,14 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Sparkles className="h-6 w-6 text-amber-500" />
             <div>
-              <h1 className="text-xl font-bold">Протокол Аудита Вселенной</h1>
-              <p className="text-xs text-muted-foreground">v10.0</p>
+              <h1 className="text-xl font-bold">{t.app.title}</h1>
+              <p className="text-xs text-muted-foreground">{t.app.version}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="hidden sm:flex">
               <BookOpen className="h-3 w-3 mr-1" />
-              52 критерия
+              {t.app.criteriaCount}
             </Badge>
             <Button
               variant="ghost"
@@ -246,7 +246,7 @@ export default function Home() {
           /* Input Form Phase */
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">Аудит вашей вселенной</h2>
+              <h2 className="text-3xl font-bold mb-2">{t.app.title}</h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
                 {t.homeDescription}
               </p>
@@ -255,10 +255,10 @@ export default function Home() {
             {/* Protocol Overview Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {[
-                { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', icon: '⚙️' },
-                { level: 'L2', name: 'Тело', question: 'Есть ли воплощённость?', icon: '🫀' },
-                { level: 'L3', name: 'Психика', question: 'Работает ли как симптом?', icon: '🧠' },
-                { level: 'L4', name: 'Мета', question: 'Спрашивает ли о реальной жизни?', icon: '🪞' },
+                { level: 'L1', name: t.levels.L1.name, question: t.levels.L1.question, icon: '\u2699\uFE0F' },
+                { level: 'L2', name: t.levels.L2.name, question: t.levels.L2.question, icon: '\uD83E\uDEC0' },
+                { level: 'L3', name: t.levels.L3.name, question: t.levels.L3.question, icon: '\uD83E\uDDE0' },
+                { level: 'L4', name: t.levels.L4.name, question: t.levels.L4.question, icon: '\uD83E\uDE9E' },
               ].map((item) => (
                 <Card key={item.level} className="text-center">
                   <CardHeader className="pb-2">
@@ -285,20 +285,20 @@ export default function Home() {
                 {/* Quick Stats */}
                 <Card>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Конфигурация</CardTitle>
+                      <CardTitle className="text-sm">{t.config.title}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Медиа:</span>
+                        <span className="text-muted-foreground">{t.config.media}:</span>
                         <Badge variant="outline">{mediaType}</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Режим:</span>
-                        <Badge variant="outline">{auditMode || 'определение...'}</Badge>
+                        <span className="text-muted-foreground">{t.config.mode}:</span>
+                        <Badge variant="outline">{auditMode || t.config.modeDetecting}</Badge>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-muted-foreground">Ввод:</span>
-                        <span>{inputText.length} символов</span>
+                        <span className="text-muted-foreground">{t.config.input}:</span>
+                        <span>{t.config.characters.replace('{count}', String(inputText.length))}</span>
                       </div>
                     </CardContent>
                   </Card>
@@ -311,7 +311,7 @@ export default function Home() {
                       className="w-full"
                       onClick={cancelAudit}
                     >
-                      Отменить аудит
+                      {t.app.cancelAudit}
                     </Button>
                   )}
                   <Button
@@ -321,7 +321,7 @@ export default function Home() {
                     disabled={isLoading}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
-                    Новый аудит
+                    {t.app.newAudit}
                   </Button>
                 </div>
               </div>
@@ -334,20 +334,20 @@ export default function Home() {
               <div className="p-4 h-full overflow-auto">
                 {/* Show blocked state prominently when blocked */}
                 {phase === 'blocked' && <div className="mb-4"><BlockedState /></div>}
-                
+
                 <Tabs defaultValue="report" className="h-full">
                   <TabsList className="mb-4 flex-wrap h-auto gap-1">
                     <TabsTrigger value="report" className="flex items-center gap-1">
                       <FileText className="h-4 w-4" />
-                      Отчёт
+                      {t.tabs.report}
                     </TabsTrigger>
                     <TabsTrigger value="gates" className="flex items-center gap-1">
                       <BarChart3 className="h-4 w-4" />
-                      Гейты
+                      {t.tabs.gates}
                     </TabsTrigger>
                     <TabsTrigger value="issues" className="flex items-center gap-1">
                       <AlertTriangle className="h-4 w-4" />
-                      Проблемы
+                      {t.tabs.issues}
                       {issues.length > 0 && (
                         <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
                           {issues.length}
@@ -356,19 +356,19 @@ export default function Home() {
                     </TabsTrigger>
                     <TabsTrigger value="chains" className="flex items-center gap-1">
                       <Link2 className="h-4 w-4" />
-                      Цепочки
+                      {t.tabs.chains}
                     </TabsTrigger>
                     <TabsTrigger value="generative" className="flex items-center gap-1">
                       <Sparkles className="h-4 w-4" />
-                      Генерация
+                      {t.tabs.generative}
                     </TabsTrigger>
                     <TabsTrigger value="checklist" className="flex items-center gap-1">
                       <ListChecks className="h-4 w-4" />
-                      Чеклист
+                      {t.tabs.checklist}
                     </TabsTrigger>
                     <TabsTrigger value="grief" className="flex items-center gap-1">
                       <Heart className="h-4 w-4" />
-                      Горе-матрица
+                      {t.tabs.grief}
                     </TabsTrigger>
                   </TabsList>
 
@@ -409,11 +409,9 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t py-4">
         <div className="container flex items-center justify-between text-sm text-muted-foreground">
-          <p>
-            Протокол Аудита Вселенной v10.0 — На основе протокола &quot;АУДИТ_ВСЕЛЕННОЙ_v10.0.md&quot;
-          </p>
+          <p>{t.app.footer}</p>
           <div className="flex items-center gap-4">
-            <span>4 уровня • 52 критерия • Порог зависит от режима</span>
+            <span>{t.app.footerStats}</span>
           </div>
         </div>
       </footer>

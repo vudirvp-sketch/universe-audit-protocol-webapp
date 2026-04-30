@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, Link2, CheckCircle2, XCircle, ArrowRight, HelpCircle } from 'lucide-react';
 import type { ChainResult, ChainIteration } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
 
 interface WhatForChainsProps {
   chains: ChainResult[];
@@ -66,7 +67,7 @@ function ChainCard({ chain, index }: { chain: ChainResult; index: number }) {
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Link2 className="h-4 w-4" />
-            Chain {index + 1}
+            {t.chains.chainTitle.replace('{index}', String(index + 1))}
           </CardTitle>
           <div className="flex items-center gap-2">
             <Badge className={TERMINAL_COLORS[terminal as keyof typeof TERMINAL_COLORS] || TERMINAL_COLORS.UNCLASSIFIED}>
@@ -87,10 +88,10 @@ function ChainCard({ chain, index }: { chain: ChainResult; index: number }) {
             <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5" />
             <div>
               <p className="text-sm font-medium text-red-600">
-                Critical: BREAK at step {stepReached}
+                {t.chains.criticalBreak.replace('{step}', String(stepReached))}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Element breaks narrative logic early in the chain. Consider binding to world law or removing.
+                {t.chains.criticalBreakDesc}
               </p>
             </div>
           </div>
@@ -101,23 +102,23 @@ function ChainCard({ chain, index }: { chain: ChainResult; index: number }) {
           {chain.valid ? (
             <div className="flex items-center gap-1 text-green-600">
               <CheckCircle2 className="h-4 w-4" />
-              <span className="text-sm">Valid chain</span>
+              <span className="text-sm">{t.chains.validChain}</span>
             </div>
           ) : (
             <div className="flex items-center gap-1 text-yellow-600">
               <HelpCircle className="h-4 w-4" />
-              <span className="text-sm">Unclassified terminal - requires retry</span>
+              <span className="text-sm">{t.chains.unclassifiedTerminal}</span>
             </div>
           )}
           <span className="text-sm text-muted-foreground">
-            • Terminated at step {stepReached}
+            {'\u2022'} {t.chains.terminatedAtStep.replace('{step}', String(stepReached))}
           </span>
         </div>
 
         {/* Iterations */}
         {iterations.length > 0 && (
           <div className="space-y-1">
-            <h4 className="text-sm font-medium">Iterations</h4>
+            <h4 className="text-sm font-medium">{t.chains.iterations}</h4>
             <div className="pl-2">
               {iterations.map((iteration, i) => (
                 <ChainIterationCard
@@ -140,36 +141,36 @@ function ChainCard({ chain, index }: { chain: ChainResult; index: number }) {
         {/* Action Recommendation */}
         {chain.action && (
           <div className="p-3 bg-muted/50 rounded-lg">
-            <div className="text-sm font-medium mb-1">Recommended Action</div>
+            <div className="text-sm font-medium mb-1">{t.chains.recommendedAction}</div>
             <div className="flex items-center gap-2">
               {chain.action === 'bind_to_law' && (
                 <>
                   <ArrowRight className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm">Bind this element to the world&apos;s thematic law</span>
+                  <span className="text-sm">{t.chains.bindToLaw}</span>
                 </>
               )}
               {chain.action === 'keep' && (
                 <>
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="text-sm">Element creates meaningful dilemma - keep as is</span>
+                  <span className="text-sm">{t.chains.keepElement}</span>
                 </>
               )}
               {chain.action === 'remove' && (
                 <>
                   <XCircle className="h-4 w-4 text-red-500" />
-                  <span className="text-sm">Consider removing this element</span>
+                  <span className="text-sm">{t.chains.removeElement}</span>
                 </>
               )}
               {chain.action === 'bind_to_law_or_remove' && (
                 <>
                   <AlertTriangle className="h-4 w-4 text-purple-500" />
-                  <span className="text-sm">Either bind to law or remove entirely</span>
+                  <span className="text-sm">{t.chains.bindOrRemove}</span>
                 </>
               )}
               {chain.action === 'retry_analysis' && (
                 <>
                   <HelpCircle className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm">Chain did not reach clear terminal - re-analyze</span>
+                  <span className="text-sm">{t.chains.retryAnalysis}</span>
                 </>
               )}
             </div>
@@ -190,9 +191,9 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
               <Link2 className="h-8 w-8 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-medium">No Chain Analysis</h3>
+              <h3 className="text-lg font-medium">{t.chains.noChains}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                No &quot;А чтобы что?&quot; chains were generated for this narrative.
+                {t.chains.noChainsDesc}
               </p>
             </div>
           </div>
@@ -207,7 +208,7 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
   const unclassified = chains.filter(c => !c.terminal && !c.terminal_type);
 
   // Count critical breaks (step <= 4)
-  const criticalBreaks = breaks.filter(c => 
+  const criticalBreaks = breaks.filter(c =>
     (c.terminalStep || c.step_reached) <= 4
   );
 
@@ -217,7 +218,7 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Link2 className="h-5 w-5" />
-          <span className="font-medium">{chains.length} Chains</span>
+          <span className="font-medium">{t.chains.countChains.replace('{count}', String(chains.length))}</span>
         </div>
         {breaks.length > 0 && (
           <Badge variant="destructive">{breaks.length} BREAK</Badge>
@@ -240,7 +241,7 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-red-500">
             <AlertTriangle className="h-5 w-5" />
-            Critical BREAK Chains (≤4 steps)
+            {t.chains.criticalBreakChains}
           </h3>
           <div className="space-y-4">
             {criticalBreaks.map((chain, i) => (
@@ -255,7 +256,7 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-orange-500">
             <XCircle className="h-5 w-5" />
-            Other BREAK Chains
+            {t.chains.otherBreakChains}
           </h3>
           <div className="space-y-4">
             {breaks.filter(c => (c.terminalStep || c.step_reached) > 4).map((chain, i) => (
@@ -270,7 +271,7 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-green-500">
             <CheckCircle2 className="h-5 w-5" />
-            DILEMMA Chains
+            {t.chains.dilemmaChains}
           </h3>
           <div className="space-y-4">
             {dilemmas.map((chain, i) => (
@@ -285,7 +286,7 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-yellow-500">
             <HelpCircle className="h-5 w-5" />
-            Unclassified Chains (Need Retry)
+            {t.chains.unclassifiedChains}
           </h3>
           <div className="space-y-4">
             {unclassified.map((chain, i) => (

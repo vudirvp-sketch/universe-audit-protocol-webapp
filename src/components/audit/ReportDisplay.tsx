@@ -19,6 +19,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import type { AuditReport, LegacySkeleton } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
+import { Label } from '@/components/ui/label';
 
 // Type guard for LegacySkeleton
 function isLegacySkeleton(skeleton: unknown): skeleton is LegacySkeleton {
@@ -32,11 +34,11 @@ const CLASSIFICATION_COLORS = {
   decoration: 'bg-red-500 text-white',
 };
 
-const CLASSIFICATION_LABELS = {
-  cult_masterpiece: 'Культовый шедевр',
-  powerful: 'Мощный нарратив',
-  living_weak_soul: 'Живой мир, слабая душа',
-  decoration: 'Декорация',
+const CLASSIFICATION_LABELS: Record<string, string> = {
+  cult_masterpiece: t.report.cult_masterpiece,
+  powerful: t.report.powerful,
+  living_weak_soul: t.report.living_weak_soul,
+  decoration: t.report.decoration,
 };
 
 interface HumanReadableReportProps {
@@ -52,27 +54,27 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold">Отчёт аудита</h2>
-            <p className="text-muted-foreground">Протокол Аудита Вселенной v10.0</p>
+            <h2 className="text-2xl font-bold">{t.report.title}</h2>
+            <p className="text-muted-foreground">{t.report.protocolVersion}</p>
           </div>
           <Badge className={CLASSIFICATION_COLORS[humanReadable.classification]}>
-            {CLASSIFICATION_LABELS[humanReadable.classification]}
+            {CLASSIFICATION_LABELS[humanReadable.classification] || humanReadable.classification}
           </Badge>
         </div>
 
         {/* 1. Audit Mode */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">1. Режим аудита</CardTitle>
+            <CardTitle className="text-base">{t.report.auditMode}</CardTitle>
           </CardHeader>
           <CardContent>
             <Badge variant="outline" className="text-lg">
               {humanReadable.auditMode.toUpperCase()}
             </Badge>
             <p className="text-sm text-muted-foreground mt-2">
-              {humanReadable.auditMode === 'conflict' && 'Западная структура, Путешествие Героя, конфликт как драйвер'}
-              {humanReadable.auditMode === 'kishō' && 'Структура без конфликта, смена перспективы как драйвер'}
-              {humanReadable.auditMode === 'hybrid' && 'Архитектура Горя как основа, антагонист как симптом'}
+              {humanReadable.auditMode === 'conflict' && t.report.conflictModeDesc}
+              {humanReadable.auditMode === 'kishō' && t.report.kishoModeDesc}
+              {humanReadable.auditMode === 'hybrid' && t.report.hybridModeDesc}
             </p>
           </CardContent>
         </Card>
@@ -80,7 +82,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 2. Author Profile */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">2. Профиль автора</CardTitle>
+            <CardTitle className="text-base">{t.report.authorProfile}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-3">
@@ -88,10 +90,12 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
                 {humanReadable.authorProfile.type.toUpperCase()}
               </Badge>
               <span className="text-2xl font-bold">{humanReadable.authorProfile.percentage}%</span>
-              <Badge variant="secondary">{humanReadable.authorProfile.confidence === 'high' ? 'высокая' : humanReadable.authorProfile.confidence === 'medium' ? 'средняя' : 'низкая'} уверенность</Badge>
+              <Badge variant="secondary">
+                {humanReadable.authorProfile.confidence === 'high' ? t.report.confidenceHigh : humanReadable.authorProfile.confidence === 'medium' ? t.report.confidenceMedium : t.report.confidenceLow} {t.report.confidenceLabel}
+              </Badge>
             </div>
             <div className="mt-3 space-y-1">
-              <p className="text-sm"><strong>Главные риски:</strong></p>
+              <p className="text-sm"><strong>{t.report.mainRisks}</strong></p>
               <ul className="text-sm text-muted-foreground list-disc list-inside">
                 {humanReadable.authorProfile.mainRisks.map((risk, i) => (
                   <li key={i}>{risk}</li>
@@ -104,7 +108,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 3. Skeleton */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">3. Извлечённый скелет</CardTitle>
+            <CardTitle className="text-base">{t.report.skeleton}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -112,18 +116,18 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
                 // Legacy skeleton format
                 <>
                   {[
-                    { label: 'Тематический закон', value: humanReadable.skeleton.thematicLaw },
-                    { label: 'Корневая травма', value: humanReadable.skeleton.rootTrauma },
-                    { label: 'Хамартия', value: humanReadable.skeleton.hamartia },
-                    { label: '3 Столпа', value: humanReadable.skeleton.pillars?.join(' → ') },
-                    { label: 'Эмоциональный двигатель', value: humanReadable.skeleton.emotionalEngine },
-                    { label: 'Авторский запрет', value: humanReadable.skeleton.authorProhibition },
-                    { label: 'Целевой опыт', value: humanReadable.skeleton.targetExperience },
-                    { label: 'Центральный вопрос', value: humanReadable.skeleton.centralQuestion },
+                    { label: t.report.skeletonLabels.thematicLaw, value: humanReadable.skeleton.thematicLaw },
+                    { label: t.report.skeletonLabels.rootTrauma, value: humanReadable.skeleton.rootTrauma },
+                    { label: t.report.skeletonLabels.hamartia, value: humanReadable.skeleton.hamartia },
+                    { label: t.report.skeletonLabels.pillars, value: humanReadable.skeleton.pillars?.join(' \u2192 ') },
+                    { label: t.report.skeletonLabels.emotionalEngine, value: humanReadable.skeleton.emotionalEngine },
+                    { label: t.report.skeletonLabels.authorProhibition, value: humanReadable.skeleton.authorProhibition },
+                    { label: t.report.skeletonLabels.targetExperience, value: humanReadable.skeleton.targetExperience },
+                    { label: t.report.skeletonLabels.centralQuestion, value: humanReadable.skeleton.centralQuestion },
                   ].map((item) => (
                     <div key={item.label}>
                       <Label className="text-xs text-muted-foreground">{item.label}</Label>
-                      <p className="text-sm">{item.value || <span className="text-muted-foreground italic">Не извлечено</span>}</p>
+                      <p className="text-sm">{item.value || <span className="text-muted-foreground italic">{t.report.notExtracted}</span>}</p>
                     </div>
                   ))}
                 </>
@@ -138,7 +142,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
                   {humanReadable.skeleton.elements.map((element) => (
                     <div key={element.id}>
                       <Label className="text-xs text-muted-foreground">{element.name}</Label>
-                      <p className="text-sm">{element.value || <span className="text-muted-foreground italic">Not extracted</span>}</p>
+                      <p className="text-sm">{element.value || <span className="text-muted-foreground italic">{t.report.notExtracted}</span>}</p>
                     </div>
                   ))}
                 </>
@@ -150,18 +154,18 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 4. Screening */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">4. Быстрый скрининг</CardTitle>
+            <CardTitle className="text-base">{t.report.screening}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-2">
               {[
-                { q: 'Закон как правило?', a: humanReadable.screening.question1_thematicLaw },
-                { q: 'Мир без героя?', a: humanReadable.screening.question2_worldWithoutProtagonist },
-                { q: 'Воплощённость?', a: humanReadable.screening.question3_embodiment },
-                { q: 'Хамартия определена?', a: humanReadable.screening.question4_hamartia },
-                { q: 'Болезненный выбор?', a: humanReadable.screening.question5_painfulChoice },
-                { q: 'Логика антагониста?', a: humanReadable.screening.question6_antagonistLogic },
-                { q: 'Финал необратим?', a: humanReadable.screening.question7_finalIrreversible },
+                { q: t.report.screeningQuestions.q1, a: humanReadable.screening.question1_thematicLaw },
+                { q: t.report.screeningQuestions.q2, a: humanReadable.screening.question2_worldWithoutProtagonist },
+                { q: t.report.screeningQuestions.q3, a: humanReadable.screening.question3_embodiment },
+                { q: t.report.screeningQuestions.q4, a: humanReadable.screening.question4_hamartia },
+                { q: t.report.screeningQuestions.q5, a: humanReadable.screening.question5_painfulChoice },
+                { q: t.report.screeningQuestions.q6, a: humanReadable.screening.question6_antagonistLogic },
+                { q: t.report.screeningQuestions.q7, a: humanReadable.screening.question7_finalIrreversible },
               ].map((item, i) => (
                 <div key={i} className="flex items-center gap-2 p-2 rounded border">
                   {item.a ? (
@@ -173,7 +177,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
                 </div>
               ))}
             </div>
-            <Badge 
+            <Badge
               variant={humanReadable.screening.recommendation === 'ready_for_audit' ? 'default' : 'destructive'}
               className="mt-3"
             >
@@ -185,17 +189,17 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 5. Gate Results */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">5. Результаты гейтов</CardTitle>
+            <CardTitle className="text-base">{t.report.gateResults}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-4 gap-2">
               {['L1', 'L2', 'L3', 'L4'].map((level) => {
                 const gate = humanReadable.gates[level as keyof typeof humanReadable.gates];
                 return (
-                  <div 
+                  <div
                     key={level}
                     className={`p-3 rounded text-center ${
-                      gate?.passed ? 'bg-green-500/10 border border-green-500/30' : 
+                      gate?.passed ? 'bg-green-500/10 border border-green-500/30' :
                       gate ? 'bg-red-500/10 border border-red-500/30' : 'bg-muted'
                     }`}
                   >
@@ -216,7 +220,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 6. Scores */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">6. Оценки по измерениям</CardTitle>
+            <CardTitle className="text-base">{t.report.scores}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-5 gap-2">
@@ -236,7 +240,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-destructive" />
-                7. Критические проблемы
+                {t.report.criticalHoles}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -258,7 +262,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 14. Final Score */}
         <Card className="border-primary/50">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">14. Итоговый балл</CardTitle>
+            <CardTitle className="text-base">{t.report.finalScore}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
@@ -269,7 +273,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
                 <div className="text-lg text-muted-foreground">{humanReadable.finalPercentage}%</div>
               </div>
               <Badge className={`${CLASSIFICATION_COLORS[humanReadable.classification]} text-lg px-4 py-2`}>
-                {CLASSIFICATION_LABELS[humanReadable.classification]}
+                {CLASSIFICATION_LABELS[humanReadable.classification] || humanReadable.classification}
               </Badge>
             </div>
           </CardContent>
@@ -278,7 +282,7 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
         {/* 15. Priority Actions */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">15. Приоритетные действия</CardTitle>
+            <CardTitle className="text-base">{t.report.priorityActions}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -295,9 +299,6 @@ function HumanReadableReport({ report }: HumanReadableReportProps) {
     </ScrollArea>
   );
 }
-
-// Import Label component
-import { Label } from '@/components/ui/label';
 
 interface JsonReportProps {
   report: AuditReport;
@@ -331,11 +332,11 @@ function JsonReport({ report }: JsonReportProps) {
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={handleCopy}>
           {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-          {copied ? 'Скопировано!' : 'Копировать'}
+          {copied ? t.report.copied : t.report.copy}
         </Button>
         <Button variant="outline" size="sm" onClick={handleDownload}>
           <Download className="h-4 w-4 mr-2" />
-          Скачать JSON
+          {t.report.downloadJson}
         </Button>
       </div>
       <ScrollArea className="h-[550px]">
@@ -356,9 +357,9 @@ export function ReportDisplay() {
         <CardContent className="flex items-center justify-center h-[400px]">
           <div className="text-center">
             <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">Отчёт ещё не сгенерирован</p>
+            <p className="text-muted-foreground">{t.report.notGenerated}</p>
             <p className="text-sm text-muted-foreground">
-              Завершите аудит для просмотра полного отчёта
+              {t.report.notGeneratedHint}
             </p>
           </div>
         </CardContent>
@@ -369,9 +370,9 @@ export function ReportDisplay() {
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Отчёт аудита</CardTitle>
+        <CardTitle className="text-lg">{t.report.title}</CardTitle>
         <CardDescription>
-          Читаемый анализ и структурированный JSON-вывод
+          {t.report.protocolVersion}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -379,18 +380,18 @@ export function ReportDisplay() {
           <TabsList className="w-full">
             <TabsTrigger value="human" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
-              Читаемый отчёт
+              {t.report.humanReadable}
             </TabsTrigger>
             <TabsTrigger value="json" className="flex items-center gap-2">
               <Code className="h-4 w-4" />
-              JSON
+              {t.report.jsonView}
             </TabsTrigger>
           </TabsList>
-          
+
           <TabsContent value="human" className="mt-4">
             <HumanReadableReport report={report} />
           </TabsContent>
-          
+
           <TabsContent value="json" className="mt-4">
             <JsonReport report={report} />
           </TabsContent>

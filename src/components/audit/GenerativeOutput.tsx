@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, Heart, Scale, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
 import type { GenerativeOutput, GriefMappingResult, DilemmaResult } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
 
 interface GenerativeOutputProps {
   output: GenerativeOutput | undefined | null;
@@ -12,23 +13,23 @@ interface GenerativeOutputProps {
 
 const GRIEF_STAGE_INFO: Record<string, { description: string; color: string }> = {
   denial: {
-    description: 'Refusal to accept reality',
+    description: t.generative.denial,
     color: 'bg-blue-500/10 border-blue-500/30 text-blue-600',
   },
   anger: {
-    description: 'Frustration and emotional outburst',
+    description: t.generative.anger,
     color: 'bg-red-500/10 border-red-500/30 text-red-600',
   },
   bargaining: {
-    description: 'Attempting to negotiate or delay',
+    description: t.generative.bargaining,
     color: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-600',
   },
   depression: {
-    description: 'Deep sadness and withdrawal',
+    description: t.generative.depression,
     color: 'bg-purple-500/10 border-purple-500/30 text-purple-600',
   },
   acceptance: {
-    description: 'Coming to terms with reality',
+    description: t.generative.acceptance,
     color: 'bg-green-500/10 border-green-500/30 text-green-600',
   },
 };
@@ -42,24 +43,24 @@ function GriefMappingCard({ mapping }: { mapping: GriefMappingResult }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Heart className="h-4 w-4 text-pink-500" />
-          §9 — Law → Grief Stage Derivation
+          {t.generative.lawGriefTitle}
         </CardTitle>
         <CardDescription>
-          Automatically derived from thematic law when dominant_stage not provided
+          {t.generative.lawGriefDesc}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Source Law */}
         {mapping.law && (
           <div className="p-3 bg-muted/50 rounded-lg">
-            <div className="text-xs text-muted-foreground mb-1">Source Law</div>
+            <div className="text-xs text-muted-foreground mb-1">{t.generative.sourceLaw}</div>
             <div className="text-sm font-medium">{mapping.law}</div>
           </div>
         )}
 
         {/* Derived Stage */}
         <div className="flex items-center gap-4">
-          <div className="text-sm text-muted-foreground">Derived Stage:</div>
+          <div className="text-sm text-muted-foreground">{t.generative.derivedStage}</div>
           <Badge className={stageInfo.color}>
             {mapping.derived_stage.toUpperCase()}
           </Badge>
@@ -69,7 +70,7 @@ function GriefMappingCard({ mapping }: { mapping: GriefMappingResult }) {
         {/* Justification Chain */}
         {justification.length > 0 && (
           <div className="space-y-2">
-            <div className="text-sm font-medium">Justification Chain</div>
+            <div className="text-sm font-medium">{t.generative.justificationChain}</div>
             <div className="space-y-2">
               {justification.map((step, i) => (
                 <div key={i} className="flex items-start gap-2">
@@ -98,21 +99,21 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Scale className="h-4 w-4 text-amber-500" />
-          §12 — Theme → Dilemma Derivation
+          {t.generative.themeDilemmaTitle}
         </CardTitle>
         <CardDescription>
-          Automatically derived from thematic law when final_dilemma not provided
+          {t.generative.themeDilemmaDesc}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Values in Conflict */}
         <div className="grid grid-cols-2 gap-4">
           <div className="p-4 bg-blue-500/10 rounded-lg border border-blue-500/30">
-            <div className="text-xs text-muted-foreground mb-1">Value A</div>
+            <div className="text-xs text-muted-foreground mb-1">{t.generative.valueA}</div>
             <div className="text-sm font-medium">{dilemma.value_A}</div>
           </div>
           <div className="p-4 bg-red-500/10 rounded-lg border border-red-500/30">
-            <div className="text-xs text-muted-foreground mb-1">Value B</div>
+            <div className="text-xs text-muted-foreground mb-1">{t.generative.valueB}</div>
             <div className="text-sm font-medium">{dilemma.value_B}</div>
           </div>
         </div>
@@ -120,7 +121,7 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
         {/* Conflict Description */}
         {(dilemma.conflict_description || dilemma.post_final_world) && (
           <div className="p-3 bg-muted/50 rounded-lg">
-            <div className="text-xs text-muted-foreground mb-1">Conflict</div>
+            <div className="text-xs text-muted-foreground mb-1">{t.generative.conflict}</div>
             <div className="text-sm">{dilemma.conflict_description || dilemma.post_final_world}</div>
           </div>
         )}
@@ -128,11 +129,11 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
         {/* Criteria Met */}
         <div className="space-y-2">
           <div className="text-sm font-medium flex items-center gap-2">
-            Dilemma Criteria
+            {t.generative.dilemmaCriteria}
             {allCriteriaMet ? (
-              <Badge variant="default" className="bg-green-500">All Met</Badge>
+              <Badge variant="default" className="bg-green-500">{t.generative.allMet}</Badge>
             ) : (
-              <Badge variant="destructive">Incomplete</Badge>
+              <Badge variant="destructive">{t.generative.incomplete}</Badge>
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -142,7 +143,7 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
               ) : (
                 <XCircle className="h-4 w-4 text-red-500" />
               )}
-              <span className="text-sm">Type Choice</span>
+              <span className="text-sm">{t.generative.typeChoice}</span>
             </div>
             <div className={`flex items-center gap-2 p-2 rounded ${criteria.irreversibility ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
               {criteria.irreversibility ? (
@@ -150,7 +151,7 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
               ) : (
                 <XCircle className="h-4 w-4 text-red-500" />
               )}
-              <span className="text-sm">Irreversibility</span>
+              <span className="text-sm">{t.generative.irreversibility}</span>
             </div>
             <div className={`flex items-center gap-2 p-2 rounded ${criteria.identity ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
               {criteria.identity ? (
@@ -158,7 +159,7 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
               ) : (
                 <XCircle className="h-4 w-4 text-red-500" />
               )}
-              <span className="text-sm">Identity Impact</span>
+              <span className="text-sm">{t.generative.identityImpact}</span>
             </div>
             <div className={`flex items-center gap-2 p-2 rounded ${criteria.victory_price ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
               {criteria.victory_price ? (
@@ -166,7 +167,7 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
               ) : (
                 <XCircle className="h-4 w-4 text-red-500" />
               )}
-              <span className="text-sm">Victory Price</span>
+              <span className="text-sm">{t.generative.victoryPrice}</span>
             </div>
           </div>
         </div>
@@ -174,7 +175,7 @@ function DilemmaCard({ dilemma }: { dilemma: DilemmaResult }) {
         {/* Post-Final World */}
         {dilemma.post_final_world && !dilemma.conflict_description && (
           <div className="p-3 bg-muted/50 rounded-lg">
-            <div className="text-xs text-muted-foreground mb-1">Post-Final World</div>
+            <div className="text-xs text-muted-foreground mb-1">{t.generative.postFinalWorld}</div>
             <div className="text-sm">{dilemma.post_final_world}</div>
           </div>
         )}
@@ -193,13 +194,13 @@ export function GenerativeOutputDisplay({ output }: GenerativeOutputProps) {
               <Sparkles className="h-8 w-8 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="text-lg font-medium">No Generative Output</h3>
+              <h3 className="text-lg font-medium">{t.generative.noOutput}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                Generative modules activate automatically when required inputs are absent.
+                {t.generative.noOutputDesc}
               </p>
               <p className="text-xs text-muted-foreground mt-2">
-                §9 activates when dominant_stage is not provided.<br />
-                §12 activates when final_dilemma is not provided.
+                {t.generative.noOutputHint9}<br />
+                {t.generative.noOutputHint12}
               </p>
             </div>
           </div>
@@ -214,18 +215,18 @@ export function GenerativeOutputDisplay({ output }: GenerativeOutputProps) {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-amber-500" />
-          <span className="font-medium">Generative Output</span>
+          <span className="font-medium">{t.generative.title}</span>
         </div>
         {output.grief_mapping && (
           <Badge variant="outline">
             <Heart className="h-3 w-3 mr-1" />
-            Grief Mapping
+            {t.generative.griefMapping}
           </Badge>
         )}
         {output.dilemma && (
           <Badge variant="outline">
             <Scale className="h-3 w-3 mr-1" />
-            Dilemma
+            {t.generative.dilemma}
           </Badge>
         )}
       </div>
@@ -235,10 +236,9 @@ export function GenerativeOutputDisplay({ output }: GenerativeOutputProps) {
         <div className="flex items-start gap-3">
           <Sparkles className="h-5 w-5 text-amber-500 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-amber-600">Auto-Generated Values</p>
+            <p className="text-sm font-medium text-amber-600">{t.generative.autoGenerated}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              These values were automatically derived because the corresponding inputs were not provided.
-              You can override them by supplying explicit values in the audit input.
+              {t.generative.autoGeneratedDesc}
             </p>
           </div>
         </div>

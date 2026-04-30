@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import type { GateResult as GateResultType, FixItem } from '@/lib/audit/types';
 import { GATE_THRESHOLD } from '@/lib/audit/protocol-data';
+import { t } from '@/lib/i18n/ru';
 
 interface GateResultCardProps {
   level: 'L1' | 'L2' | 'L3' | 'L4';
@@ -39,26 +40,26 @@ interface GateResultCardProps {
   onProceed?: () => void;
 }
 
-const LEVEL_INFO = {
+const LEVEL_INFO: Record<string, { name: string; description: string; focus: string }> = {
   L1: {
-    name: 'Mechanism',
-    description: 'Does the world work as a system?',
-    focus: 'Basic coherence, logic, economy',
+    name: t.levels.L1.name,
+    description: t.levels.L1.description,
+    focus: t.levels.L1.focus,
   },
   L2: {
-    name: 'Body',
-    description: 'Is there embodiment and consequences?',
-    focus: 'Trust, routine, spatial memory',
+    name: t.levels.L2.name,
+    description: t.levels.L2.description,
+    focus: t.levels.L2.focus,
   },
   L3: {
-    name: 'Psyche',
-    description: 'Does the world work as a symptom?',
-    focus: 'Grief architecture, character depth',
+    name: t.levels.L3.name,
+    description: t.levels.L3.description,
+    focus: t.levels.L3.focus,
   },
   L4: {
-    name: 'Meta',
-    description: 'Does it ask about real life?',
-    focus: 'Mirror, cult status, authorship ethics',
+    name: t.levels.L4.name,
+    description: t.levels.L4.description,
+    focus: t.levels.L4.focus,
   },
 };
 
@@ -72,6 +73,12 @@ const APPROACH_COLORS = {
   conservative: 'bg-blue-500/10 border-blue-500/50',
   compromise: 'bg-purple-500/10 border-purple-500/50',
   radical: 'bg-red-500/10 border-red-500/50',
+};
+
+const APPROACH_LABELS: Record<string, string> = {
+  conservative: t.issues.conservative,
+  compromise: t.issues.compromise,
+  radical: t.issues.radical,
 };
 
 function FixItemCard({ fix }: { fix: FixItem }) {
@@ -91,10 +98,19 @@ function FixItemCard({ fix }: { fix: FixItem }) {
       <p className="text-sm mb-2">{fix.description}</p>
       <div className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs ${APPROACH_COLORS[fix.recommendedApproach]}`}>
         <Wrench className="h-3 w-3" />
-        {fix.recommendedApproach} fix recommended
+        {t.gates.fixRecommended.replace('{approach}', APPROACH_LABELS[fix.recommendedApproach] || fix.recommendedApproach)}
       </div>
     </div>
   );
+}
+
+function getProceedTarget(level: 'L1' | 'L2' | 'L3' | 'L4'): string {
+  switch (level) {
+    case 'L1': return t.gates.proceedL2;
+    case 'L2': return t.gates.proceedL3;
+    case 'L3': return t.gates.proceedL4;
+    case 'L4': return t.gates.proceedFinal;
+  }
 }
 
 export function GateResultCard({ level, result, onProceed }: GateResultCardProps) {
@@ -111,12 +127,12 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
               </CardTitle>
               <CardDescription>{info.description}</CardDescription>
             </div>
-            <Badge variant="outline">Pending</Badge>
+            <Badge variant="outline">{t.gates.pending}</Badge>
           </div>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            This level has not been evaluated yet.
+            {t.gates.notEvaluated}
           </p>
         </CardContent>
       </Card>
@@ -146,7 +162,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
               {score}%
             </div>
             <Badge variant={passed ? 'default' : 'destructive'}>
-              {passed ? 'PASSED' : 'FAILED'}
+              {passed ? t.gates.passed : t.gates.failed}
             </Badge>
           </div>
         </div>
@@ -155,8 +171,8 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         {/* Score Breakdown */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Score</span>
-            <span>{score}% (threshold: {GATE_THRESHOLD}%)</span>
+            <span>{t.gates.scoreLabel}</span>
+            <span>{score}% ({t.gates.threshold.replace('{value}', String(GATE_THRESHOLD))})</span>
           </div>
           <Progress value={score} className={`h-3 ${passed ? '[&>div]:bg-green-500' : '[&>div]:bg-red-500'}`} />
         </div>
@@ -165,19 +181,19 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         <div className="grid grid-cols-4 gap-2 text-center">
           <div className="p-2 rounded bg-muted">
             <div className="text-lg font-bold">{result.applicableItems}</div>
-            <div className="text-xs text-muted-foreground">Total</div>
+            <div className="text-xs text-muted-foreground">{t.gates.total}</div>
           </div>
           <div className="p-2 rounded bg-green-500/10">
             <div className="text-lg font-bold text-green-600">{result.passedItems}</div>
-            <div className="text-xs text-muted-foreground">Passed</div>
+            <div className="text-xs text-muted-foreground">{t.gates.passedItems}</div>
           </div>
           <div className="p-2 rounded bg-red-500/10">
             <div className="text-lg font-bold text-red-600">{result.failedItems}</div>
-            <div className="text-xs text-muted-foreground">Failed</div>
+            <div className="text-xs text-muted-foreground">{t.gates.failedItems}</div>
           </div>
           <div className="p-2 rounded bg-yellow-500/10">
             <div className="text-lg font-bold text-yellow-600">{result.insufficientDataItems}</div>
-            <div className="text-xs text-muted-foreground">No Data</div>
+            <div className="text-xs text-muted-foreground">{t.gates.noData}</div>
           </div>
         </div>
 
@@ -186,15 +202,15 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
           <div className="space-y-2">
             <h4 className="text-sm font-medium flex items-center gap-2">
               <BarChart3 className="h-4 w-4" />
-              Block-Level Breakdown
+              {t.gates.blockBreakdown}
             </h4>
             <div className="grid grid-cols-2 gap-2">
               {Object.entries(result.metadata.breakdown).map(([block, blockScore]) => (
-                <div 
-                  key={block} 
+                <div
+                  key={block}
                   className={`flex justify-between text-sm p-2 rounded border ${
-                    typeof blockScore === 'string' && blockScore.includes('FAIL') 
-                      ? 'bg-red-500/10 border-red-500/30' 
+                    typeof blockScore === 'string' && blockScore.includes('FAIL')
+                      ? 'bg-red-500/10 border-red-500/30'
                       : typeof blockScore === 'string' && blockScore.includes('PASS')
                       ? 'bg-green-500/10 border-green-500/30'
                       : 'bg-muted border-border'
@@ -211,11 +227,11 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         {/* Conditions Breakdown */}
         {result.conditions && result.conditions.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Conditions</h4>
+            <h4 className="text-sm font-medium">{t.gates.conditions}</h4>
             <div className="space-y-1 max-h-40 overflow-y-auto">
               {result.conditions.slice(0, 10).map((condition) => (
-                <div 
-                  key={condition.id} 
+                <div
+                  key={condition.id}
                   className={`flex items-center gap-2 text-xs p-2 rounded ${
                     condition.passed ? 'bg-green-500/10' : 'bg-red-500/10'
                   }`}
@@ -231,7 +247,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
               ))}
               {result.conditions.length > 10 && (
                 <p className="text-xs text-muted-foreground text-center">
-                  +{result.conditions.length - 10} more conditions...
+                  {t.gates.moreConditions.replace('{count}', String(result.conditions.length - 10))}
                 </p>
               )}
             </div>
@@ -245,7 +261,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
               <AccordionTrigger className="hover:no-underline">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-red-500" />
-                  <span>Prioritized Fix List ({result.fixList.length} items)</span>
+                  <span>{t.gates.fixList.replace('{count}', String(result.fixList.length))}</span>
                 </div>
               </AccordionTrigger>
               <AccordionContent>
@@ -262,7 +278,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         {/* Proceed Button (if passed) */}
         {passed && onProceed && (
           <Button onClick={onProceed} className="w-full">
-            Proceed to {level === 'L1' ? 'L2 (Body)' : level === 'L2' ? 'L3 (Psyche)' : level === 'L3' ? 'L4 (Meta)' : 'Final Report'}
+            {t.gates.proceedTo.replace('{target}', getProceedTarget(level))}
             <ChevronRight className="h-4 w-4 ml-2" />
           </Button>
         )}
@@ -287,11 +303,11 @@ export function GateResults() {
     <>
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold">Gate Results</h3>
+          <h3 className="text-lg font-semibold">{t.gates.title}</h3>
           {failures.length > 0 && (
             <Badge variant="destructive" className="flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
-              {failures.length} gate(s) failed
+              {t.gates.gatesFailed.replace('{count}', String(failures.length))}
             </Badge>
           )}
         </div>
@@ -313,10 +329,9 @@ export function GateResults() {
               <div className="flex items-start gap-3">
                 <AlertCircle className="h-5 w-5 text-destructive mt-0.5" />
                 <div>
-                  <p className="font-medium text-destructive">Audit Stopped</p>
+                  <p className="font-medium text-destructive">{t.gates.auditStopped}</p>
                   <p className="text-sm text-muted-foreground">
-                    The audit has been stopped due to failed gate(s). 
-                    Fix the issues listed above before proceeding to the next level.
+                    {t.gates.auditStoppedDesc}
                   </p>
                 </div>
               </div>
@@ -331,25 +346,23 @@ export function GateResults() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-destructive" />
-              Gate Failure Detected
+              {t.gates.gateFailureDetected}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {failures.length > 0 && (
-                <>
-                  The <strong>{failures[0].level}</strong> gate failed with a score of{' '}
-                  <strong>{failures[0].result.score}%</strong>.
-                  <br /><br />
-                  According to the Universe Audit Protocol v10.0, each level requires ≥60% 
-                  to proceed. The audit has been stopped to prevent analysis on an unstable foundation.
-                  <br /><br />
-                  Please review the fix list and address the identified issues before continuing.
-                </>
+                <span
+                  dangerouslySetInnerHTML={{
+                    __html: t.gates.gateFailureDesc
+                      .replace('{level}', failures[0].level)
+                      .replace('{score}', String(failures[0].result.score)),
+                  }}
+                />
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction onClick={() => setShowFailureDialog(false)}>
-              View Fix List
+              {t.gates.viewFixList}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

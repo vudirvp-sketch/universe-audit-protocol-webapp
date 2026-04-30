@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertTriangle, AlertCircle, Info, Wrench, CheckCircle2 } from 'lucide-react';
 import type { Issue, Severity, PatchType } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
 
 interface IssueListProps {
   issues: Issue[];
@@ -40,6 +41,12 @@ const PATCH_COLORS: Record<PatchType, string> = {
   radical: 'bg-red-500/10 border-red-500/30 text-red-600',
 };
 
+const PATCH_LABELS: Record<PatchType, string> = {
+  conservative: t.issues.conservative,
+  compromise: t.issues.compromise,
+  radical: t.issues.radical,
+};
+
 function IssueCard({ issue }: { issue: Issue }) {
   const severityConfig = SEVERITY_CONFIG[issue.severity];
 
@@ -54,7 +61,7 @@ function IssueCard({ issue }: { issue: Issue }) {
                 {issue.id}
               </span>
             </CardTitle>
-            <Badge 
+            <Badge
               variant={issue.severity === 'critical' ? 'destructive' : issue.severity === 'major' ? 'default' : 'secondary'}
             >
               {issue.severity}
@@ -73,9 +80,9 @@ function IssueCard({ issue }: { issue: Issue }) {
             <div className={`text-2xl font-bold ${issue.axes.criticality >= 7 ? 'text-red-500' : issue.axes.criticality >= 4 ? 'text-orange-500' : 'text-green-500'}`}>
               {issue.axes.criticality}
             </div>
-            <div className="text-xs text-muted-foreground">Criticality</div>
+            <div className="text-xs text-muted-foreground">{t.issues.criticality}</div>
             <div className="w-full h-1 bg-muted rounded mt-1">
-              <div 
+              <div
                 className={`h-full rounded ${issue.axes.criticality >= 7 ? 'bg-red-500' : issue.axes.criticality >= 4 ? 'bg-orange-500' : 'bg-green-500'}`}
                 style={{ width: `${(issue.axes.criticality / 10) * 100}%` }}
               />
@@ -85,9 +92,9 @@ function IssueCard({ issue }: { issue: Issue }) {
             <div className={`text-2xl font-bold ${issue.axes.risk >= 7 ? 'text-red-500' : issue.axes.risk >= 4 ? 'text-orange-500' : 'text-green-500'}`}>
               {issue.axes.risk}
             </div>
-            <div className="text-xs text-muted-foreground">Risk</div>
+            <div className="text-xs text-muted-foreground">{t.issues.risk}</div>
             <div className="w-full h-1 bg-muted rounded mt-1">
-              <div 
+              <div
                 className={`h-full rounded ${issue.axes.risk >= 7 ? 'bg-red-500' : issue.axes.risk >= 4 ? 'bg-orange-500' : 'bg-green-500'}`}
                 style={{ width: `${(issue.axes.risk / 10) * 100}%` }}
               />
@@ -97,9 +104,9 @@ function IssueCard({ issue }: { issue: Issue }) {
             <div className={`text-2xl font-bold ${issue.axes.time_cost >= 7 ? 'text-red-500' : issue.axes.time_cost >= 4 ? 'text-orange-500' : 'text-green-500'}`}>
               {issue.axes.time_cost}
             </div>
-            <div className="text-xs text-muted-foreground">Time Cost</div>
+            <div className="text-xs text-muted-foreground">{t.issues.timeCost}</div>
             <div className="w-full h-1 bg-muted rounded mt-1">
-              <div 
+              <div
                 className={`h-full rounded ${issue.axes.time_cost >= 7 ? 'bg-red-500' : issue.axes.time_cost >= 4 ? 'bg-orange-500' : 'bg-green-500'}`}
                 style={{ width: `${(issue.axes.time_cost / 10) * 100}%` }}
               />
@@ -110,15 +117,11 @@ function IssueCard({ issue }: { issue: Issue }) {
         {/* Patches Tabs */}
         <Tabs defaultValue={issue.recommended} className="w-full">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="conservative" className="text-xs">
-              Conservative
-            </TabsTrigger>
-            <TabsTrigger value="compromise" className="text-xs">
-              Compromise
-            </TabsTrigger>
-            <TabsTrigger value="radical" className="text-xs">
-              Radical
-            </TabsTrigger>
+            {(['conservative', 'compromise', 'radical'] as const).map((type) => (
+              <TabsTrigger key={type} value={type} className="text-xs">
+                {PATCH_LABELS[type]}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
           {(['conservative', 'compromise', 'radical'] as const).map((type) => {
@@ -131,15 +134,15 @@ function IssueCard({ issue }: { issue: Issue }) {
                   {isRecommended && (
                     <div className="flex items-center gap-1 mb-2">
                       <CheckCircle2 className="h-4 w-4" />
-                      <span className="text-xs font-medium">Recommended Approach</span>
+                      <span className="text-xs font-medium">{t.issues.recommendedApproach}</span>
                     </div>
                   )}
-                  
+
                   <p className="text-sm mb-2">{patch.description}</p>
 
                   {patch.impact && (
                     <div className="text-xs mb-2">
-                      <span className="font-medium">Impact:</span> {patch.impact}
+                      <span className="font-medium">{t.issues.impact}</span> {patch.impact}
                     </div>
                   )}
 
@@ -151,7 +154,7 @@ function IssueCard({ issue }: { issue: Issue }) {
 
                   {patch.risks && patch.risks.length > 0 && (
                     <div className="text-xs mb-2">
-                      <span className="font-medium">Risks:</span>
+                      <span className="font-medium">{t.issues.risks}</span>
                       <ul className="list-disc list-inside ml-2 mt-1">
                         {patch.risks.map((risk, i) => (
                           <li key={i}>{risk}</li>
@@ -162,7 +165,7 @@ function IssueCard({ issue }: { issue: Issue }) {
 
                   {patch.tests && patch.tests.length > 0 && (
                     <div className="text-xs">
-                      <span className="font-medium">Verification Tests:</span>
+                      <span className="font-medium">{t.issues.verificationTests}</span>
                       <ul className="list-disc list-inside ml-2 mt-1">
                         {patch.tests.map((test, i) => (
                           <li key={i}>{test}</li>
@@ -173,7 +176,7 @@ function IssueCard({ issue }: { issue: Issue }) {
 
                   {patch.sideEffects && patch.sideEffects.length > 0 && (
                     <div className="text-xs mt-2">
-                      <span className="font-medium">Side Effects:</span>
+                      <span className="font-medium">{t.issues.sideEffects}</span>
                       <ul className="list-disc list-inside ml-2 mt-1">
                         {patch.sideEffects.map((effect, i) => (
                           <li key={i}>{effect}</li>
@@ -208,9 +211,9 @@ export function IssueList({ issues }: IssueListProps) {
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
             <div>
-              <h3 className="text-lg font-medium">No Issues Found</h3>
+              <h3 className="text-lg font-medium">{t.issues.noIssues}</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                The audit did not identify any issues that require attention.
+                {t.issues.noIssuesDesc}
               </p>
             </div>
           </div>
@@ -230,16 +233,16 @@ export function IssueList({ issues }: IssueListProps) {
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <AlertCircle className="h-5 w-5 text-red-500" />
-          <span className="font-medium">{issues.length} Issues</span>
+          <span className="font-medium">{t.issues.countIssues.replace('{count}', String(issues.length))}</span>
         </div>
         {criticalIssues.length > 0 && (
-          <Badge variant="destructive">{criticalIssues.length} Critical</Badge>
+          <Badge variant="destructive">{t.issues.criticalCount.replace('{count}', String(criticalIssues.length))}</Badge>
         )}
         {majorIssues.length > 0 && (
-          <Badge variant="default">{majorIssues.length} Major</Badge>
+          <Badge variant="default">{t.issues.majorCount.replace('{count}', String(majorIssues.length))}</Badge>
         )}
         {minorIssues.length > 0 && (
-          <Badge variant="secondary">{minorIssues.length} Minor</Badge>
+          <Badge variant="secondary">{t.issues.minorCount.replace('{count}', String(minorIssues.length))}</Badge>
         )}
       </div>
 
@@ -248,7 +251,7 @@ export function IssueList({ issues }: IssueListProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-red-500">
             <AlertCircle className="h-5 w-5" />
-            Critical Issues
+            {t.issues.criticalIssues}
           </h3>
           <div className="space-y-4">
             {criticalIssues.map((issue) => (
@@ -263,7 +266,7 @@ export function IssueList({ issues }: IssueListProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-orange-500">
             <AlertTriangle className="h-5 w-5" />
-            Major Issues
+            {t.issues.majorIssues}
           </h3>
           <div className="space-y-4">
             {majorIssues.map((issue) => (
@@ -278,7 +281,7 @@ export function IssueList({ issues }: IssueListProps) {
         <div className="space-y-4">
           <h3 className="text-lg font-semibold flex items-center gap-2 text-yellow-500">
             <Info className="h-5 w-5" />
-            Minor Issues
+            {t.issues.minorIssues}
           </h3>
           <div className="space-y-4">
             {minorIssues.map((issue) => (

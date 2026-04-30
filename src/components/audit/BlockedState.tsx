@@ -26,9 +26,9 @@ import type { GateResult, FixItem } from '@/lib/audit/types';
 // ---------------------------------------------------------------------------
 
 const PATCH_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
-  conservative: { label: 'Осторожный', icon: <ShieldAlert className="h-4 w-4" /> },
-  compromise: { label: 'Компромиссный', icon: <Wrench className="h-4 w-4" /> },
-  radical: { label: 'Радикальный', icon: <Zap className="h-4 w-4" /> },
+  conservative: { label: t.blocked.patchConservative, icon: <ShieldAlert className="h-4 w-4" /> },
+  compromise: { label: t.blocked.patchCompromise, icon: <Wrench className="h-4 w-4" /> },
+  radical: { label: t.blocked.patchRadical, icon: <Zap className="h-4 w-4" /> },
 };
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ export function BlockedState() {
   // Copy recommendations
   const handleCopy = async () => {
     const text = criticalIssues
-      .map((i) => `${i.id}: ${i.diagnosis}\nРекомендация: ${i.patches[i.recommended]?.description || i.patches.compromise.description}`)
+      .map((i) => `${i.id}: ${i.diagnosis}\n${t.blocked.impact} ${i.patches[i.recommended]?.description || i.patches.compromise.description}`)
       .join('\n\n');
     await navigator.clipboard.writeText(text);
     setCopied(true);
@@ -99,9 +99,8 @@ export function BlockedState() {
             </CardTitle>
             <CardDescription>
               {t.gates.blockedDescription
-                .replace('{threshold}', 'порог')
+                .replace('{threshold}', String(failedScore))
                 .replace('{level}', failedLevel)}
-              {failedScore > 0 && ` (${failedScore}%)`}
             </CardDescription>
           </div>
         </div>
@@ -118,7 +117,7 @@ export function BlockedState() {
         {/* Failed criteria */}
         {criticalIssues.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Проваленные критерии:</h4>
+            <h4 className="text-sm font-medium">{t.blocked.failedCriteria}</h4>
             {criticalIssues.slice(0, 10).map((issue) => (
               <div
                 key={issue.id}
@@ -159,11 +158,11 @@ export function BlockedState() {
                       (type) => (
                         <TabsContent key={type} value={type} className="mt-1">
                           <p className="text-xs text-muted-foreground">
-                            {issue.patches[type]?.description || 'Нет описания'}
+                            {issue.patches[type]?.description || t.blocked.noDescription}
                           </p>
                           {issue.patches[type]?.impact && (
                             <p className="text-xs text-muted-foreground mt-1">
-                              Влияние: {issue.patches[type].impact}
+                              {t.blocked.impact} {issue.patches[type].impact}
                             </p>
                           )}
                         </TabsContent>
@@ -178,12 +177,9 @@ export function BlockedState() {
 
         {/* Weakness test explanation */}
         <div className="p-3 rounded-md bg-muted">
-          <p className="text-sm font-medium">Почему это важно:</p>
+          <p className="text-sm font-medium">{t.blocked.whyImportant}</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Каждый гейт — это иерархический фильтр. Если уровень не пройден,
-            исправление более глубоких уровней бессмысленно — их результаты будут
-            ненадёжными. Сначала устраните проблемы текущего уровня, затем
-            перезапустите аудит с этого этапа.
+            {t.blocked.whyImportantExplanation}
           </p>
         </div>
 
@@ -193,11 +189,11 @@ export function BlockedState() {
         <div className="flex flex-wrap gap-2">
           <Button variant="default" onClick={reset}>
             <RotateCcw className="h-4 w-4 mr-2" />
-            Редактировать концепт и перезапустить
+            {t.blocked.editAndRestart}
           </Button>
           <Button variant="outline" onClick={handleDownload}>
             <Download className="h-4 w-4 mr-2" />
-            Скачать текущие результаты (JSON)
+            {t.blocked.downloadResults}
           </Button>
           <Button variant="outline" onClick={handleCopy}>
             {copied ? (
@@ -205,7 +201,7 @@ export function BlockedState() {
             ) : (
               <Copy className="h-4 w-4 mr-2" />
             )}
-            {copied ? 'Скопировано!' : 'Скопировать рекомендации'}
+            {copied ? t.blocked.copied : t.blocked.copyRecommendations}
           </Button>
         </div>
       </CardContent>
