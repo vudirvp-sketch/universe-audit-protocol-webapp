@@ -70,8 +70,8 @@ export function AuditForm() {
   const allAuthorQuestionsAnswered = authorAnswers && Object.keys(authorAnswers).length === 7;
 
   const handleStartAudit = () => {
-    if (!inputText.trim()) return;
-    setPhase('mode_detection');
+    if (!inputText.trim() || inputText.length < 50) return;
+    setPhase('input_validation');
   };
 
   return (

@@ -34,6 +34,10 @@ export interface InputValidationOutput {
 
 // ---------------------------------------------------------------------------
 // Module-level cache for skipLLM state communication
+// WARNING: This is NOT concurrency-safe if two audits run in separate browser
+// tabs simultaneously. The risk is low (same-origin module scope is per-tab in
+// modern browsers since each tab gets its own module instance), but if shared
+// workers ever come into play this would need redesign.
 // ---------------------------------------------------------------------------
 
 let cachedValidation: InputValidationOutput | null = null;

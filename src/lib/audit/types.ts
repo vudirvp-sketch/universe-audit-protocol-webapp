@@ -22,7 +22,13 @@ export type ChecklistItemStatus = 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA' | 'PENDI
 
 export type GriefStage = 'denial' | 'anger' | 'bargaining' | 'depression' | 'acceptance';
 
-export type GriefLevel = 'character' | 'location' | 'mechanic' | 'act' | 'world' | 'society' | 'scene';
+// The 4 canonical grief materialization levels used in the matrix and scoring.
+// The protocol mentions 7 levels in theory (character, location, mechanic, act,
+// world, society, scene), but the 5×4 matrix uses these 4 standard columns.
+export type GriefLevel = 'character' | 'location' | 'mechanic' | 'act';
+
+/** Extended grief levels for reference — not used in the standard matrix */
+export type GriefLevelExtended = GriefLevel | 'world' | 'society' | 'scene';
 
 export type AuthorProfileType = 'gardener' | 'hybrid' | 'architect';
 
@@ -95,7 +101,7 @@ export interface GateResult {
   gateName: string;
   status: 'pending' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped';
   score: number;          // 0-100
-  passed?: boolean;       // Legacy compatibility
+  passed: boolean;         // Deterministic: code decides gate pass/fail, never LLM
   conditions: {
     id: string;
     passed: boolean;
@@ -695,15 +701,9 @@ export interface ValidationRule {
   errorMessage?: string;
 }
 
-// ValidationResult for pipeline step validation (AuditStep.validate)
-// NOTE: A separate type for input validation with richer fields exists below
-// as InputValidationResult — the simple {valid, errors, canRetry} form is
-// used by the AuditStep lifecycle.
-export interface StepValidationResult {
-  valid: boolean;
-  errors: string[];
-  canRetry: boolean;
-}
+// StepValidationResult is defined in audit-step.ts (canonical location).
+// It is re-exported from here for backward compatibility with existing imports.
+export type { StepValidationResult } from './audit-step';
 
 // Full input validation result with typed errors/warnings
 export interface InputValidationResult {
@@ -781,14 +781,14 @@ export type ScreeningRecommendation =
 /** Thresholds per audit mode, per gate level */
 export interface GateThresholds {
   conflict: { L1: number; L2: number; L3: number; L4: number };
-  kisho:   { L1: number; L2: number; L3: number; L4: number };
-  hybrid:  { L1: number; L2: number; L3: number; L4: number };
+  kishō:    { L1: number; L2: number; L3: number; L4: number };
+  hybrid:   { L1: number; L2: number; L3: number; L4: number };
 }
 
 /** Default gate thresholds per COMPLETION_PLAN Section 0.7 */
 export const DEFAULT_THRESHOLDS: GateThresholds = {
   conflict: { L1: 60, L2: 60, L3: 60, L4: 60 },
-  kisho:    { L1: 50, L2: 50, L3: 50, L4: 50 },
+  kishō:    { L1: 50, L2: 50, L3: 50, L4: 50 },
   hybrid:   { L1: 55, L2: 55, L3: 55, L4: 55 },
 };
 
@@ -800,7 +800,6 @@ export function getGateThreshold(
   mode: AuditMode,
   level: 'L1' | 'L2' | 'L3' | 'L4',
 ): number {
-  const key = mode === 'kishō' ? 'kisho' : mode;
-  const thresholds = DEFAULT_THRESHOLDS[key as keyof GateThresholds] ?? DEFAULT_THRESHOLDS.conflict;
+  const thresholds = DEFAULT_THRESHOLDS[mode] ?? DEFAULT_THRESHOLDS.conflict;
   return thresholds[level];
 }

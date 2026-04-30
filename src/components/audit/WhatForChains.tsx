@@ -75,7 +75,7 @@ function ChainCard({ chain, index }: { chain: ChainResult; index: number }) {
             </Badge>
             {chain.action && (
               <Badge className={ACTION_COLORS[chain.action as keyof typeof ACTION_COLORS] || ''}>
-                {chain.action.replace('_', ' ')}
+                {t.chains.actionLabels[chain.action as keyof typeof t.chains.actionLabels] || chain.action.replace('_', ' ')}
               </Badge>
             )}
           </div>

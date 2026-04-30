@@ -12,6 +12,13 @@ interface IssueListProps {
   issues: Issue[];
 }
 
+const SEVERITY_LABELS: Record<Severity, string> = {
+  critical: t.issues.severityCritical,
+  major: t.issues.severityMajor,
+  minor: t.issues.severityMinor,
+  cosmetic: t.issues.severityCosmetic,
+};
+
 const SEVERITY_CONFIG: Record<Severity, { icon: React.ReactNode; color: string; bg: string }> = {
   critical: {
     icon: <AlertCircle className="h-4 w-4" />,
@@ -64,7 +71,7 @@ function IssueCard({ issue }: { issue: Issue }) {
             <Badge
               variant={issue.severity === 'critical' ? 'destructive' : issue.severity === 'major' ? 'default' : 'secondary'}
             >
-              {issue.severity}
+              {SEVERITY_LABELS[issue.severity]}
             </Badge>
           </div>
           <span className="text-xs font-mono text-muted-foreground">{issue.location}</span>

@@ -81,6 +81,23 @@ const APPROACH_LABELS: Record<string, string> = {
   radical: t.issues.radical,
 };
 
+const SEVERITY_LABELS: Record<string, string> = {
+  critical: t.issues.severityCritical,
+  major: t.issues.severityMajor,
+  minor: t.issues.severityMinor,
+  cosmetic: t.issues.severityCosmetic,
+};
+
+const FIX_TYPE_LABELS: Record<string, string> = {
+  motivation: t.gates.fixTypeMotivation,
+  competence: t.gates.fixTypeCompetence,
+  scale: t.gates.fixTypeScale,
+  resources: t.gates.fixTypeResources,
+  memory: t.gates.fixTypeMemory,
+  ideology: t.gates.fixTypeIdeology,
+  time: t.gates.fixTypeTime,
+};
+
 function FixItemCard({ fix }: { fix: FixItem }) {
   return (
     <div className={`p-3 rounded-md border ${SEVERITY_COLORS[fix.severity]}`}>
@@ -89,10 +106,10 @@ function FixItemCard({ fix }: { fix: FixItem }) {
           {fix.id}
         </Badge>
         <Badge className={`text-xs ${fix.severity === 'critical' ? 'bg-red-500' : fix.severity === 'major' ? 'bg-orange-500' : 'bg-yellow-500'}`}>
-          {fix.severity}
+          {SEVERITY_LABELS[fix.severity] || fix.severity}
         </Badge>
         <Badge variant="outline" className="text-xs">
-          {fix.type}
+          {FIX_TYPE_LABELS[fix.type] || fix.type}
         </Badge>
       </div>
       <p className="text-sm mb-2">{fix.description}</p>

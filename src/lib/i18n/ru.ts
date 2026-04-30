@@ -143,6 +143,14 @@ export const t = {
     conditionBreakdown: '### Разбивка по условиям:',
     requiredFixes: '### Необходимые исправления:',
     executionHalted: '**ВЫПОЛНЕНИЕ ОСТАНОВЛЕНО** — Устраните проблемы выше перед продолжением',
+    // Fix type labels (Russian per Language Contract)
+    fixTypeMotivation: 'Мотивация',
+    fixTypeCompetence: 'Компетентность',
+    fixTypeScale: 'Масштаб',
+    fixTypeResources: 'Ресурсы',
+    fixTypeMemory: 'Память',
+    fixTypeIdeology: 'Идеология',
+    fixTypeTime: 'Время',
   },
 
   levels: {
@@ -348,6 +356,11 @@ export const t = {
     risks: 'Риски:',
     verificationTests: 'Проверки:',
     sideEffects: 'Побочные эффекты:',
+    // Severity labels (Russian per Language Contract)
+    severityCritical: 'Критический',
+    severityMajor: 'Значительный',
+    severityMinor: 'Мелкий',
+    severityCosmetic: 'Косметический',
   },
 
   // ─── WhatForChains.tsx ────────────────────────────────────────────
@@ -378,6 +391,14 @@ export const t = {
     dilemmaCount: '{count} ДИЛЕММА',
     unclassifiedCount: '{count} Неклассиф.',
     criticalCount: '{count} Критич.',
+    // Action badge labels (Russian per Language Contract)
+    actionLabels: {
+      bind_to_law: 'Привязать к закону',
+      keep: 'Оставить',
+      remove: 'Удалить',
+      bind_to_law_or_remove: 'Закон или удаление',
+      retry_analysis: 'Повтор анализа',
+    } as const,
   },
 
   // ─── GenerativeOutput.tsx ─────────────────────────────────────────
@@ -448,6 +469,11 @@ export const t = {
     functionalRole: 'Функциональная роль',
     functionalRolePlaceholder: 'Объясните, как это служит критерию функционально...',
     insufficientDataMsg: 'Невозможно определить по доступному тексту. Требуется дополнительная информация.',
+    // Status labels (Russian per Language Contract)
+    statusPass: 'ПРОЙДЕН',
+    statusFail: 'НЕ ПРОЙДЕН',
+    statusInsufficient: 'НЕДОСТАТОЧНО ДАННЫХ',
+    statusPending: 'ОЖИДАНИЕ',
   },
 
   // ─── GriefArchitectureMatrix.tsx ──────────────────────────────────

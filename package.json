@@ -45,13 +45,10 @@
     "next": "^16.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-markdown": "^10.1.0",
     "react-resizable-panels": "^3.0.3",
     "recharts": "^2.15.4",
-    "rehype-sanitize": "^6.0.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^4.0.2",
     "zustand": "^5.0.6"
   },
   "devDependencies": {

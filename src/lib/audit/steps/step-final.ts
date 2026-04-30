@@ -31,6 +31,8 @@ export interface FinalOutput {
 
 // ---------------------------------------------------------------------------
 // Module-level cache for skipLLM state communication
+// WARNING: Same concurrency note as step-validate.ts — safe per-tab, not
+// across shared-worker scenarios.
 // ---------------------------------------------------------------------------
 
 let cachedOutput: FinalOutput | null = null;

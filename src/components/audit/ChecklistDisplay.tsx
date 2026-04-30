@@ -34,6 +34,13 @@ const STATUS_ICONS: Record<ChecklistItemStatus, React.ReactNode> = {
   PENDING: <Circle className="h-4 w-4 text-muted-foreground" />,
 };
 
+const STATUS_LABELS: Record<ChecklistItemStatus, string> = {
+  PASS: t.checklist.statusPass,
+  FAIL: t.checklist.statusFail,
+  INSUFFICIENT_DATA: t.checklist.statusInsufficient,
+  PENDING: t.checklist.statusPending,
+};
+
 const STATUS_COLORS: Record<ChecklistItemStatus, string> = {
   PASS: 'bg-green-500/10 border-green-500/30',
   FAIL: 'bg-red-500/10 border-red-500/30',
@@ -45,9 +52,10 @@ interface ChecklistItemRowProps {
   item: ChecklistItem;
   onStatusChange: (status: ChecklistItemStatus) => void;
   onEvidenceChange: (evidence: string) => void;
+  onUpdateItem: (id: string, updates: Partial<ChecklistItem>) => void;
 }
 
-function ChecklistItemRow({ item, onStatusChange, onEvidenceChange }: ChecklistItemRowProps) {
+function ChecklistItemRow({ item, onStatusChange, onEvidenceChange, onUpdateItem }: ChecklistItemRowProps) {
   const [expanded, setExpanded] = React.useState(false);
 
   return (
@@ -77,7 +85,7 @@ function ChecklistItemRow({ item, onStatusChange, onEvidenceChange }: ChecklistI
                   }}
                   className="h-3.5 w-3.5"
                 />
-                <span className="text-xs">{status.replace('_', ' ')}</span>
+                <span className="text-xs">{STATUS_LABELS[status]}</span>
               </label>
             ))}
           </div>
@@ -168,6 +176,7 @@ function ChecklistBlock({ block, items, onUpdateItem }: ChecklistBlockProps) {
               item={item}
               onStatusChange={(status) => onUpdateItem(item.id, { status })}
               onEvidenceChange={(evidence) => onUpdateItem(item.id, { evidence })}
+              onUpdateItem={onUpdateItem}
             />
           ))}
         </div>
