@@ -51,8 +51,9 @@ export function GriefArchitectureMatrix() {
   const setGriefMatrix = useAuditState((state) => state.setGriefMatrix);
 
   const handleDominantStageChange = (stage: GriefStage) => {
+    if (!griefMatrix) return;
     setGriefMatrix({
-      ...griefMatrix!,
+      ...griefMatrix,
       dominantStage: stage,
     });
   };
@@ -203,7 +204,7 @@ export function GriefArchitectureMatrix() {
                             <div className="flex items-center justify-between mb-2">
                               <Label className="text-sm font-medium">{LEVEL_LABELS[level] || level}</Label>
                               <Badge className={`text-xs ${CONFIDENCE_BADGE_COLORS[confidence]}`}>
-                                {confidence}
+                                {t.grief.confidenceLabels[confidence] || confidence}
                               </Badge>
                             </div>
 
@@ -237,7 +238,7 @@ export function GriefArchitectureMatrix() {
                                   className="text-xs cursor-pointer"
                                   onClick={() => handleCellUpdate(stage, level, { confidence: c })}
                                 >
-                                  {c}
+                                  {t.grief.confidenceLabels[c] || c}
                                 </Badge>
                               ))}
                             </div>

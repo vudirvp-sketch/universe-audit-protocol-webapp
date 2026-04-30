@@ -255,104 +255,17 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             <h4 className="text-sm font-medium">{t.settings.howToGetKey}</h4>
 
             <div className="text-sm text-muted-foreground space-y-2">
-              {provider === 'google' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Google AI Studio</a></li>
-                  <li>Create a new API key</li>
-                  <li>Free tier: 15 RPM, 1M tokens/day</li>
-                </ol>
-              )}
-
-              {provider === 'groq' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://console.groq.com/keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Groq Console</a></li>
-                  <li>Create an API key (starts with gsk_)</li>
-                  <li>Very fast inference, generous free tier</li>
-                </ol>
-              )}
-
-              {provider === 'openrouter' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">OpenRouter</a></li>
-                  <li>Create an API key</li>
-                  <li>Access to many models, some free</li>
-                </ol>
-              )}
-
-              {provider === 'huggingface' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Hugging Face Settings</a></li>
-                  <li>Create an Access Token</li>
-                  <li>Free inference API (rate limited)</li>
-                </ol>
-              )}
-
-              {provider === 'together' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://api.together.xyz/settings/api-keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Together AI</a></li>
-                  <li>Create an API key</li>
-                  <li>$1 free credit on signup</li>
-                </ol>
-              )}
-
-              {provider === 'openai' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-blue-500 hover:underline">OpenAI Platform</a></li>
-                  <li>Create an API key (starts with sk-)</li>
-                  <li>Pay-as-you-go pricing</li>
-                </ol>
-              )}
-
-              {provider === 'anthropic' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://console.anthropic.com/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Anthropic Console</a></li>
-                  <li>Create an API key (starts with sk-ant-)</li>
-                  <li>Pay-as-you-go pricing</li>
-                </ol>
-              )}
-
-              {provider === 'mistral' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://console.mistral.ai/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Mistral Console</a></li>
-                  <li>Create an API key</li>
-                </ol>
-              )}
-
-              {provider === 'deepseek' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://platform.deepseek.com/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">DeepSeek Platform</a></li>
-                  <li>Create an API key</li>
-                  <li>Very competitive pricing</li>
-                </ol>
-              )}
-
-              {provider === 'qwen' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://dashscope.console.aliyun.com/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Alibaba DashScope</a></li>
-                  <li>Create an API key</li>
-                </ol>
-              )}
-
-              {provider === 'kimi' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://platform.moonshot.cn/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">Moonshot Platform</a></li>
-                  <li>Create an API key</li>
-                </ol>
-              )}
-
-              {provider === 'xai' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Go to <a href="https://console.x.ai/" target="_blank" rel="noopener" className="text-blue-500 hover:underline">xAI Console</a></li>
-                  <li>Create an API key</li>
-                </ol>
-              )}
-
-              {provider === 'zai' && (
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Contact Z.AI for API access</li>
-                  <li>Enter your API key here</li>
-                </ol>
-              )}
+              {(() => {
+                const instructions = t.settings.providerInstructions[provider as keyof typeof t.settings.providerInstructions];
+                if (!instructions) return null;
+                return (
+                  <ol className="list-decimal list-inside space-y-1">
+                    <li dangerouslySetInnerHTML={{ __html: instructions.step1 }} />
+                    <li>{instructions.step2}</li>
+                    {instructions.step3 && <li>{instructions.step3}</li>}
+                  </ol>
+                );
+              })()}
             </div>
 
             <p className="text-xs text-muted-foreground pt-2 border-t">

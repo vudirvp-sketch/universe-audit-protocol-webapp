@@ -100,7 +100,7 @@ function ChecklistItemRow({ item, onStatusChange, onEvidenceChange }: ChecklistI
                   <Textarea
                     placeholder={t.checklist.functionalRolePlaceholder}
                     value={item.functionalRole || ''}
-                    onChange={(e) => onEvidenceChange(e.target.value)}
+                    onChange={(e) => onUpdateItem(item.id, { functionalRole: e.target.value })}
                     className="min-h-[40px] text-sm"
                   />
                 </div>

@@ -27,6 +27,8 @@ import type {
   GenerativeOutput,
   NextAction,
 } from './types';
+import { MASTER_CHECKLIST, filterChecklistByMedia } from './protocol-data';
+import { filterByMediaType, evaluateGate } from './scoring-algorithm';
 
 // Ensure steps are registered (side-effect import triggers auto-registration)
 void stepRegistry.registeredCount;
@@ -240,18 +242,33 @@ export async function runAuditPipeline(
 
 /**
  * Map PipelineRunState to the public PipelineState interface.
- * The two types have the same shape, so this is a straightforward mapping.
+ * Populates checklist from gate results using scoring-algorithm and
+ * generates a report when the pipeline is complete or blocked.
  */
 function mapToPipelineState(runState: PipelineRunState): PipelineState {
+  // Build checklist from gate evaluation results if any gate has been evaluated
+  let checklist: ChecklistItem[] = [];
+  if (runState.skeleton || runState.screeningResult ||
+      runState.gateResults.L1 || runState.gateResults.L2 ||
+      runState.gateResults.L3 || runState.gateResults.L4) {
+    checklist = buildChecklistFromState(runState);
+  }
+
+  // Build report when pipeline has enough data (at least skeleton extracted)
+  let report: AuditReport | null = null;
+  if (runState.skeleton) {
+    report = buildReportFromState(runState, checklist);
+  }
+
   return {
     auditMode: runState.auditMode,
     authorProfile: runState.authorProfile,
     skeleton: runState.skeleton,
     screeningResult: runState.screeningResult,
     gateResults: runState.gateResults,
-    checklist: [],
+    checklist,
     griefMatrix: runState.griefMatrix,
-    report: null,
+    report,
     issues: runState.issues,
     whatForChains: runState.whatForChains,
     generativeOutput: runState.generativeOutput,
@@ -263,4 +280,66 @@ function mapToPipelineState(runState: PipelineRunState): PipelineState {
     elapsedMs: runState.elapsedMs,
     stepTimings: runState.stepTimings,
   };
+}
+
+/**
+ * Build checklist items from current pipeline state.
+ * Uses the master checklist filtered by media type and updates
+ * statuses based on gate evaluation results.
+ */
+function buildChecklistFromState(runState: PipelineRunState): ChecklistItem[] {
+  // Use the media type from the run state; default to 'novel' if not set
+  const mediaType = (runState as Record<string, unknown>).mediaType as import('./types').MediaType || 'novel';
+  const filtered = filterByMediaType([...MASTER_CHECKLIST], mediaType);
+
+  // If a gate result exists for a level, update checklist statuses from it
+  for (const level of ['L1', 'L2', 'L3', 'L4'] as const) {
+    const gateResult = runState.gateResults[level];
+    if (!gateResult) continue;
+
+    for (const condition of gateResult.conditions) {
+      const matchIdx = filtered.findIndex(item => item.id === condition.id);
+      if (matchIdx >= 0) {
+        filtered[matchIdx] = {
+          ...filtered[matchIdx],
+          status: condition.passed ? 'PASS' : 'FAIL',
+        };
+      }
+    }
+  }
+
+  return filtered;
+}
+
+/**
+ * Build an AuditReport from the current pipeline state.
+ * Only called when at least the skeleton has been extracted.
+ */
+function buildReportFromState(runState: PipelineRunState, checklist: ChecklistItem[]): AuditReport {
+  const gateResults = runState.gateResults;
+  const scores: Record<string, number> = {};
+
+  for (const level of ['L1', 'L2', 'L3', 'L4'] as const) {
+    const gate = gateResults[level];
+    if (gate) {
+      scores[level] = gate.score;
+    }
+  }
+
+  return {
+    protocolVersion: '10.0',
+    auditMode: runState.auditMode || 'conflict',
+    authorProfile: runState.authorProfile || null,
+    skeleton: runState.skeleton || null,
+    screeningResult: runState.screeningResult || null,
+    gateResults,
+    checklist,
+    griefMatrix: runState.griefMatrix || null,
+    issues: runState.issues,
+    whatForChains: runState.whatForChains,
+    generativeOutput: runState.generativeOutput || null,
+    finalScore: runState.finalScore || null,
+    scores,
+    generatedAt: new Date().toISOString(),
+  } as AuditReport;
 }

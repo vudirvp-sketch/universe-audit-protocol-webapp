@@ -136,6 +136,13 @@ export const t = {
     gateFailureDesc:
       'Гейт <strong>{level}</strong> не пройден с баллом <strong>{score}%</strong>.<br/><br/>Согласно Протоколу Аудита Вселенной v10.0, каждый уровень требует прохождения порога для продолжения. Аудит остановлен, чтобы предотвратить анализ на нестабильной основе.<br/><br/>Ознакомьтесь со списком исправлений и устраните выявленные проблемы перед продолжением.',
     viewFixList: 'Смотреть список исправлений',
+    // Gate executor output strings
+    gateFailedHeading: '## ГЕЙТ НЕ ПРОЙДЕН: {name}',
+    statusLabel: 'Статус',
+    scoreLabelShort: 'Балл',
+    conditionBreakdown: '### Разбивка по условиям:',
+    requiredFixes: '### Необходимые исправления:',
+    executionHalted: '**ВЫПОЛНЕНИЕ ОСТАНОВЛЕНО** — Устраните проблемы выше перед продолжением',
   },
 
   levels: {
@@ -227,6 +234,74 @@ export const t = {
     howToGetKey: 'Как получить API ключ:',
     keySecurityNote:
       'Ваш API ключ хранится локально в браузере и не передаётся третьим лицам.',
+    // Provider-specific instructions (Russian per Language Contract)
+    providerInstructions: {
+      google: {
+        step1: 'Перейдите в <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Google AI Studio</a>',
+        step2: 'Создайте новый API ключ',
+        step3: 'Бесплатный тариф: 15 запросов/мин, 1М токенов/день',
+      },
+      groq: {
+        step1: 'Перейдите в <a href="https://console.groq.com/keys" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Консоль Groq</a>',
+        step2: 'Создайте API ключ (начинается с gsk_)',
+        step3: 'Очень быстрый вывод, щедрый бесплатный тариф',
+      },
+      openrouter: {
+        step1: 'Перейдите в <a href="https://openrouter.ai/keys" target="_blank" rel="noopener" class="text-blue-500 hover:underline">OpenRouter</a>',
+        step2: 'Создайте API ключ',
+        step3: 'Доступ ко многим моделям, некоторые бесплатные',
+      },
+      huggingface: {
+        step1: 'Перейдите в <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Настройки Hugging Face</a>',
+        step2: 'Создайте Токен Доступа',
+        step3: 'Бесплатный API вывода (с ограничением скорости)',
+      },
+      together: {
+        step1: 'Перейдите в <a href="https://api.together.xyz/settings/api-keys" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Together AI</a>',
+        step2: 'Создайте API ключ',
+        step3: '1$ бесплатного кредита при регистрации',
+      },
+      openai: {
+        step1: 'Перейдите на <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Платформу OpenAI</a>',
+        step2: 'Создайте API ключ (начинается с sk-)',
+        step3: 'Оплата по факту использования',
+      },
+      anthropic: {
+        step1: 'Перейдите в <a href="https://console.anthropic.com/" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Консоль Anthropic</a>',
+        step2: 'Создайте API ключ (начинается с sk-ant-)',
+        step3: 'Оплата по факту использования',
+      },
+      mistral: {
+        step1: 'Перейдите в <a href="https://console.mistral.ai/" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Консоль Mistral</a>',
+        step2: 'Создайте API ключ',
+        step3: '',
+      },
+      deepseek: {
+        step1: 'Перейдите на <a href="https://platform.deepseek.com/" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Платформу DeepSeek</a>',
+        step2: 'Создайте API ключ',
+        step3: 'Очень конкурентные цены',
+      },
+      qwen: {
+        step1: 'Перейдите в <a href="https://dashscope.console.aliyun.com/" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Alibaba DashScope</a>',
+        step2: 'Создайте API ключ',
+        step3: '',
+      },
+      kimi: {
+        step1: 'Перейдите на <a href="https://platform.moonshot.cn/" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Платформу Moonshot</a>',
+        step2: 'Создайте API ключ',
+        step3: '',
+      },
+      xai: {
+        step1: 'Перейдите в <a href="https://console.x.ai/" target="_blank" rel="noopener" class="text-blue-500 hover:underline">Консоль xAI</a>',
+        step2: 'Создайте API ключ',
+        step3: '',
+      },
+      zai: {
+        step1: 'Обратитесь в Z.AI для получения доступа к API',
+        step2: 'Введите ваш API ключ здесь',
+        step3: '',
+      },
+    },
   },
 
   tabs: {
@@ -298,6 +373,11 @@ export const t = {
     criticalBreak: 'Критическое: BREAK на шаге {step}',
     criticalBreakDesc:
       'Элемент нарушает логику нарратива на раннем этапе цепочки. Рассмотрите привязку к закону мира или удаление.',
+    // Badge labels (Russian per Language Contract)
+    breakCount: '{count} РАЗРЫВ',
+    dilemmaCount: '{count} ДИЛЕММА',
+    unclassifiedCount: '{count} Неклассиф.',
+    criticalCount: '{count} Критич.',
   },
 
   // ─── GenerativeOutput.tsx ─────────────────────────────────────────
@@ -392,6 +472,13 @@ export const t = {
     cellPlaceholder: 'Кто/что воплощает {stage} на этом уровне?',
     evidencePlaceholder: 'Доказательства из нарратива...',
     confidence: 'Уверенность:',
+    // Confidence level labels (Russian)
+    confidenceLabels: {
+      high: 'высокая',
+      medium: 'средняя',
+      low: 'низкая',
+      absent: 'отсутствует',
+    },
   },
 
   // ─── ReportDisplay.tsx ────────────────────────────────────────────

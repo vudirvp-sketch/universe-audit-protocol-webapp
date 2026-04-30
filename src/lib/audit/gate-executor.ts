@@ -247,123 +247,6 @@ function generateFixes(
 }
 
 // ============================================================================
-// GATE EXECUTION CONTROLLER
-// ============================================================================
-
-/**
- * Controls sequential gate execution
- * Handles halt conditions and state management
- */
-export class GateExecutionController {
-  private gates: GateResult[] = [];
-  private currentGate: number = 0;
-  private halted: boolean = false;
-  private haltReason?: string;
-
-  constructor() {
-    this.gates = [];
-    this.currentGate = 0;
-    this.halted = false;
-  }
-
-  /**
-   * Runs the next gate in sequence
-   * Returns null if halted or complete
-   */
-  runNextGate(
-    input: unknown,
-    validators: Map<string, ((input: unknown) => { passed: boolean; score: number; message: string })[]>
-  ): GateResult | null {
-    if (this.halted) {
-      return null;
-    }
-
-    const gateKeys = Object.keys(GATE_DEFINITIONS);
-    if (this.currentGate >= gateKeys.length) {
-      return null; // All gates complete
-    }
-
-    const gateKey = gateKeys[this.currentGate];
-    const gateDef = GATE_DEFINITIONS[gateKey as keyof typeof GATE_DEFINITIONS];
-    
-    // Check prerequisites
-    const prereq = validatePrerequisites(gateDef.id, this.gates);
-    if (!prereq.canProceed) {
-      this.halted = true;
-      this.haltReason = prereq.reason;
-      return null;
-    }
-
-    // Get validators for this gate
-    const gateValidators = validators.get(gateDef.id) || [];
-    
-    // Execute gate
-    const result = executeGate(gateDef.id, input, gateValidators);
-    this.gates.push(result);
-    this.currentGate++;
-
-    // Check for halt condition
-    if (result.halt) {
-      this.halted = true;
-      this.haltReason = `Гейт ${gateDef.id} провален с условием остановки`;
-    }
-
-    return result;
-  }
-
-  /**
-   * Returns current execution state
-   */
-  getState(): GateSequence {
-    const totalScore = this.gates.reduce((sum, g) => sum + g.score, 0) / 
-                       Math.max(1, this.gates.length);
-
-    return {
-      gates: [...this.gates],
-      currentGate: this.currentGate,
-      halted: this.halted,
-      haltReason: this.haltReason,
-      totalScore
-    };
-  }
-
-  /**
-   * Resets execution state
-   */
-  reset(): void {
-    this.gates = [];
-    this.currentGate = 0;
-    this.halted = false;
-    this.haltReason = undefined;
-  }
-
-  /**
-   * Skips a gate (only allowed for non-halting gates)
-   */
-  skipGate(gateId: string): boolean {
-    const gateDef = GATE_DEFINITIONS[gateId as keyof typeof GATE_DEFINITIONS];
-    if (!gateDef || gateDef.haltOnFailure) {
-      return false; // Cannot skip halting gates
-    }
-
-    const skipResult: GateResult = {
-      gateId: gateDef.id,
-      gateName: gateDef.name,
-      status: 'skipped',
-      score: 0,
-      conditions: [],
-      halt: false,
-      fixes: [],
-      metadata: { skipped: true, level: gateDef.level }
-    };
-
-    this.gates.push(skipResult);
-    this.currentGate++;
-    return true;
-  }
-}
-
-// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
@@ -392,13 +275,13 @@ export function createGateFailedOutput(
 ): string {
   const lines: string[] = [];
   
-  lines.push(`## GATE FAILED: ${gateResult.gateName}`);
-  lines.push(`Status: ${gateResult.status}`);
-  lines.push(`Score: ${gateResult.score.toFixed(1)}%`);
+  lines.push(`## ГЕЙТ НЕ ПРОЙДЕН: ${gateResult.gateName}`);
+  lines.push(`Статус: ${gateResult.status}`);
+  lines.push(`Балл: ${gateResult.score.toFixed(1)}%`);
   lines.push('');
 
   if (includeBreakdown && gateResult.conditions.length > 0) {
-    lines.push('### Condition Breakdown:');
+    lines.push('### Разбивка по условиям:');
     for (const cond of gateResult.conditions) {
       const icon = cond.passed ? '✓' : '✗';
       lines.push(`- ${icon} ${cond.message}`);
@@ -407,7 +290,7 @@ export function createGateFailedOutput(
   }
 
   if (gateResult.fixes.length > 0) {
-    lines.push('### Required Fixes:');
+    lines.push('### Необходимые исправления:');
     for (const fix of gateResult.fixes) {
       lines.push(`- ${fix}`);
     }

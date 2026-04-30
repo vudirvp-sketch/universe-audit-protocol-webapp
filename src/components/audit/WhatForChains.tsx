@@ -221,17 +221,17 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
           <span className="font-medium">{t.chains.countChains.replace('{count}', String(chains.length))}</span>
         </div>
         {breaks.length > 0 && (
-          <Badge variant="destructive">{breaks.length} BREAK</Badge>
+          <Badge variant="destructive">{t.chains.breakCount.replace('{count}', String(breaks.length))}</Badge>
         )}
         {dilemmas.length > 0 && (
-          <Badge variant="default" className="bg-green-500">{dilemmas.length} DILEMMA</Badge>
+          <Badge variant="default" className="bg-green-500">{t.chains.dilemmaCount.replace('{count}', String(dilemmas.length))}</Badge>
         )}
         {unclassified.length > 0 && (
-          <Badge variant="secondary">{unclassified.length} Unclassified</Badge>
+          <Badge variant="secondary">{t.chains.unclassifiedCount.replace('{count}', String(unclassified.length))}</Badge>
         )}
         {criticalBreaks.length > 0 && (
           <Badge variant="destructive" className="animate-pulse">
-            {criticalBreaks.length} Critical
+            {t.chains.criticalCount.replace('{count}', String(criticalBreaks.length))}
           </Badge>
         )}
       </div>

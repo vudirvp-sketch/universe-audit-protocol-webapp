@@ -115,7 +115,7 @@ export function evaluateGate(
   
   return {
     gateId: `GATE-${level}`,
-    gateName: `Level ${level} Gate`,
+    gateName: `Гейт уровня ${level}`,
     status: passedGate ? 'passed' : 'failed',
     score,
     passed: passedGate,

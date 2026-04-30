@@ -1,8 +1,10 @@
 /**
  * Universe Audit Protocol v10.0
  * Audit Module Index
- * 
- * Central export for all audit modules
+ *
+ * Central export for all audit modules.
+ * The pipeline entry point is pipeline.ts (uses AuditStepRunner + step registry).
+ * The old keyword-based orchestrator.ts has been removed.
  */
 
 // TIER 0 — Foundation
@@ -20,13 +22,11 @@ export * from './skeleton-extraction';
 export * from './what-for-chain';
 
 // TIER 2 — Protocol Fidelity
-// NOTE: new-element-validation.ts deleted — types FiveChecksResult and FiveTouchesResult
-// are in types.ts; the module was unused by pipeline and had conflicting type definitions.
 export * from './media-transformation';
 export * from './generative-templates';
 
 // TIER 3 — Diagnostics
 export * from './diagnostics';
 
-// TIER 4 — Client Pipeline (Phase 1: wrapper around orchestrator; Phase 2: AuditStepRunner)
+// TIER 4 — Client Pipeline (AuditStepRunner with step registry)
 export * from './pipeline';

@@ -45,8 +45,15 @@ interface SettingsState extends AppSettings {
   clearSettings: () => void;
 }
 
-// Default proxy URL — REPLACE <your-subdomain> with your actual Cloudflare Workers subdomain
-const DEFAULT_PROXY_URL = 'https://audit-proxy.<your-subdomain>.workers.dev';
+// Default proxy URL placeholder — users MUST replace <your-subdomain> with their actual Cloudflare Workers subdomain.
+// If the URL still contains '<your-subdomain>', the proxy will not work.
+const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
+const DEFAULT_PROXY_URL = `https://audit-proxy.${PROXY_URL_PLACEHOLDER}.workers.dev`;
+
+/** Check if the proxy URL is still the unconfigured placeholder */
+export function isProxyUrlPlaceholder(url: string): boolean {
+  return url.includes(PROXY_URL_PLACEHOLDER);
+}
 
 const DEFAULT_SETTINGS: AppSettings = {
   provider: 'zai',
@@ -188,5 +195,4 @@ export const useAppSettings = () => {
   };
 };
 
-// Backwards compatibility alias
-export const useApiKey = useAppSettings;
+
