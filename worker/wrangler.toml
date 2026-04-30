@@ -3,22 +3,17 @@ main = "cors-proxy.js"
 compatibility_date = "2024-01-01"
 
 # ============================================================
-# IMPORTANT: DEPLOYMENT CONFIGURATION
+# DEPLOYMENT CONFIGURATION
 # ============================================================
-# Before deploying, you MUST replace <your-subdomain> below with
-# your actual Cloudflare Workers subdomain. To find your subdomain:
+# Cloudflare Workers subdomain: vudirvp
+# Worker URL: https://universe-audit-proxy.vudirvp.workers.dev
+# Account ID: 5a7a04ab064205a1f901ebdb7b40dcc0
 #
-#   1. Log in to https://dash.cloudflare.com
-#   2. Go to Workers & Pages → Overview
-#   3. Your subdomain appears as: <your-subdomain>.workers.dev
-#
-# Example: if your subdomain is "my-audit", use:
-#   pattern = "audit-proxy.my-audit.workers.dev/*"
-#
-# Then deploy with: cd worker && npx wrangler deploy
+# Deploy with: cd worker && npx wrangler deploy
+# Or via GitHub Actions (automatic on push to main)
 # ============================================================
 
 [env.production]
 routes = [
-  { pattern = "audit-proxy.vudirvp.workers.dev/*" }
+  { pattern = "universe-audit-proxy.vudirvp.workers.dev/*" }
 ]

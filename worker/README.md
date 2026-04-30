@@ -1,6 +1,15 @@
 # Universe Audit Protocol — CORS Proxy Worker
 
+## Current Deployment
+
+- **Worker URL**: https://universe-audit-proxy.vudirvp.workers.dev
+- **Account**: weathered-paper-631c
+- **Account ID**: 5a7a04ab064205a1f901ebdb7b40dcc0
+- **Workers subdomain**: vudirvp
+
 ## Deployment
+
+### Option A: Wrangler CLI (recommended)
 
 1. Install dependencies:
    ```bash
@@ -18,11 +27,28 @@
    ```
    Or: `npx wrangler deploy`
 
-4. Update the proxy URL in the main app settings to match your deployed Worker URL.
+4. The Worker will be available at: `https://universe-audit-proxy.vudirvp.workers.dev`
+
+### Option B: Environment variables (CI/CD)
+
+For non-interactive environments (GitHub Actions), set:
+```bash
+export CLOUDFLARE_API_TOKEN="your-api-token"
+export CLOUDFLARE_ACCOUNT_ID="5a7a04ab064205a1f901ebdb7b40dcc0"
+npx wrangler deploy
+```
 
 ## Configuration
 
-Edit `wrangler.toml` and replace `<your-subdomain>` with your actual Cloudflare Workers subdomain.
+The `wrangler.toml` file contains the production route:
+```toml
+[env.production]
+routes = [
+  { pattern = "universe-audit-proxy.vudirvp.workers.dev/*" }
+]
+```
+
+If deploying to a different Cloudflare account, update the subdomain in the route pattern.
 
 ## How It Works
 

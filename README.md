@@ -101,7 +101,38 @@ npx vitest run __tests__/audit/json-sanitizer.test.ts
 
 ## Deployment
 
-### Deploy the CORS Proxy (Cloudflare Worker)
+> **Current deployment URLs (account `weathered-paper-631c`):**
+> - Frontend: https://universe-audit-protocol.pages.dev
+> - CORS Proxy Worker: https://universe-audit-proxy.vudirvp.workers.dev
+> - Account ID: `5a7a04ab064205a1f901ebdb7b40dcc0`
+
+### Step 1: Create Cloudflare API Token
+
+1. Go to https://dash.cloudflare.com/profile/api-tokens
+2. Click **Create Token**
+3. Select **Custom token** → **Get started**
+4. Token name: `universe-audit-deploy`
+5. Permissions:
+   - **Account** → **Cloudflare Pages** → **Edit**
+   - **Account** → **Workers Scripts** → **Edit**
+6. Account Resources: Include → your account (`weathered-paper-631c`)
+7. Click **Continue to summary** → **Create Token**
+8. **Copy the token immediately** — it will not be shown again
+
+You will also need your **Account ID** from:
+https://dash.cloudflare.com → left sidebar → **Workers & Pages** → URL contains the account ID, or find it at the bottom of any domain's overview page.
+
+### Step 2: Configure GitHub Secrets
+
+1. Go to your GitHub repository: https://github.com/vudirvp-sketch/universe-audit-protocol-webapp
+2. Navigate to **Settings** → **Secrets and variables** → **Actions**
+3. Click **New repository secret** and add:
+   - Name: `CLOUDFLARE_API_TOKEN` → Value: your API token from Step 1
+   - Name: `CLOUDFLARE_ACCOUNT_ID` → Value: `5a7a04ab064205a1f901ebdb7b40dcc0`
+
+After this, every push to `main` will trigger the GitHub Actions workflow (`.github/workflows/deploy.yml`) and auto-deploy the frontend to Cloudflare Pages.
+
+### Step 3: Deploy the CORS Proxy Worker
 
 ```bash
 cd worker
@@ -109,26 +140,43 @@ npm install
 npx wrangler deploy
 ```
 
-After deployment, note the Worker URL (e.g., `https://audit-proxy.your-subdomain.workers.dev`).
+The Worker will be available at: `https://universe-audit-proxy.vudirvp.workers.dev`
 
-### Deploy the Frontend (Cloudflare Pages)
+### Step 4: Deploy the Frontend (Cloudflare Pages)
 
-1. Push the repository to GitHub
-2. Go to [Cloudflare Pages](https://pages.cloudflare.com)
-3. Create a new project, connect to the GitHub repo
-4. Set build command: `npm run build`
-5. Set output directory: `out`
-6. Deploy
+**Option A: Automatic via GitHub Actions** (recommended)
 
-Alternatively, connect the GitHub repo directly to Cloudflare Pages via the dashboard.
+After configuring GitHub Secrets (Step 2), simply push to `main`:
+```bash
+git push origin main
+```
+GitHub Actions will build and deploy automatically.
 
-### Configure in the App
+**Option B: Manual via Wrangler CLI**
 
-1. Open the deployed app
+```bash
+npm run build
+npx wrangler pages deploy out --project-name=universe-audit-protocol
+```
+
+**Option C: Manual via Cloudflare Dashboard**
+
+1. Go to https://dash.cloudflare.com → **Workers & Pages**
+2. Click **Create** → **Pages** tab → **Connect to Git**
+3. Select the GitHub repository
+4. Build settings:
+   - Framework preset: **Next.js (Static Export)**
+   - Build command: `npm run build`
+   - Build output directory: `out`
+5. Click **Save and Deploy**
+
+### Step 5: Configure in the App
+
+1. Open the deployed app: https://universe-audit-protocol.pages.dev
 2. Click the ⚙️ Settings button in the header
-3. Select your LLM provider
+3. Select your LLM provider (e.g., Google Gemini, Groq, OpenAI)
 4. Enter your API key
-5. Enter the Worker proxy URL
+5. The Worker proxy URL is pre-configured: `https://universe-audit-proxy.vudirvp.workers.dev`
 6. Click Save
 
 ## Configuration

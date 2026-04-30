@@ -46,10 +46,11 @@ interface SettingsState extends AppSettings {
   clearSettings: () => void;
 }
 
-// Default proxy URL placeholder — users MUST replace <your-subdomain> with their actual Cloudflare Workers subdomain.
-// If the URL still contains '<your-subdomain>', the proxy will not work.
+// Default proxy URL — the CORS proxy Worker is deployed at this URL.
+// Cloudflare Workers subdomain: vudirvp
+// If you redeploy to a different account, update this URL accordingly.
+const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
 const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
-const DEFAULT_PROXY_URL = `https://audit-proxy.${PROXY_URL_PLACEHOLDER}.workers.dev`;
 
 /** Check if the proxy URL is still the unconfigured placeholder */
 export function isProxyUrlPlaceholder(url: string): boolean {
@@ -60,7 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   provider: 'zai',
   apiKey: null,
   model: null,
-  proxyUrl: DEFAULT_PROXY_URL,
+  proxyUrl: PROXY_URL_DEFAULT,
   rpmLimit: PROVIDER_RPM_DEFAULTS.zai,
 };
 
@@ -80,7 +81,7 @@ export const useSettings = create<SettingsState>((set, get) => ({
           provider,
           apiKey: parsed.apiKey || null,
           model: parsed.model || null,
-          proxyUrl: parsed.proxyUrl || DEFAULT_PROXY_URL,
+          proxyUrl: parsed.proxyUrl || PROXY_URL_DEFAULT,
           rpmLimit: parsed.rpmLimit || PROVIDER_RPM_DEFAULTS[provider] || DEFAULT_SETTINGS.rpmLimit,
           isLoaded: true,
         });
