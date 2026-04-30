@@ -61,7 +61,7 @@ const PIPELINE_STEP_ORDER: readonly AuditPhase[] = [
  */
 class StepRegistry {
   /** Internal map from AuditPhase to its registered AuditStep */
-  private readonly steps = new Map<AuditPhase, AuditStep>();
+  private readonly steps = new Map<AuditPhase, AuditStep<unknown>>();
 
   /**
    * Register an audit step.
@@ -71,14 +71,14 @@ class StepRegistry {
    * @param step - The AuditStep instance to register
    * @throws {Error} If step.id is not an executable pipeline phase
    */
-  registerStep(step: AuditStep): void {
+  registerStep<T>(step: AuditStep<T>): void {
     if (!PIPELINE_STEP_ORDER.includes(step.id)) {
       throw new Error(
         `Cannot register step for phase "${step.id}": not a valid executable pipeline phase. ` +
         `Executable phases are: ${PIPELINE_STEP_ORDER.join(', ')}`
       );
     }
-    this.steps.set(step.id, step);
+    this.steps.set(step.id, step as AuditStep<unknown>);
   }
 
   /**
@@ -88,7 +88,7 @@ class StepRegistry {
    * @returns The registered AuditStep
    * @throws {Error} If no step is registered for the given phase
    */
-  getStep(phase: AuditPhase): AuditStep {
+  getStep(phase: AuditPhase): AuditStep<unknown> {
     const step = this.steps.get(phase);
     if (!step) {
       throw new Error(
@@ -167,7 +167,7 @@ export const stepRegistry = new StepRegistry();
  * Register a step in the global registry.
  * Convenience wrapper around `stepRegistry.registerStep()`.
  */
-export function registerStep(step: AuditStep): void {
+export function registerStep<T>(step: AuditStep<T>): void {
   stepRegistry.registerStep(step);
 }
 
@@ -177,7 +177,7 @@ export function registerStep(step: AuditStep): void {
  *
  * @throws {Error} If no step is registered for the given phase
  */
-export function getStep(phase: AuditPhase): AuditStep {
+export function getStep(phase: AuditPhase): AuditStep<unknown> {
   return stepRegistry.getStep(phase);
 }
 
@@ -188,3 +188,39 @@ export function getStep(phase: AuditPhase): AuditStep {
 export function getStepOrder(): AuditPhase[] {
   return stepRegistry.getStepOrder();
 }
+
+// ============================================================================
+// AUTO-REGISTRATION — all step implementations registered on import
+// ============================================================================
+
+import { stepValidate } from './steps/step-validate';
+import { stepModeDetection } from './steps/step-mode-detection';
+import { stepAuthorProfile } from './steps/step-author-profile';
+import { stepSkeleton } from './steps/step-skeleton';
+import { stepScreening } from './steps/step-screening';
+import { stepGateL1 } from './steps/step-gate-L1';
+import { stepGateL2 } from './steps/step-gate-L2';
+import { stepGateL3 } from './steps/step-gate-L3';
+import { stepGateL4 } from './steps/step-gate-L4';
+import { stepIssuesChains } from './steps/step-issues-chains';
+import { stepGenerative } from './steps/step-generative';
+import { stepFinal } from './steps/step-final';
+
+/** Register all pipeline steps into the global registry. */
+export function registerAllSteps(): void {
+  stepRegistry.registerStep(stepValidate);
+  stepRegistry.registerStep(stepModeDetection);
+  stepRegistry.registerStep(stepAuthorProfile);
+  stepRegistry.registerStep(stepSkeleton);
+  stepRegistry.registerStep(stepScreening);
+  stepRegistry.registerStep(stepGateL1);
+  stepRegistry.registerStep(stepGateL2);
+  stepRegistry.registerStep(stepGateL3);
+  stepRegistry.registerStep(stepGateL4);
+  stepRegistry.registerStep(stepIssuesChains);
+  stepRegistry.registerStep(stepGenerative);
+  stepRegistry.registerStep(stepFinal);
+}
+
+// Auto-register on first import
+registerAllSteps();

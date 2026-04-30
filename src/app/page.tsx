@@ -40,6 +40,7 @@ import {
 import type { MediaType, AuthorProfileAnswers, AuditPhase, AuthorProfile, Skeleton, ScreeningResult, GateResult, Issue, ChainResult, GenerativeOutput, NextAction } from '@/lib/audit/types';
 import { runAuditPipeline, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
+import { BlockedState } from '@/components/audit/BlockedState';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n/ru';
 
@@ -138,9 +139,8 @@ export default function Home() {
         setAuthorProfile(result.authorProfile);
       }
       if (result.skeleton) {
-        // Orchestrator may return SkeletonExtractionResult from skeleton-extraction module
-        // or canonical Skeleton from types.ts. Both share compatible shape for UI display.
-        setSkeleton(result.skeleton as unknown as Skeleton);
+        // Pipeline returns canonical Skeleton from types.ts — no cast needed
+        setSkeleton(result.skeleton);
       }
       if (result.screeningResult) {
         setScreeningResult(result.screeningResult);
@@ -332,6 +332,9 @@ export default function Home() {
             {/* Right Panel - Results */}
             <ResizablePanel defaultSize={75}>
               <div className="p-4 h-full overflow-auto">
+                {/* Show blocked state prominently when blocked */}
+                {phase === 'blocked' && <div className="mb-4"><BlockedState /></div>}
+                
                 <Tabs defaultValue="report" className="h-full">
                   <TabsList className="mb-4 flex-wrap h-auto gap-1">
                     <TabsTrigger value="report" className="flex items-center gap-1">

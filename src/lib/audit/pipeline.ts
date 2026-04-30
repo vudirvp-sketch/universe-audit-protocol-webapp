@@ -2,20 +2,19 @@
  * Audit Pipeline — Client-side entry point for running the full audit.
  *
  * This module is the ONLY place page.tsx should call to start an audit.
- * It wraps the orchestrator (runFullAudit) and adapts it for browser execution.
+ * It uses the AuditStepRunner from audit-step.ts to execute each pipeline
+ * step sequentially with real LLM calls.
  *
- * Phase 1: Orchestrator uses keyword-based logic; LLM client is created
- * but not yet consumed inside orchestrator steps.
- * Phase 2: Will replace orchestrator internals with AuditStepRunner + real LLM calls.
+ * Phase 2: Replaced keyword-based orchestrator with AuditStepRunner.
+ * Each step is a declarative AuditStep object registered in step-registry.
  */
 
 import { createLLMClient, type LLMClient, type LLMProvider } from '@/lib/llm-client';
-import { runFullAudit, type OrchestratorState } from './orchestrator';
+import { runStep, type PipelineRunState } from './audit-step';
+import { getStep, getStepOrder, stepRegistry } from './step-registry';
 import type {
-  AuditMode,
   AuditPhase,
   MediaType,
-  AuthorProfile,
   AuthorProfileAnswers,
   Skeleton,
   ScreeningResult,
@@ -28,7 +27,9 @@ import type {
   GenerativeOutput,
   NextAction,
 } from './types';
-import type { SkeletonExtractionResult } from './skeleton-extraction';
+
+// Ensure steps are registered (side-effect import triggers auto-registration)
+void stepRegistry.registeredCount;
 
 // ============================================================================
 // PUBLIC API
@@ -50,9 +51,9 @@ export interface PipelineProgress {
 }
 
 export interface PipelineState {
-  auditMode: AuditMode | null;
-  authorProfile: AuthorProfile | null;
-  skeleton: Skeleton | SkeletonExtractionResult | null;
+  auditMode: import('./types').AuditMode | null;
+  authorProfile: import('./types').AuthorProfile | null;
+  skeleton: Skeleton | null;
   screeningResult: ScreeningResult | null;
   gateResults: {
     L1: GateResult | null;
@@ -102,44 +103,37 @@ function createEmptyPipelineState(): PipelineState {
 }
 
 /**
- * Map the orchestrator's AuditPhase to the pipeline's AuditPhase.
- *
- * The orchestrator now uses the canonical AuditPhase values from ./types
- * (e.g. `L1_evaluation` instead of `gate_L1`), so a translation table is
- * no longer needed.  We only need to handle the case where the orchestrator
- * returns an unexpected string — we fall back to `'failed'` so the UI can
- * react.
+ * Create the initial PipelineRunState from the user's input.
  */
-function toPipelinePhase(phase: string): AuditPhase {
-  // The orchestrator already emits canonical AuditPhase values; just validate.
-  const canonical: AuditPhase[] = [
-    'idle',
-    'input_validation',
-    'mode_detection',
-    'author_profile',
-    'skeleton_extraction',
-    'screening',
-    'L1_evaluation',
-    'L2_evaluation',
-    'L3_evaluation',
-    'L4_evaluation',
-    'issue_generation',
-    'generative_modules',
-    'final_output',
-    'complete',
-    'failed',
-    'blocked',
-    'cancelled',
-  ];
-
-  if (canonical.includes(phase as AuditPhase)) {
-    return phase as AuditPhase;
-  }
-  return 'failed';
+function createInitialRunState(input: AuditInput): PipelineRunState {
+  return {
+    phase: 'idle',
+    inputText: input.narrative,
+    mediaType: input.mediaType,
+    auditMode: null,
+    authorProfile: null,
+    skeleton: null,
+    screeningResult: null,
+    gateResults: { L1: null, L2: null, L3: null, L4: null },
+    griefMatrix: null,
+    issues: [],
+    whatForChains: [],
+    generativeOutput: null,
+    nextActions: [],
+    finalScore: null,
+    error: null,
+    blockedAt: null,
+    elapsedMs: 0,
+    stepTimings: {},
+  };
 }
 
 /**
- * Run the full audit pipeline from the browser.
+ * Run the full audit pipeline from the browser using the AuditStepRunner.
+ *
+ * Each step is executed sequentially via runStep() from audit-step.ts.
+ * On gate failure (blocked), the pipeline stops immediately.
+ * Progress callbacks update the UI in real time.
  *
  * @param input - The audit input (narrative, media type, etc.)
  * @param llmClientOrConfig - Either an LLMClient instance or settings to create one
@@ -154,16 +148,13 @@ export async function runAuditPipeline(
   abortSignal?: AbortSignal,
 ): Promise<PipelineState> {
   const overallStart = Date.now();
-  const stepTimings: Partial<Record<AuditPhase, number>> = {};
 
   // Check for cancellation before starting
   if (abortSignal?.aborted) {
-    return { ...createEmptyPipelineState(), phase: 'cancelled', elapsedMs: Date.now() - overallStart };
+    return { ...createEmptyPipelineState(), phase: 'cancelled', elapsedMs: 0 };
   }
 
   // Create or reuse LLM client
-  // Phase 1: LLM client is created but not yet used by the orchestrator.
-  // Phase 2: The AuditStepRunner will use it for each pipeline step.
   let llmClient: LLMClient;
   if ('chatCompletion' in llmClientOrConfig) {
     llmClient = llmClientOrConfig;
@@ -177,69 +168,99 @@ export async function runAuditPipeline(
     });
   }
 
-  // Map pipeline input to orchestrator input format
-  const orchestratorInput = {
-    concept: input.narrative,
-    media_type: input.mediaType,
-    author_answers: input.authorAnswers,
-  };
+  // Initialize the pipeline run state
+  let runState: PipelineRunState = createInitialRunState(input);
+  const stepOrder = getStepOrder();
 
-  // Notify: starting input validation
-  const emptyState = createEmptyPipelineState();
-  onProgress?.('input_validation', { ...emptyState, phase: 'input_validation' });
+  // Notify: starting
+  onProgress?.('input_validation', mapToPipelineState(runState));
 
-  // Check cancellation before orchestrator
-  if (abortSignal?.aborted) {
-    return { ...createEmptyPipelineState(), phase: 'cancelled', elapsedMs: Date.now() - overallStart };
+  // Execute each step sequentially
+  for (const phase of stepOrder) {
+    // Check cancellation before each step
+    if (abortSignal?.aborted) {
+      runState = { ...runState, phase: 'cancelled' };
+      break;
+    }
+
+    // Get the step from the registry
+    if (!stepRegistry.hasStep(phase)) {
+      // Skip unregistered steps — this shouldn't happen in production
+      continue;
+    }
+
+    const step = getStep(phase);
+    const stepStart = Date.now();
+
+    try {
+      // Execute the step via AuditStepRunner
+      runState = await runStep(step, runState, llmClient, (p) => {
+        onProgress?.(p, mapToPipelineState(runState));
+      });
+
+      // Track timing
+      const stepElapsed = Date.now() - stepStart;
+      runState = {
+        ...runState,
+        elapsedMs: Date.now() - overallStart,
+        stepTimings: { ...runState.stepTimings, [phase]: stepElapsed },
+      };
+
+      // Notify progress
+      onProgress?.(runState.phase, mapToPipelineState(runState));
+
+      // If blocked, stop the pipeline
+      if (runState.phase === 'blocked') {
+        break;
+      }
+    } catch (error) {
+      // AuditStepError or unexpected error — mark as failed
+      const message = error instanceof Error ? error.message : String(error);
+      runState = {
+        ...runState,
+        phase: 'failed',
+        error: message,
+        elapsedMs: Date.now() - overallStart,
+        stepTimings: { ...runState.stepTimings, [phase]: Date.now() - stepStart },
+      };
+      break;
+    }
   }
 
-  // Run the orchestrator
-  // Phase 1: Uses the existing keyword-based orchestrator
-  // Phase 2: Will use the sequential AuditStepRunner with real LLM calls
-  const orchestratorStart = Date.now();
-  const result: OrchestratorState = await runFullAudit(orchestratorInput);
-  const orchestratorElapsed = Date.now() - orchestratorStart;
-
-  // Record the terminal phase timing from the orchestrator result
-  const mappedPhase = toPipelinePhase(result.phase);
-  stepTimings[mappedPhase] = orchestratorElapsed;
-
-  // Check cancellation after orchestrator
-  if (abortSignal?.aborted) {
-    return { ...createEmptyPipelineState(), phase: 'cancelled', elapsedMs: Date.now() - overallStart };
+  // Mark as complete if not blocked/failed/cancelled
+  if (runState.phase !== 'blocked' && runState.phase !== 'failed' && runState.phase !== 'cancelled') {
+    runState = { ...runState, phase: 'complete' };
   }
-
-  // Map orchestrator result to pipeline state.
-  // The orchestrator now returns properly-typed data using canonical types
-  // from ./types, so no `as` casts are needed.
-  const pipelineState: PipelineState = {
-    auditMode: result.audit_mode_config?.mode ?? null,
-    authorProfile: result.author_profile_result ?? null,
-    skeleton: result.skeleton ?? null,
-    screeningResult: result.screening_result ?? null,
-    gateResults: {
-      L1: result.gate_L1 ?? null,
-      L2: result.gate_L2 ?? null,
-      L3: result.gate_L3 ?? null,
-      L4: result.gate_L4 ?? null,
-    },
-    checklist: [],
-    griefMatrix: null,
-    report: null,
-    issues: result.issues,
-    whatForChains: result.what_for_chains,
-    generativeOutput: result.generative_output ?? null,
-    nextActions: result.next_actions,
-    finalScore: result.final_score ?? null,
-    phase: mappedPhase,
-    blockedAt: result.phase === 'blocked' ? (result.error ?? 'unknown') : null,
-    error: result.error ?? null,
-    elapsedMs: Date.now() - overallStart,
-    stepTimings,
-  };
 
   // Final progress callback
-  onProgress?.(mappedPhase, pipelineState);
+  onProgress?.(runState.phase, mapToPipelineState(runState));
 
-  return pipelineState;
+  return mapToPipelineState(runState);
+}
+
+/**
+ * Map PipelineRunState to the public PipelineState interface.
+ * The two types have the same shape, so this is a straightforward mapping.
+ */
+function mapToPipelineState(runState: PipelineRunState): PipelineState {
+  return {
+    auditMode: runState.auditMode,
+    authorProfile: runState.authorProfile,
+    skeleton: runState.skeleton,
+    screeningResult: runState.screeningResult,
+    gateResults: runState.gateResults,
+    checklist: [],
+    griefMatrix: runState.griefMatrix,
+    report: null,
+    issues: runState.issues,
+    whatForChains: runState.whatForChains,
+    generativeOutput: runState.generativeOutput,
+    nextActions: runState.nextActions,
+    finalScore: runState.finalScore,
+    phase: runState.phase,
+    blockedAt: runState.blockedAt,
+    error: runState.error,
+    elapsedMs: runState.elapsedMs,
+    stepTimings: runState.stepTimings,
+  };
 }
