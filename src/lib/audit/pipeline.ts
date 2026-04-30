@@ -289,7 +289,7 @@ function mapToPipelineState(runState: PipelineRunState): PipelineState {
  */
 function buildChecklistFromState(runState: PipelineRunState): ChecklistItem[] {
   // Use the media type from the run state; default to 'novel' if not set
-  const mediaType = (runState as Record<string, unknown>).mediaType as import('./types').MediaType || 'novel';
+  const mediaType = runState.mediaType;
   const filtered = filterByMediaType([...MASTER_CHECKLIST], mediaType);
 
   // If a gate result exists for a level, update checklist statuses from it
@@ -329,17 +329,17 @@ function buildReportFromState(runState: PipelineRunState, checklist: ChecklistIt
   return {
     protocolVersion: '10.0',
     auditMode: runState.auditMode || 'conflict',
-    authorProfile: runState.authorProfile || null,
-    skeleton: runState.skeleton || null,
-    screeningResult: runState.screeningResult || null,
+    authorProfile: runState.authorProfile,
+    skeleton: runState.skeleton,
+    screeningResult: runState.screeningResult,
     gateResults,
     checklist,
-    griefMatrix: runState.griefMatrix || null,
+    griefMatrix: runState.griefMatrix,
     issues: runState.issues,
     whatForChains: runState.whatForChains,
-    generativeOutput: runState.generativeOutput || null,
-    finalScore: runState.finalScore || null,
+    generativeOutput: runState.generativeOutput,
+    finalScore: runState.finalScore,
     scores,
     generatedAt: new Date().toISOString(),
-  } as AuditReport;
+  };
 }

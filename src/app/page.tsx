@@ -57,6 +57,7 @@ export default function Home() {
     whatForChains,
     generativeOutput,
     setPhase,
+    setAuditMode,
     setLoading,
     setError,
     setAuthorProfile,
@@ -129,7 +130,27 @@ export default function Home() {
         },
         (phase: AuditPhase, state: PipelineState) => {
           // Per-step progress callback — update Zustand store in real time
+          // so the user sees intermediate results (skeleton, gates, etc.)
+          // as each pipeline step completes, not only after the entire run.
           setPhase(phase);
+
+          if (state.auditMode) setAuditMode(state.auditMode);
+          if (state.authorProfile) setAuthorProfile(state.authorProfile);
+          if (state.skeleton) setSkeleton(state.skeleton);
+          if (state.screeningResult) setScreeningResult(state.screeningResult);
+          if (state.gateResults) {
+            if (state.gateResults.L1) setGateResult('L1', state.gateResults.L1);
+            if (state.gateResults.L2) setGateResult('L2', state.gateResults.L2);
+            if (state.gateResults.L3) setGateResult('L3', state.gateResults.L3);
+            if (state.gateResults.L4) setGateResult('L4', state.gateResults.L4);
+          }
+          if (state.griefMatrix) setGriefMatrix(state.griefMatrix);
+          if (state.issues && state.issues.length > 0) setIssues(state.issues);
+          if (state.whatForChains && state.whatForChains.length > 0) setWhatForChains(state.whatForChains);
+          if (state.generativeOutput) setGenerativeOutput(state.generativeOutput);
+          if (state.nextActions && state.nextActions.length > 0) setNextActions(state.nextActions);
+          if (state.finalScore) setFinalScore(state.finalScore);
+          if (state.checklist && state.checklist.length > 0) setChecklist(state.checklist);
         },
         controller.signal,
       );

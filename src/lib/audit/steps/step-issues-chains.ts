@@ -201,10 +201,17 @@ ${gateContext}
       id: i.id,
       location: i.location,
       severity: i.severity,
-      axes: { criticality: i.severity === 'critical' ? 9 : i.severity === 'major' ? 6 : 3, risk: 4, time_cost: 5 },
+      // Derive axes from severity — severity maps to criticality scale;
+      // risk and time_cost are estimated from severity as reasonable defaults.
+      // These are not arbitrary: critical issues have high criticality/risk/cost.
+      axes: {
+        criticality: i.severity === 'critical' ? 9 : i.severity === 'major' ? 6 : i.severity === 'minor' ? 3 : 1,
+        risk: i.severity === 'critical' ? 8 : i.severity === 'major' ? 5 : i.severity === 'minor' ? 3 : 1,
+        time_cost: i.severity === 'critical' ? 7 : i.severity === 'major' ? 5 : i.severity === 'minor' ? 2 : 1,
+      },
       diagnosis: i.diagnosis,
       patches: {
-        conservative: { type: 'compromise' as PatchType, description: i.patches.conservative.description, impact: i.patches.conservative.impact, sideEffects: i.patches.conservative.sideEffects },
+        conservative: { type: 'conservative' as PatchType, description: i.patches.conservative.description, impact: i.patches.conservative.impact, sideEffects: i.patches.conservative.sideEffects },
         compromise: { type: 'compromise' as PatchType, description: i.patches.compromise.description, impact: i.patches.compromise.impact, sideEffects: i.patches.compromise.sideEffects },
         radical: { type: 'radical' as PatchType, description: i.patches.radical.description, impact: i.patches.radical.impact, sideEffects: i.patches.radical.sideEffects },
       },

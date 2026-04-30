@@ -7,6 +7,14 @@
  *
  * skipLLM: true — the step produces its result entirely from state.
  * maxTokens: 0 — never calls LLM.
+ *
+ * DESIGN: For skipLLM steps, parseResponse('') is called first but has no
+ * access to state. We use a module-level state cache that is set by gateCheck
+ * and reduce (which DO receive state). The flow is:
+ *   1. parseResponse('') → empty shell
+ *   2. validate(shell) → always valid (shell is just a marker)
+ *   3. gateCheck(shell, state) → performs REAL validation, stores result in cache
+ *   4. reduce(state, shell) → uses cached result to produce new state
  */
 
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
@@ -25,89 +33,13 @@ export interface InputValidationOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Step definition
+// Module-level cache for skipLLM state communication
 // ---------------------------------------------------------------------------
 
-export const stepValidate: AuditStep<InputValidationOutput> = {
-  id: 'input_validation',
-
-  buildPrompt: () => [], // never called — skipLLM is true
-
-  parseResponse: (_raw: string): InputValidationOutput => {
-    // skipLLM step — derive output from state through closure.
-    // We return a marker that validate() will replace with real data.
-    // The actual validation logic lives in validate() which has access
-    // to the PipelineRunState via the gateCheck/reduce cycle.
-    return { valid: false, length: 0, sanitized: '', wrapped: '', errors: [] };
-  },
-
-  validate: (output: InputValidationOutput): StepValidationResult => {
-    // This step uses a two-phase approach: parseResponse creates a shell,
-    // then the real validation happens here. But since skipLLM steps call
-    // parseResponse('') first then validate(), we need the state somehow.
-    // The canonical approach is: reduce receives the computed output.
-    // For skipLLM steps, we make parseResponse smart via a closure trick.
-    //
-    // However, the AuditStep interface does not pass state to validate().
-    // So we must do the actual validation logic in parseResponse via a
-    // module-level state reference. This is the pattern used by the COMPLETION_PLAN.
-    if (output.valid) {
-      return { valid: true, errors: [], canRetry: false };
-    }
-    if (output.errors.length > 0) {
-      return { valid: false, errors: output.errors, canRetry: false };
-    }
-    // No errors but not valid — means parseResponse returned the shell
-    return { valid: true, errors: [], canRetry: false };
-  },
-
-  gateCheck: (output: InputValidationOutput, _state: PipelineRunState): GateDecision => {
-    if (!output.valid) {
-      return {
-        passed: false,
-        reason: output.errors.join('; '),
-        fixes: [],
-      };
-    }
-    return { passed: true };
-  },
-
-  reduce: (state: PipelineRunState, _output: InputValidationOutput): PipelineRunState => {
-    // Compute the real validation from the current state
-    const text = state.inputText;
-    const errors: string[] = [];
-
-    if (!text || text.trim().length === 0) {
-      errors.push('Концепт пустой — невозможно продолжить');
-    } else if (text.trim().length < 50) {
-      errors.push('Концепт слишком краткий для полноценного аудита (минимум 50 символов)');
-    } else if (text.length > 50000) {
-      errors.push('Концепт слишком длинный. Сократите до 50000 символов.');
-    }
-
-    // Check for non-text input (HTML tags)
-    if (/<[^>]+>/.test(text) && text.includes('</')) {
-      // Warn but don't block — strip tags
-    }
-
-    const valid = errors.length === 0;
-    const sanitized = valid ? sanitizeNarrative(text) : text;
-    const wrapped = valid ? wrapUserInput(sanitized) : '';
-
-    return {
-      ...state,
-      phase: valid ? 'input_validation' : 'blocked',
-      error: valid ? null : errors.join('; '),
-    };
-  },
-
-  maxRetries: 0,
-  skipLLM: true,
-  maxTokens: 0,
-};
+let cachedValidation: InputValidationOutput | null = null;
 
 // ---------------------------------------------------------------------------
-// Helper: validate input text (used by both parseResponse and reduce)
+// Core validation logic (shared between gateCheck and reduce)
 // ---------------------------------------------------------------------------
 
 export function validateInputText(text: string): InputValidationOutput {
@@ -127,3 +59,63 @@ export function validateInputText(text: string): InputValidationOutput {
 
   return { valid, length: text.length, sanitized, wrapped, errors };
 }
+
+// ---------------------------------------------------------------------------
+// Step definition
+// ---------------------------------------------------------------------------
+
+export const stepValidate: AuditStep<InputValidationOutput> = {
+  id: 'input_validation',
+
+  buildPrompt: () => [], // never called — skipLLM is true
+
+  parseResponse: (_raw: string): InputValidationOutput => {
+    // skipLLM step — return a marker shell. The real validation happens
+    // in gateCheck() which has access to PipelineRunState.
+    // Results are cached in module-level variable for reduce() to use.
+    return { valid: false, length: 0, sanitized: '', wrapped: '', errors: [] };
+  },
+
+  validate: (_output: InputValidationOutput): StepValidationResult => {
+    // Always valid — the shell is just a marker. Real validation logic
+    // lives in gateCheck() which has access to the state.
+    return { valid: true, errors: [], canRetry: false };
+  },
+
+  gateCheck: (_output: InputValidationOutput, state: PipelineRunState): GateDecision => {
+    // Perform REAL validation from the current state
+    const result = validateInputText(state.inputText);
+
+    // Cache the result for reduce() to use
+    cachedValidation = result;
+
+    if (!result.valid) {
+      return {
+        passed: false,
+        reason: result.errors.join('; '),
+        fixes: [],
+      };
+    }
+
+    return { passed: true };
+  },
+
+  reduce: (state: PipelineRunState, _output: InputValidationOutput): PipelineRunState => {
+    // Use the cached validation result from gateCheck
+    const result = cachedValidation ?? validateInputText(state.inputText);
+    cachedValidation = null; // Clear cache after use
+
+    return {
+      ...state,
+      // Store sanitized and wrapped text in the state for downstream steps
+      // The inputText stays as-is for display; the sanitized version is used
+      // by buildPrompt functions via inputText (they call sanitizeNarrative themselves)
+      phase: result.valid ? 'input_validation' : 'blocked',
+      error: result.valid ? null : result.errors.join('; '),
+    };
+  },
+
+  maxRetries: 0,
+  skipLLM: true,
+  maxTokens: 0,
+};

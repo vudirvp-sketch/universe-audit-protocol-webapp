@@ -480,27 +480,25 @@ export interface LogicHole {
 // ============================================================================
 
 export interface AuditReport {
-  humanReadable: {
-    auditMode: AuditMode;
-    authorProfile: AuthorProfile;
-    skeleton: Skeleton | LegacySkeleton;
-    screening: ScreeningResult;
-    gates: {
-      L1: GateResult | null;
-      L2: GateResult | null;
-      L3: GateResult | null;
-      L4: GateResult | null;
-    };
-    scores: Scores;
-    criticalHoles: LogicHole[];
-    griefArchitecture: GriefArchitectureMatrix;
-    cultPotential: number;
-    finalScore: number;
-    finalPercentage: number;
-    classification: 'cult_masterpiece' | 'powerful' | 'living_weak_soul' | 'decoration';
-    priorityActions: [string, string, string];
+  protocolVersion: string;
+  auditMode: AuditMode;
+  authorProfile: AuthorProfile | null;
+  skeleton: Skeleton | null;
+  screeningResult: ScreeningResult | null;
+  gateResults: {
+    L1: GateResult | null;
+    L2: GateResult | null;
+    L3: GateResult | null;
+    L4: GateResult | null;
   };
-  jsonData: AuditJSONOutput;
+  checklist: ChecklistItem[];
+  griefMatrix: GriefArchitectureMatrix | null;
+  issues: Issue[];
+  whatForChains: ChainResult[];
+  generativeOutput: GenerativeOutput | null;
+  finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null;
+  scores: Record<string, number>;
+  generatedAt: string;
 }
 
 export interface AuditJSONOutput {
