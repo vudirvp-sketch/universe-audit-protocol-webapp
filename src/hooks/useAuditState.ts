@@ -140,6 +140,14 @@ export const useAuditState = create<AuditState>()(
 }),
     {
       name: AUDIT_STATE_STORAGE_KEY,
+      // CRITICAL: skipHydration prevents React Error #185 (hydration mismatch).
+      // In a static-export Next.js app (output: 'export'), the server renders
+      // HTML with default state at build time. Without skipHydration, Zustand's
+      // persist middleware rehydrates from localStorage DURING the initial render,
+      // causing the client's first render to differ from the server HTML.
+      // By skipping auto-hydration and calling rehydrate() in useEffect (see page.tsx),
+      // we ensure the server HTML and client's first render are identical.
+      skipHydration: true,
       // Only persist these fields — exclude isLoading and setter functions
       partialize: (state) => ({
         phase: state.phase,
@@ -165,9 +173,6 @@ export const useAuditState = create<AuditState>()(
         stepTimings: state.stepTimings,
       }),
       // On hydration, reset terminal states (failed/blocked/cancelled) to idle.
-      // FIX: Use setState instead of direct mutation to prevent React Error #185.
-      // Direct mutations bypass Zustand's notification system, causing split-brain
-      // state where components hold stale values while the store has been mutated.
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {

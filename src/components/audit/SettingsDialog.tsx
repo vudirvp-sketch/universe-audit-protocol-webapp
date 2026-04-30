@@ -164,10 +164,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
     setTestConnection({ loading: true, success: false, error: null });
 
-    // FIX: Use a 15-second timeout and NO retries for test connection.
-    // The regular chatCompletion retries 429 up to 3 times with 10s+ backoff,
-    // which makes the test button appear stuck ("вечная загрузка").
-    // For a quick connectivity test, fail fast with a clear message.
+    // FIX: Use AbortController with signal passed to fetch() for REAL timeout.
+    // Also use skipProxyRetry to tell the worker not to retry 429s server-side
+    // (prevents 12+ seconds of hidden retries before the client gets a response).
+    // maxRateLimitRetries: 0 means the client also doesn't retry on 429.
+    // Combined: the test connection fails fast with a clear error message.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
@@ -183,20 +184,33 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           { role: 'user', content: 'Ответь одним словом: работает' },
         ],
         max_tokens: 10,
-        maxRateLimitRetries: 0, // No retries for test — fail fast
+        maxRateLimitRetries: 0, // No client-side retries — fail fast
+        signal: controller.signal, // Real fetch cancellation on timeout
+        skipProxyRetry: true, // Tell proxy to skip server-side 429 retries
       });
       clearTimeout(timeoutId);
       setTestConnection({ loading: false, success: true, error: null });
     } catch (err) {
       clearTimeout(timeoutId);
       let msg = err instanceof Error ? err.message : String(err);
-      if (controller.signal.aborted) {
+
+      // Handle AbortError (timeout)
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        msg = 'Таймаут — сервер не ответил за 15 секунд. Проверьте URL прокси и доступность API.';
+      } else if (controller.signal.aborted) {
         msg = 'Таймаут — сервер не ответил за 15 секунд. Проверьте URL прокси и доступность API.';
       }
+
       // Make 429 error more user-friendly
       if (msg.includes('429') || msg.includes('лимит запросов')) {
-        msg = 'Лимит запросов (429). Подождите минуту и попробуйте снова, или выберите провайдера с более высоким лимитом (Google Gemini, Groq).';
+        msg = 'Лимит запросов (429). Провайдер временно отклоняет запросы. Подождите 1-2 минуты и попробуйте снова. Если проблема повторяется — проверьте лимиты вашего API-ключа в консоли провайдера.';
       }
+
+      // Make proxy errors more user-friendly
+      if (msg.includes('ошибка прокси') && !msg.includes('429')) {
+        msg = 'Прокси вернул ошибку. Проверьте URL прокси в расширенных настройках и попробуйте снова.';
+      }
+
       setTestConnection({ loading: false, success: false, error: msg });
     }
   };

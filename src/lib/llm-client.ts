@@ -59,6 +59,10 @@ export interface ChatCompletionOptions {
   stream?: boolean;
   /** Maximum number of 429 rate-limit retries before giving up. Default: 3 */
   maxRateLimitRetries?: number;
+  /** AbortSignal to cancel the request (e.g. for timeout). Passed to fetch(). */
+  signal?: AbortSignal;
+  /** If true, tells the proxy to skip server-side 429 retries (for test connections). */
+  skipProxyRetry?: boolean;
 }
 
 export interface ChatCompletionResponse {
@@ -413,6 +417,12 @@ export function createLLMClient(config: LLMClientConfig) {
       );
     }
 
+    // Build fetch headers — include X-No-Retry if test connection wants to skip proxy retries
+    const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (options.skipProxyRetry) {
+      fetchHeaders['X-No-Retry'] = 'true';
+    }
+
     // 429 Rate Limit auto-retry with exponential backoff + countdown
     // The Worker proxy already retries 429s 2 times server-side,
     // so client retries here are a second line of defense.
@@ -420,8 +430,9 @@ export function createLLMClient(config: LLMClientConfig) {
     for (let retryAttempt = 0; retryAttempt <= max429Retries; retryAttempt++) {
       const response = await fetch(proxyUrl, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: fetchHeaders,
         body: JSON.stringify(proxyRequest),
+        signal: options.signal, // AbortSignal — enables real timeout cancellation
       });
 
       // Handle 429 Rate Limit with auto-retry and countdown

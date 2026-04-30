@@ -3,8 +3,8 @@
 // Pass-through proxy with provider routing.
 //
 // v2: Added server-side 429 retry with exponential backoff (2 retries).
-// This reduces client round-trips and handles brief provider rate limiting
-// transparently without exceeding the 30s Worker timeout.
+// v3: Added X-No-Retry header support — test connections can skip retries
+//     for instant feedback instead of waiting through multiple retry cycles.
 
 const PROVIDER_CONFIGS = {
   openai: {
@@ -54,7 +54,7 @@ const PROVIDER_CONFIGS = {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Z-AI-From, x-api-key, anthropic-version',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Z-AI-From, X-No-Retry, x-api-key, anthropic-version',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -73,11 +73,14 @@ function sleep(ms) {
 /**
  * Attempt a fetch with automatic 429 retry and exponential backoff.
  * Returns the final Response object (may still be 429 if all retries exhausted).
+ * @param {string} url - Target URL
+ * @param {RequestInit} options - Fetch options
+ * @param {number} maxRetries - Maximum number of retries (default: MAX_429_RETRIES)
  */
-async function fetchWith429Retry(url, options) {
+async function fetchWith429Retry(url, options, maxRetries = MAX_429_RETRIES) {
   let lastResponse = null;
 
-  for (let attempt = 0; attempt <= MAX_429_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     lastResponse = await fetch(url, options);
 
     // If not 429, return immediately
@@ -86,7 +89,7 @@ async function fetchWith429Retry(url, options) {
     }
 
     // If this was the last retry attempt, return the 429 response
-    if (attempt >= MAX_429_RETRIES) {
+    if (attempt >= maxRetries) {
       return lastResponse;
     }
 
@@ -130,6 +133,9 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
+    // Check if client wants to skip server-side 429 retries (e.g. for test connections)
+    const skipRetry = request.headers.get('X-No-Retry') === 'true';
+
     try {
       // Parse the proxy request body
       const { provider, apiKey, targetUrl, payload } = await request.json();
@@ -148,12 +154,13 @@ export default {
         apiKey,
       });
 
-      // Forward to target with 429 retry
+      // Forward to target — with or without 429 retry based on X-No-Retry header
+      const maxRetries = skipRetry ? 0 : MAX_429_RETRIES;
       const response = await fetchWith429Retry(transformed.targetUrl, {
         method: 'POST',
         headers: transformed.headers,
         body: transformed.body,
-      });
+      }, maxRetries);
 
       // Return with CORS headers
       const responseData = await response.text();
@@ -166,7 +173,7 @@ export default {
 
       // If 429, add a helpful header so the client knows the proxy already retried
       if (response.status === 429) {
-        responseHeaders['X-Proxy-Retried'] = String(MAX_429_RETRIES);
+        responseHeaders['X-Proxy-Retried'] = String(skipRetry ? 0 : MAX_429_RETRIES);
       }
 
       return new Response(responseData, {

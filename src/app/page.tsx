@@ -48,9 +48,41 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function Home() {
   // =========================================================================
+  // HYDRATION GUARD: Prevents React Error #185 (hydration mismatch)
+  //
+  // In a static-export Next.js app, the server HTML is rendered at build time
+  // with default Zustand state. On the client, Zustand's persist middleware
+  // would rehydrate from localStorage during the initial render, causing a
+  // mismatch with the server HTML. We prevent this by:
+  //   1. Using skipHydration: true in useAuditState (see useAuditState.ts)
+  //   2. Calling rehydrate() in useEffect (AFTER hydration completes)
+  //   3. Showing a minimal shell until rehydration finishes
+  //
+  // This ensures the server HTML and client's first render are identical.
+  // =========================================================================
+  const [isHydrated, setIsHydrated] = React.useState(false);
+
+  React.useEffect(() => {
+    // Rehydrate Zustand persisted state AFTER initial render
+    useAuditState.persist.rehydrate();
+  }, []);
+
+  React.useEffect(() => {
+    // Wait for Zustand persist to finish rehydration
+    const unsubFinishHydration = useAuditState.persist.onFinishHydration(() => {
+      setIsHydrated(true);
+    });
+
+    // If already hydrated (e.g. rehydrate was synchronous), set immediately
+    if (useAuditState.persist.hasHydrated()) {
+      setIsHydrated(true);
+    }
+
+    return unsubFinishHydration;
+  }, []);
+
+  // =========================================================================
   // Zustand: select specific state slices to minimize re-renders
-  // (COMPLETION_PLAN §5.3: "select specific state slices instead of
-  //  destructuring the entire store")
   // =========================================================================
   const phase = useAuditState(s => s.phase);
   const inputText = useAuditState(s => s.inputText);
@@ -347,6 +379,19 @@ export default function Home() {
       setAbortController(null);
     }
   };
+
+  // Hydration guard: show minimal shell until Zustand persist rehydrates
+  // This prevents both React Error #185 and flash of incorrect content
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <Sparkles className="h-8 w-8 text-amber-500 mx-auto animate-pulse" />
+          <p className="text-sm text-muted-foreground">{t.progress.processing}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
