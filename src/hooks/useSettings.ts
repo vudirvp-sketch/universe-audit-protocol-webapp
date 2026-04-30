@@ -46,9 +46,8 @@ interface SettingsState extends AppSettings {
   clearSettings: () => void;
 }
 
-// Default proxy URL — the CORS proxy Worker is deployed at this URL.
-// Cloudflare Workers subdomain: vudirvp
-// If you redeploy to a different account, update this URL accordingly.
+// Default proxy URL — pre-configured CORS proxy for this app.
+// If you are self-hosting, update this URL to point to your own proxy.
 const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
 const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
 
@@ -198,5 +197,3 @@ export const useAppSettings = () => {
     clearSettings,
   };
 };
-
-

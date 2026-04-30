@@ -241,8 +241,11 @@ export const t = {
     apiKeyPlaceholder: 'Введите ваш API ключ...',
     proxyUrl: 'URL Прокси',
     proxyUrlHint:
-      'URL вашего Cloudflare Worker CORS-прокси. Развёртывается из директории worker/',
-    proxyUrlPlaceholder: 'URL прокси ещё не настроен! Замените <your-subdomain> на ваш реальный поддомен Cloudflare Workers.',
+      'URL CORS-прокси для запросов к LLM. Преднастроено, изменяйте только при самостоятельном хостинге.',
+    proxyUrlHintAdvanced:
+      'URL CORS-прокси. Преднастроено для этого приложения. Изменяйте только если вы развёртываете собственный прокси.',
+    proxyUrlPlaceholder: 'URL прокси ещё не настроен! Замените <your-subdomain> на ваш реальный поддомен.',
+    advancedSettings: 'Расширенные настройки',
     rpmLimit: 'Лимит запросов/мин',
     rpmLimitHint: 'Максимальное количество запросов к API в минуту. Автозаполняется по провайдеру, но можно изменить.',
     rpmLimitLabel: 'Лимит: {rpm} запросов/мин',

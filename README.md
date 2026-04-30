@@ -1,6 +1,16 @@
 # Universe Audit Protocol v10.0
 
-A comprehensive web application for auditing fictional worlds and narratives through a sequential AI-powered pipeline. Built on Cloudflare Pages (static SPA) + Cloudflare Worker (CORS proxy) architecture for zero-cost hosting.
+AI-powered tool for auditing fictional worlds and narratives through a 12-step sequential pipeline with 4 hierarchical gate levels. No deployment, no downloads — just open the link, enter your API key, and start analyzing.
+
+## Quick Start
+
+1. **Open the app**: [universe-audit-protocol.pages.dev](https://universe-audit-protocol.pages.dev)
+2. **Click the gear icon** (Settings) in the header
+3. **Select your LLM provider** (Google Gemini and Groq have free tiers!)
+4. **Enter your API key**
+5. **Click Save** — that's it!
+
+The CORS proxy is pre-configured. You don't need to deploy anything.
 
 ## What it does
 
@@ -10,24 +20,60 @@ This tool analyzes narratives (novels, games, films, anime, series, TTRPGs) thro
 |-------|----------|-------|
 | **L1 (Mechanism)** | "Does the world work as a system?" | Thematic law, root trauma, hamartia, emotional engine |
 | **L2 (Body)** | "Is there embodiment and consequences?" | Pillars, prohibition, target experience, spatial memory |
-| **L3 (Psyche)** | "Does the world work as a symptom?" | Grief architecture, dominant stage, hard check (≥2 levels) |
+| **L3 (Psyche)** | "Does the world work as a symptom?" | Grief architecture, dominant stage, hard check (>=2 levels) |
 | **L4 (Meta)** | "Does it ask a question about the agent's real life?" | Three layers, cornelian dilemma, agent mirror, cult potential |
 
 Each gate requires a mode-specific threshold score to proceed:
-- **Conflict mode**: ≥60% per gate
-- **Kishō mode**: ≥50% per gate
-- **Hybrid mode**: ≥55% per gate
+- **Conflict mode**: >=60% per gate
+- **Kisho mode**: >=50% per gate
+- **Hybrid mode**: >=55% per gate
+
+## Supported LLM Providers
+
+| Provider | Auth Method | Default Model | Free Tier? |
+|----------|-------------|---------------|------------|
+| Z.AI | Bearer token | default | - |
+| OpenAI | Bearer token | gpt-4o-mini | - |
+| Anthropic | x-api-key | claude-3-5-sonnet-20241022 | - |
+| Google Gemini | Query string | gemini-2.0-flash | Yes |
+| Mistral | Bearer token | mistral-large-latest | - |
+| DeepSeek | Bearer token | deepseek-chat | - |
+| Qwen | Bearer token | qwen-turbo | - |
+| Kimi | Bearer token | moonshot-v1-8k | - |
+| Groq | Bearer token | llama-3.3-70b-versatile | Yes |
+| OpenRouter | Bearer token | anthropic/claude-3.5-sonnet | Yes |
+| HuggingFace | Bearer token | - | Yes |
+| Together AI | Bearer token | - | Yes |
+| xAI | Bearer token | grok-beta | - |
+| Custom | Bearer token | - | - |
+
+## Pipeline Steps
+
+| Step | Phase | Description | LLM? |
+|------|-------|-------------|------|
+| 0 | `input_validation` | Validate input (50-50,000 chars) | No |
+| 1 | `mode_detection` | Detect audit mode (conflict/kisho/hybrid) | Yes |
+| 2 | `author_profile` | Determine author's working method | Yes |
+| 3 | `skeleton_extraction` | Extract structural elements (thematic law, root trauma, etc.) | Yes |
+| 4 | `screening` | 7-question screening with count-based logic | Yes |
+| 5 | `L1_evaluation` | Gate L1: Mechanism evaluation | Yes |
+| 6 | `L2_evaluation` | Gate L2: Body evaluation | Yes |
+| 7 | `L3_evaluation` | Gate L3: Psyche + Grief HARD CHECK | Yes |
+| 8 | `L4_evaluation` | Gate L4: Meta + Cult Potential | Yes |
+| 9 | `issue_generation` | Generate issues + "A chtoby chto?" chains | Yes |
+| 10 | `generative_modules` | Grief mapping (S9) + Dilemma (S12) | Yes |
+| 11 | `final_output` | Compute final score + classification | No |
 
 ## Architecture
 
 ```
 Browser (Next.js Static SPA)
-       │
-       │ fetch() with CORS
-       ▼
+       |
+       | fetch() with CORS
+       v
 Cloudflare Worker (CORS Proxy)
-       │
-       ▼
+       |
+       v
 LLM Provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 ```
 
@@ -36,41 +82,27 @@ LLM Provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 - **State**: Browser localStorage via Zustand with `persist` middleware
 - **No server, no database**: Everything runs client-side
 
-## Pipeline Steps
-
-| Step | Phase | Description | LLM? |
-|------|-------|-------------|------|
-| 0 | `input_validation` | Validate input (50–50,000 chars) | No |
-| 1 | `mode_detection` | Detect audit mode (conflict/kishō/hybrid) | Yes |
-| 2 | `author_profile` | Determine author's working method | Yes |
-| 3 | `skeleton_extraction` | Extract structural elements (thematic law, root trauma, etc.) | Yes |
-| 4 | `screening` | 7-question screening with count-based logic | Yes |
-| 5 | `L1_evaluation` | Gate L1: Mechanism evaluation | Yes |
-| 6 | `L2_evaluation` | Gate L2: Body evaluation | Yes |
-| 7 | `L3_evaluation` | Gate L3: Psyche + Grief HARD CHECK | Yes |
-| 8 | `L4_evaluation` | Gate L4: Meta + Cult Potential | Yes |
-| 9 | `issue_generation` | Generate issues + "А чтобы что?" chains | Yes |
-| 10 | `generative_modules` | Grief mapping (§9) + Dilemma (§12) | Yes |
-| 11 | `final_output` | Compute final score + classification | No |
-
 ## Tech Stack
 
-- **Next.js 16** — React framework (static export)
-- **TypeScript** — Type safety
-- **Tailwind CSS 4** — Styling
-- **shadcn/ui** — UI components
-- **Zustand** — State management with localStorage persistence
-- **Vitest** — Testing framework
-- **Cloudflare Workers** — CORS proxy
+- **Next.js 16** - React framework (static export)
+- **TypeScript** - Type safety
+- **Tailwind CSS 4** - Styling
+- **shadcn/ui** - UI components
+- **Zustand** - State management with localStorage persistence
+- **Vitest** - Testing framework
+- **Cloudflare Workers** - CORS proxy
 
-## Getting Started
+---
+
+<details>
+<summary><strong>For Developers: Local Development & Deployment</strong></summary>
 
 ### Prerequisites
 
 - Node.js 20+
 - An LLM API key (OpenAI, Anthropic, Google, DeepSeek, etc.)
 
-### Installation
+### Local Development
 
 ```bash
 # Clone the repository
@@ -99,108 +131,62 @@ npm run test:coverage
 npx vitest run __tests__/audit/json-sanitizer.test.ts
 ```
 
-## Deployment
-
-> **Current deployment URLs (account `weathered-paper-631c`):**
-> - Frontend: https://universe-audit-protocol.pages.dev
-> - CORS Proxy Worker: https://universe-audit-proxy.vudirvp.workers.dev
-> - Account ID: `5a7a04ab064205a1f901ebdb7b40dcc0`
-
-### Step 1: Create Cloudflare API Token
-
-1. Go to https://dash.cloudflare.com/profile/api-tokens
-2. Click **Create Token**
-3. Select **Custom token** → **Get started**
-4. Token name: `universe-audit-deploy`
-5. Permissions:
-   - **Account** → **Cloudflare Pages** → **Edit**
-   - **Account** → **Workers Scripts** → **Edit**
-6. Account Resources: Include → your account (`weathered-paper-631c`)
-7. Click **Continue to summary** → **Create Token**
-8. **Copy the token immediately** — it will not be shown again
-
-You will also need your **Account ID** from:
-https://dash.cloudflare.com → left sidebar → **Workers & Pages** → URL contains the account ID, or find it at the bottom of any domain's overview page.
-
-### Step 2: Configure GitHub Secrets
-
-1. Go to your GitHub repository: https://github.com/vudirvp-sketch/universe-audit-protocol-webapp
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret** and add:
-   - Name: `CLOUDFLARE_API_TOKEN` → Value: your API token from Step 1
-   - Name: `CLOUDFLARE_ACCOUNT_ID` → Value: `5a7a04ab064205a1f901ebdb7b40dcc0`
-
-After this, every push to `main` will trigger the GitHub Actions workflow (`.github/workflows/deploy.yml`) and auto-deploy the frontend to Cloudflare Pages.
-
-### Step 3: Deploy the CORS Proxy Worker
+### Deploying the CORS Proxy Worker
 
 ```bash
 cd worker
 npm install
+npx wrangler login
 npx wrangler deploy
 ```
 
-The Worker will be available at: `https://universe-audit-proxy.vudirvp.workers.dev`
+### Deploying the Frontend (Cloudflare Pages)
 
-### Step 4: Deploy the Frontend (Cloudflare Pages)
+**Important**: This project uses `output: 'export'` in `next.config.ts`, which produces a fully static build in the `out/` directory. It must be deployed as **Cloudflare Pages** (static), NOT as a Cloudflare Worker.
 
-**Option A: Automatic via GitHub Actions** (recommended)
+**Option A: Cloudflare Dashboard (recommended)**
 
-After configuring GitHub Secrets (Step 2), simply push to `main`:
-```bash
-git push origin main
-```
-GitHub Actions will build and deploy automatically.
+1. Go to Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git
+2. Select the repository
+3. Build settings:
+   - Framework preset: **Next.js (Static Export)**
+   - Build command: `npm run build`
+   - Build output directory: `out`
+   - **Do NOT use** `npx wrangler deploy` as the deploy command
+4. Click **Save and Deploy**
 
-**Option B: Manual via Wrangler CLI**
+**Option B: Wrangler CLI**
 
 ```bash
 npm run build
 npx wrangler pages deploy out --project-name=universe-audit-protocol
 ```
 
-**Option C: Manual via Cloudflare Dashboard**
+Or use the convenience script:
+```bash
+npm run deploy:pages
+```
 
-1. Go to https://dash.cloudflare.com → **Workers & Pages**
-2. Click **Create** → **Pages** tab → **Connect to Git**
-3. Select the GitHub repository
-4. Build settings:
-   - Framework preset: **Next.js (Static Export)**
-   - Build command: `npm run build`
-   - Build output directory: `out`
-5. Click **Save and Deploy**
+**Option C: GitHub Actions (automatic)**
 
-### Step 5: Configure in the App
+Configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Secrets, then push to `main`.
 
-1. Open the deployed app: https://universe-audit-protocol.pages.dev
-2. Click the ⚙️ Settings button in the header
-3. Select your LLM provider (e.g., Google Gemini, Groq, OpenAI)
-4. Enter your API key
-5. The Worker proxy URL is pre-configured: `https://universe-audit-proxy.vudirvp.workers.dev`
-6. Click Save
+### Common Deployment Error
 
-## Configuration
+If you see this error:
+```
+Error: ENOENT: no such file or directory, open '.next/standalone/.next/server/pages-manifest.json'
+```
 
-### Supported LLM Providers
+It means Cloudflare is trying to deploy as a **Worker** (using OpenNext) instead of as a **Pages static site**. To fix:
+1. In Cloudflare Dashboard, go to your Pages project settings
+2. Ensure the framework preset is **Next.js (Static Export)**
+3. Build output directory must be `out` (not `.next`)
+4. The deploy command should NOT be `npx wrangler deploy`
 
-| Provider | Auth Method | Default Model |
-|----------|-------------|---------------|
-| Z.AI | Bearer token | default |
-| OpenAI | Bearer token | gpt-4o |
-| Anthropic | x-api-key | claude-sonnet-4-20250514 |
-| Google Gemini | Query string | gemini-2.0-flash |
-| Mistral | Bearer token | mistral-large-latest |
-| DeepSeek | Bearer token | deepseek-chat |
-| Qwen | Bearer token | qwen-max |
-| Kimi | Bearer token | moonshot-v1-128k |
-| Groq | Bearer token | llama-3.3-70b-versatile |
-| OpenRouter | Bearer token | openai/gpt-4o |
-| HuggingFace | Bearer token | — |
-| Together AI | Bearer token | — |
-| xAI | Bearer token | grok-3 |
-| Custom | Bearer token | — |
+</details>
 
-### Language Contract
+## Language Contract
 
 All LLM prompts are in Russian. JSON keys and enum values are in English. User-facing text is in Russian. Code comments are in English. This follows the protocol's language contract (Section 0.5).
 
@@ -215,20 +201,20 @@ The test suite covers 267 tests across:
 - **Step 2 (Author Profile)**: Profile types, answer parsing, reduce state
 - **Step 3 (Skeleton)**: Complete/incomplete extraction, gateCheck blocking on missing elements
 - **Step 4 (Screening)**: Count-based recommendation (Section 0.6), LLM override, gate blocking
-- **Steps 5–8 (Gates)**: Mode-specific thresholds, Grief HARD CHECK (RULE_3), cult potential (Section 0.8)
-- **Steps 9–11**: Issue/chain generation, generative modules, final score classification
+- **Steps 5-8 (Gates)**: Mode-specific thresholds, Grief HARD CHECK (RULE_3), cult potential (Section 0.8)
+- **Steps 9-11**: Issue/chain generation, generative modules, final score classification
 - **Integration**: Step registry completeness, step order, interface compliance
 
 ## Key Protocol Rules Implemented
 
 | Rule | Description |
 |------|-------------|
-| RULE_2 | "А чтобы что?" chain BREAK at step ≤4 = critical issue |
-| RULE_3 | Grief HARD CHECK — dominant stage must have ≥2 levels |
+| RULE_2 | "A chtoby chto?" chain BREAK at step <=4 = critical issue |
+| RULE_3 | Grief HARD CHECK - dominant stage must have >=2 levels |
 | RULE_8 | Gate output always includes block-level breakdown |
 | RULE_9 | ISSUE objects missing any field = invalid, regenerate |
 | RULE_10 | Generative templates activate automatically when inputs absent |
-| Section 0.6 | Count-based screening — code decides, not LLM |
+| Section 0.6 | Count-based screening - code decides, not LLM |
 | Section 0.7 | Mode-specific gate thresholds |
 | Section 0.8 | Cult potential merged INTO L4 evaluation |
 

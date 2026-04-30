@@ -52,3 +52,9 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Cloudflare / OpenNext auto-generated files (should NOT be committed)
+wrangler.jsonc
+open-next.config.ts
+.dev.vars
+.open-next/

@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, Server, XCircle } from 'lucide-react';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server } from 'lucide-react';
 import { useSettings, isProxyUrlPlaceholder } from '@/hooks/useSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -56,6 +56,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [inputRpmLimit, setInputRpmLimit] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [testConnection, setTestConnection] = React.useState<{ loading: boolean; success: boolean; error: string | null }>({
     loading: false,
     success: false,
@@ -262,52 +263,74 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             </div>
           </div>
 
-          {/* Proxy URL */}
-          <div className="space-y-2">
-            <Label htmlFor="proxy-url" className="flex items-center gap-2">
-              <Server className="h-4 w-4" />
-              {t.settings.proxyUrl}
-            </Label>
-            <Input
-              id="proxy-url"
-              type="url"
-              placeholder="https://audit-proxy.your-subdomain.workers.dev"
-              value={inputProxyUrl}
-              onChange={(e) => setInputProxyUrl(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t.settings.proxyUrlHint}
-            </p>
-            {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
-              <Alert className="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900">
-                <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-xs">
-                  {t.settings.proxyUrlPlaceholder}
-                </AlertDescription>
-              </Alert>
+          {/* Advanced Settings (collapsible) */}
+          <div className="border rounded-lg">
+            <button
+              type="button"
+              className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+            >
+              <span>{t.settings.advancedSettings}</span>
+              {showAdvanced ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+
+            {showAdvanced && (
+              <div className="px-3 pb-3 space-y-4">
+                {/* Proxy URL */}
+                <div className="space-y-2">
+                  <Label htmlFor="proxy-url" className="flex items-center gap-2 text-xs">
+                    <Server className="h-3 w-3" />
+                    {t.settings.proxyUrl}
+                  </Label>
+                  <Input
+                    id="proxy-url"
+                    type="url"
+                    placeholder="https://audit-proxy.your-subdomain.workers.dev"
+                    value={inputProxyUrl}
+                    onChange={(e) => setInputProxyUrl(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t.settings.proxyUrlHintAdvanced}
+                  </p>
+                  {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
+                    <Alert className="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900">
+                      <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-xs">
+                        {t.settings.proxyUrlPlaceholder}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+
+                {/* RPM Limit */}
+                <div className="space-y-2">
+                  <Label htmlFor="rpm-limit" className="flex items-center gap-2 text-xs">
+                    <Zap className="h-3 w-3" />
+                    {t.settings.rpmLimit}
+                  </Label>
+                  <Input
+                    id="rpm-limit"
+                    type="number"
+                    min={1}
+                    max={120}
+                    placeholder={String(rpmLimit || 10)}
+                    value={inputRpmLimit}
+                    onChange={(e) => setInputRpmLimit(e.target.value)}
+                    className="text-xs h-8"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {t.settings.rpmLimitHint}
+                  </p>
+                </div>
+              </div>
             )}
           </div>
 
-          {/* RPM Limit — plan Section 3.6 / Finding 17 */}
-          <div className="space-y-2">
-            <Label htmlFor="rpm-limit" className="flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              {t.settings.rpmLimit}
-            </Label>
-            <Input
-              id="rpm-limit"
-              type="number"
-              min={1}
-              max={120}
-              placeholder={String(rpmLimit || 10)}
-              value={inputRpmLimit}
-              onChange={(e) => setInputRpmLimit(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t.settings.rpmLimitHint}
-            </p>
-          </div>
-
-          {/* Test Connection Button — plan Section 3.6 */}
+          {/* Test Connection Button */}
           <div className="space-y-2">
             <Button
               variant="outline"
@@ -317,7 +340,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             >
               {testConnection.loading ? (
                 <>
-                  <span className="animate-spin mr-2">⏳</span>
+                  <span className="animate-spin mr-2">&#9203;</span>
                   {t.settings.testing}
                 </>
               ) : testConnection.success ? (
@@ -327,7 +350,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 </>
               ) : testConnection.error ? (
                 <>
-                  <XCircle className="h-4 w-4 mr-2 text-red-500" />
                   {t.settings.testFailed}
                 </>
               ) : (

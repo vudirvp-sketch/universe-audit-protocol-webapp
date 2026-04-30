@@ -409,8 +409,7 @@ export function createLLMClient(config: LLMClientConfig) {
 
     if (!proxyUrl) {
       throw new Error(
-        'URL CORS-прокси не настроен. Укажите его в Настройки → URL прокси. ' +
-        'Сначала разверните Worker из директории worker/.'
+        'URL CORS-прокси не настроен. Укажите его в Настройки → Расширенные настройки → URL прокси.'
       );
     }
 
