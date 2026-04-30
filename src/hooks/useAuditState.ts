@@ -62,6 +62,12 @@ export const useAuditState = create<AuditState>()(
     (set, get) => ({
   ...initialState,
 
+  // Auto-reset failed/blocked/cancelled state on hydration
+  // This prevents the app from rendering an error state on page reload,
+  // which can cause React Error #185 when persisted state conflicts
+  // with the initial render cycle.
+  _hasHydrated: false,
+
   // Setters
   setPhase: (phase: AuditPhase) => set({ phase }),
   
@@ -164,6 +170,26 @@ export const useAuditState = create<AuditState>()(
         elapsedMs: state.elapsedMs,
         stepTimings: state.stepTimings,
       }),
+      // On hydration, reset terminal states (failed/blocked/cancelled) to idle.
+      // This prevents the app from rendering error state on page reload,
+      // which can cause React Error #185 when persisted state triggers
+      // re-renders during the initial render cycle.
+      onRehydrateStorage: () => {
+        return (state) => {
+          if (state) {
+            const terminalPhases: AuditPhase[] = ['failed', 'blocked', 'cancelled'];
+            if (terminalPhases.includes(state.phase)) {
+              // Keep the data (skeleton, gates, etc.) but reset phase to idle
+              // so the user sees the input form, not an error screen.
+              // They can still review previous results by starting a new audit.
+              state.phase = 'idle';
+              state.error = null;
+              state.isLoading = false;
+              state.blockedAt = null;
+            }
+          }
+        };
+      },
     }
   )
 );

@@ -44,6 +44,7 @@ import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { BlockedState } from '@/components/audit/BlockedState';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n/ru';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 export default function Home() {
   // =========================================================================
@@ -189,14 +190,25 @@ export default function Home() {
     } catch (err) {
       // Check if cancelled — use local variable to avoid stale closure
       if (currentController.signal.aborted) {
-        useAuditState.getState().setPhase('cancelled');
-        useAuditState.getState().setError(null);
+        // Defer state updates to avoid React Error #185
+        // (state update during render of a different component)
+        queueMicrotask(() => {
+          useAuditState.getState().setPhase('cancelled');
+          useAuditState.getState().setError(null);
+        });
       } else {
-        useAuditState.getState().setError(err instanceof Error ? err.message : t.errors.unknown);
-        useAuditState.getState().setPhase('failed');
+        const errorMessage = err instanceof Error ? err.message : t.errors.unknown;
+        // Defer state updates to avoid React Error #185
+        queueMicrotask(() => {
+          useAuditState.getState().setError(errorMessage);
+          useAuditState.getState().setPhase('failed');
+        });
       }
     } finally {
-      useAuditState.getState().setLoading(false);
+      // Defer loading state update as well for consistency
+      queueMicrotask(() => {
+        useAuditState.getState().setLoading(false);
+      });
       setAbortController(null);
     }
   };
@@ -316,19 +328,28 @@ export default function Home() {
       }
     } catch (err) {
       if (controller.signal.aborted) {
-        useAuditState.getState().setPhase('cancelled');
-        useAuditState.getState().setError(null);
+        // Defer state updates to avoid React Error #185
+        queueMicrotask(() => {
+          useAuditState.getState().setPhase('cancelled');
+          useAuditState.getState().setError(null);
+        });
       } else {
-        useAuditState.getState().setError(err instanceof Error ? err.message : t.errors.unknown);
-        useAuditState.getState().setPhase('failed');
+        const errorMessage = err instanceof Error ? err.message : t.errors.unknown;
+        queueMicrotask(() => {
+          useAuditState.getState().setError(errorMessage);
+          useAuditState.getState().setPhase('failed');
+        });
       }
     } finally {
-      useAuditState.getState().setLoading(false);
+      queueMicrotask(() => {
+        useAuditState.getState().setLoading(false);
+      });
       setAbortController(null);
     }
   };
 
   return (
+    <ErrorBoundary>
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -633,5 +654,6 @@ export default function Home() {
         </div>
       </footer>
     </div>
+    </ErrorBoundary>
   );
 }

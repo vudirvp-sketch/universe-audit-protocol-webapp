@@ -8,7 +8,7 @@ const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
 
 // Provider-specific default RPM limits (requests per minute)
 const PROVIDER_RPM_DEFAULTS: Record<string, number> = {
-  zai: 10,
+  zai: 3,       // Free tier is very limited — 3 RPM is realistic
   openai: 60,
   anthropic: 60,
   google: 15,

@@ -415,6 +415,8 @@ export function createLLMClient(config: LLMClientConfig) {
     }
 
     // 429 Rate Limit auto-retry with exponential backoff + countdown
+    // The Worker proxy already retries 429s 2 times server-side,
+    // so client retries here are a second line of defense.
     let last429Error: Error | null = null;
     for (let retryAttempt = 0; retryAttempt <= max429Retries; retryAttempt++) {
       const response = await fetch(proxyUrl, {
@@ -425,6 +427,10 @@ export function createLLMClient(config: LLMClientConfig) {
 
       // Handle 429 Rate Limit with auto-retry and countdown
       if (response.status === 429) {
+        // Check if the proxy already retried (X-Proxy-Retried header)
+        const proxyRetries = response.headers.get('X-Proxy-Retried');
+        const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
+
         const retryAfterHeader = response.headers.get('retry-after');
         let waitSeconds: number;
 
@@ -438,16 +444,17 @@ export function createLLMClient(config: LLMClientConfig) {
             waitSeconds = Math.max(1, Math.ceil((retryDate - Date.now()) / 1000));
           }
         } else {
-          // Exponential backoff: 5s, 15s, 45s
-          waitSeconds = 5 * Math.pow(3, retryAttempt);
+          // Exponential backoff: 10s, 30s, 60s — longer waits than before
+          // because the proxy already did short retries
+          waitSeconds = 10 * Math.pow(3, retryAttempt);
         }
 
-        // Cap at 60 seconds to avoid excessively long waits
-        waitSeconds = Math.min(waitSeconds, 60);
+        // Cap at 90 seconds to avoid excessively long waits
+        waitSeconds = Math.min(waitSeconds, 90);
 
         if (retryAttempt < max429Retries) {
           console.warn(
-            `[429 Rate Limit] Retry ${retryAttempt + 1}/${max429Retries} — waiting ${waitSeconds}s before retry...`
+            `[429 Rate Limit] Retry ${retryAttempt + 1}/${max429Retries}${proxyRetryInfo} — waiting ${waitSeconds}s before retry...`
           );
           // Wait with countdown — allows UI to show progress if needed
           await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
@@ -456,8 +463,17 @@ export function createLLMClient(config: LLMClientConfig) {
 
         // Final 429 after all retries — throw with clear Russian message
         last429Error = new Error(
-          `Превышен лимит запросов (${response.status}). Попытки автоповтора исчерпаны (${max429Retries}). ` +
-          `Подождите немного и попробуйте снова.`
+          `Превышен лимит запросов к провайдеру «${providerConfig.name}»${proxyRetryInfo}. ` +
+          `Все попытки повтора исчерпаны (${max429Retries}). ` +
+          `Рекомендации:
+` +
+          `1. Подождите 1-2 минуты и попробуйте снова
+` +
+          `2. Уменьшите RPM-лимит в Настройках (например, до 3)
+` +
+          `3. Смените провайдера на того, у кого выше лимиты (Google Gemini, Groq)
+` +
+          `4. Используйте платный API-ключ для более высоких лимитов`
         );
         throw last429Error;
       }

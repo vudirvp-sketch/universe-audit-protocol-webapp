@@ -96,3 +96,46 @@ rm src/lib/security.ts
 - Добавлен job `deploy-worker` для автоматического деплоя CORS Proxy Worker
 - Добавлен `npm test` в job `build` перед деплоем
 - Деплой Pages и Worker выполняются параллельно после сборки
+
+---
+
+## Часть 3 — Исправление 429 Rate Limit и React Error #185 (2026-05-01)
+
+### Проблема
+На https://universe-audit-protocol.pages.dev при запуске аудита:
+1. **429 Rate Limit** — Z.AI free tier имеет лимит ~3 RPM, Worker прокидывал 429 без retry
+2. **React Error #185** — state-обновления из async catch-блоков конфликтовали с render-циклом React, persisted failed-состояние вызывало краш при перезагрузке
+
+### Выполненные действия
+
+#### 1. `worker/cors-proxy.js` — Server-side 429 retry
+- Добавлена функция `fetchWith429Retry()`: 2 автоматические попытки при 429 с backoff (3с, 9с)
+- При 429 ответе добавляется заголовок `X-Proxy-Retried: N` — клиент знает, что прокси уже пробовал
+- Максимальное время ожидания: 12с (в рамках 30с таймаута Worker)
+- Упрощён `wrangler.toml`: убраны routes (workers.dev маршрутизируется автоматически)
+
+#### 2. `src/lib/llm-client.ts` — Улучшенный client-side retry
+- Увеличен exponential backoff: 10с/30с/60с (вместо 5с/15с/45с)
+- Чтение заголовка `X-Proxy-Retried` — клиент знает, что прокси уже делал retry
+- Улучшены сообщения об ошибках: конкретные рекомендации на русском (подождать, уменьшить RPM, сменить провайдера)
+
+#### 3. `src/components/ErrorBoundary.tsx` — Новый компонент
+- React ErrorBoundary для перехвата ошибок рендеринга
+- Показывает понятное сообщение на русском с кнопкой перезагрузки
+- Очищает persisted state при reset через `localStorage.removeItem`
+
+#### 4. `src/app/page.tsx` — Защита от React Error #185
+- Обёрнут в `<ErrorBoundary>`
+- State-обновления в catch-блоках отложены через `queueMicrotask()` — предотвращает конфликт с render-циклом
+
+#### 5. `src/hooks/useAuditState.ts` — Автосброс terminal-состояний
+- Добавлен `onRehydrateStorage`: при загрузке страницы состояния `failed/blocked/cancelled` автоматически сбрасываются в `idle`
+- Предотвращает краш при перезагрузке страницы после ошибки
+
+#### 6. `src/hooks/useSettings.ts` — RPM лимит
+- Z.AI RPM default уменьшен с 10 до 3 — реалистичный лимит для free tier
+
+#### 7. Деплой
+- Worker переделоен: `https://universe-audit-proxy.vudirvp.workers.dev`
+- Pages переделоен: `https://universe-audit-protocol.pages.dev`
+- Новый API-токен: `cfut_AKGsvO2ZV5wETLJV0bCh155qZxEJ6DNP1gCVuQGI84e2366a`

@@ -9,11 +9,9 @@ compatibility_date = "2024-01-01"
 # Worker URL: https://universe-audit-proxy.vudirvp.workers.dev
 # Account ID: 5a7a04ab064205a1f901ebdb7b40dcc0
 #
-# Deploy with: cd worker && npx wrangler deploy
+# Deploy with: cd worker && CLOUDFLARE_API_TOKEN=<token> npx wrangler deploy
 # Or via GitHub Actions (automatic on push to main)
 # ============================================================
 
-[env.production]
-routes = [
-  { pattern = "universe-audit-proxy.vudirvp.workers.dev/*" }
-]
+# Workers on *.workers.dev are automatically routed — no explicit routes needed.
+# Custom domain routes can be added here if needed in the future.
