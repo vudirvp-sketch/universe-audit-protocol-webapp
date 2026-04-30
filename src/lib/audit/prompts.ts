@@ -1,201 +1,279 @@
-// Universe Audit Protocol v10.0 - AI Prompts
-import type { MediaType, AuditMode, AuthorProfileAnswers, Skeleton, GriefStage } from './types';
+// Universe Audit Protocol v10.0 — AI Prompts
+// ALL LLM prompts are in Russian per Language Contract (Section 0.5):
+//   - System prompts: Russian
+//   - User prompts: Russian
+//   - JSON keys in output: English
+//   - JSON values in output: Russian
+//   - Enum values in output: English
+//   - User narrative is wrapped in <user_input> tags per Section 2.3
+
+import type { MediaType, AuditMode, Skeleton } from './types';
+import { wrapUserInput, sanitizeNarrative } from './input-sanitizer';
+
+// ============================================================================
+// SYSTEM PROMPTS (Russian)
+// ============================================================================
 
 /**
- * System prompt for the audit AI
+ * Main system prompt for the audit AI — Russian per Language Contract
  */
-export const AUDIT_SYSTEM_PROMPT = `You are an expert narrative auditor implementing the Universe Audit Protocol v10.0.
+export const AUDIT_SYSTEM_PROMPT = `Ты — эксперт-аудитор нарративов, реализующий Протокол Аудита Вселенной v10.0.
 
-Your role is to analyze fictional worlds/narratives through 4 hierarchical levels with strict gating:
-- L1 (Mechanism): "Does the world work as a system?" - Basic coherence, logic, economy
-- L2 (Body): "Is there embodiment and consequences?" - Trust, routine, spatial memory  
-- L3 (Psyche): "Does the world work as a symptom?" - Grief architecture, character depth
-- L4 (Meta): "Does it ask a question about the agent's real life?" - Mirror, cult status, authorship ethics
+Твоя задача — анализировать вымышленные миры и нарративы через 4 иерархических уровня со строгим гейтингом:
+- L1 (Механизм): «Работает ли мир как система?» — базовая связность, логика, экономика
+- L2 (Тело): «Есть ли воплощённость и последствия?» — доверие, рутина, пространственная память
+- L3 (Психика): «Работает ли как симптом?» — архитектура горя, глубина персонажей
+- L4 (Мета): «Спрашивает ли о реальной жизни агента?» — зеркало, культовый статус, этика авторства
 
-CRITICAL RULES:
-1. Each level requires ≥60% score to proceed to next level
-2. If L1 < 60%, STOP and provide prioritized fix list - do NOT continue to L2
-3. Each checklist item has three states: PASS / FAIL / INSUFFICIENT_DATA
-4. Every PASS must include: direct citation + functional_role explanation
-5. Media-specific items should be filtered before scoring
+КРИТИЧЕСКИЕ ПРАВИЛА:
+1. Каждый уровень требует порогового балла для перехода на следующий (60% конфликт, 50% кирё, 55% гибрид)
+2. Если L1 < порога, СТОП — предоставь приоритизированный список исправлений. НЕ продолжай на L2
+3. Каждый пункт чеклиста имеет три состояния: PASS / FAIL / INSUFFICIENT_DATA
+4. Каждый PASS должен включать: прямую цитату + объяснение функциональной роли
+5. Пункты, специфичные для медиа, фильтруются до подсчёта балла
 
-OUTPUT FORMAT:
-- Pass 1: Human-readable markdown report (15 sections)
-- Pass 2: Pure JSON with all data
+ФОРМАТ ВЫВОДА:
+JSON с английскими ключами и русскими значениями. Enum-значения на английском.
 
-Be thorough, critical, and evidence-based. Avoid positivity bias.`;
+Будь тщательным, критичным и основывайся на доказательствах. Избегай позитивного смещения.`;
 
-/**
- * Prompt for skeleton extraction
- */
-export function getSkeletonExtractionPrompt(narrative: string, mediaType: MediaType): string {
-  return `Extract the narrative skeleton from this ${mediaType} concept/narrative:
-
-"""
-${narrative}
-"""
-
-Extract the following 8 structural elements:
-
-1. **Thematic Law**: One question expressed as a physical law of the world
-   - Test: Does removing the theme break physics/economy or just plot?
-
-2. **Root Trauma**: Event that broke the previous order
-   - Without trauma: world is static, ideologies are cardboard
-
-3. **Hamartia of Protagonist**: Character trait that inevitably leads to the finale
-   - Does the finale flow from hamartia? If not, tragedy is accidental
-
-4. **3 Untouchable Pillars**: Cycle A→B→C→A without which world is not itself
-   - Non-cyclic = amorphous world
-
-5. **Emotional Engine**: Dominant grief stage of the world
-   - No dominant = emotionally neutral world
-
-6. **Author's Prohibition**: What the concept explicitly avoids
-   - Protection from "improvements" that stray from vision
-
-7. **Target Experience**: What the agent feels at the finale
-   - Single emotion = failure; conflicting feelings = success
-
-8. **Central Question**: One question the protagonist carries throughout
-   - No question = no reason to follow
-
-Return as JSON with keys: thematicLaw, rootTrauma, hamartia, pillars (array of 3 strings), emotionalEngine (one of: denial, anger, bargaining, depression, acceptance), authorProhibition, targetExperience, centralQuestion
-
-If any element cannot be extracted, use null for that field.`;
-}
+// ============================================================================
+// STEP 1: MODE DETECTION PROMPT
+// ============================================================================
 
 /**
- * Prompt for quick screening
- */
-export function getScreeningPrompt(narrative: string): string {
-  return `Perform quick screening on this narrative concept (answer only YES/NO):
-
-"""
-${narrative}
-"""
-
-Answer these 7 questions:
-
-1. Can the world's theme be formulated as a rule ("In this world [X] always leads to [Y]")?
-   - If NO: Flag for full audit §0, §1.4
-
-2. If you remove the protagonist — does the world continue living (routine, history, conflicts without hero)?
-   - If NO: Critical §3, §4
-
-3. Is there at least one scene where a character is tired, paid money, or felt a smell?
-   - If NO: Required §1.5, §5
-
-4. Does the key character carry a trait that is simultaneously their strength and their destruction?
-   - If NO: Critical §6
-
-5. Is there a moment where the "right" choice also has a painful price?
-   - If NO: Required §2, §16
-
-6. Does the antagonist (or main threat) act by logic that can be understood and even accepted?
-   - If NO: §6, §8
-
-7. Can the finale not be rewritten to a "happy ending" without destroying the meaning of the entire story?
-   - If NO: Critical §16
-
-Return as JSON:
-{
-  "answers": [true/false for each question 1-7],
-  "flags": ["list of flagged sections"],
-  "recommendation": "ready_for_audit" | "requires_sections" | "stop_return_to_skeleton"
-}
-
-Scoring:
-- 0-1 NO: "ready_for_audit"
-- 2-3 NO: "requires_sections"  
-- 4+ NO: "stop_return_to_skeleton"`;
-}
-
-/**
- * Prompt for determining audit mode
+ * Prompt for determining audit mode — Russian per Language Contract
  */
 export function getAuditModePrompt(narrative: string): string {
-  return `Determine the audit mode for this narrative:
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Определи режим аудита для данного нарратива.
 
-"""
-${narrative}
-"""
+${safeNarrative}
 
-Answer these 3 questions:
+Ответь на 3 вопроса:
 
-1. Is there an antagonist (external hostile force) in the narrative?
-2. Does the story move toward victory/defeat, not toward awareness?
-3. Is the character conflict external (they vs something) or internal (they vs themselves)?
+1. Есть ли в нарративе антагонист (внешняя враждебная сила)?
+2. Движется ли история к победе/поражению, а не к осознанию?
+3. Конфликт персонажа внешний (они против чего-то) или внутренний (они против самих себя)?
 
-Based on answers:
-- Mostly YES → "conflict" mode (Western structure, Hero's Journey, conflict as driver)
-- Mostly NO → "kishō" mode (structure without conflict, perspective shift as driver)
-- Mixed → "hybrid" mode (Grief Architecture as foundation, antagonist as symptom)
+На основе ответов:
+- Преимущественно ДА → режим "conflict" (западная структура, Путешествие Героя, конфликт как драйвер)
+- Преимущественно НЕТ → режим "kishō" (структура без конфликта, смена перспективы как драйвер)
+- Смешанно → режим "hybrid" (Архитектура Горя как основа, антагонист как симптом)
 
-Return as JSON:
+Верни ответ в формате JSON:
 {
   "hasAntagonist": true/false,
   "victoryTrajectory": true/false,
   "externalConflict": true/false,
   "mode": "conflict" | "kishō" | "hybrid",
-  "reasoning": "brief explanation"
+  "reasoning": "краткое обоснование на русском"
 }`;
 }
 
+// ============================================================================
+// STEP 2: AUTHOR PROFILE PROMPT
+// ============================================================================
+
 /**
- * Prompt for L1 (Mechanism) evaluation
+ * Prompt for author profile determination — Russian per Language Contract
+ */
+export function getAuthorProfilePrompt(narrative: string): string {
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Определи авторский профиль на основе подхода к данному нарративу.
+
+${safeNarrative}
+
+Ответь на 7 вопросов о рабочем методе автора (ДА/НЕТ):
+
+1. Когда персонаж «должен» сделать глупость ради сюжета — ищет ли автор способ сделать это органичным?
+2. Знает ли автор, как персонажи ведут себя в ситуациях, не описанных в нарративе?
+3. Возникали ли сюжетные повороты потому, что персонажи к ним пришли, а не потому что автор заранее их спланировал? [КЛЮЧЕВОЙ СИГНАЛ — вес 1.5]
+4. Был ли автор когда-нибудь удивлён действием собственного персонажа?
+5. Могла ли финальная сцена измениться, если бы один ключевой персонаж принял другое решение в середине? [КЛЮЧЕВОЙ СИГНАЛ — вес 1.5]
+6. Делает ли антагонист правильные вещи в глазах автора — по собственной логике?
+7. Выросла ли трагедия из природы персонажа, а не из сюжетной необходимости? [КЛЮЧЕВОЙ СИГНАЛ — вес 1.5]
+
+Классификация:
+- 80-100% ДА → Садовник (органический хаос, логистические/масштабные дыры)
+- 50-70% ДА → Гибрид (оптимален для большинства нарративов)
+- 0-40% ДА → Архитектор (персонажи служат сюжету, компетентностные дыры)
+
+Верни ответ в формате JSON:
+{
+  "answers": { "Q1": true/false, "Q2": true/false, "Q3": true/false, "Q4": true/false, "Q5": true/false, "Q6": true/false, "Q7": true/false },
+  "weightedScore": число,
+  "percentage": число,
+  "type": "gardener" | "hybrid" | "architect",
+  "confidence": "high" | "medium" | "low",
+  "mainRisks": ["риск1 на русском", "риск2 на русском"],
+  "auditPriorities": ["приоритет1 на русском", "приоритет2 на русском"]
+}`;
+}
+
+// ============================================================================
+// STEP 3: SKELETON EXTRACTION PROMPT
+// ============================================================================
+
+/**
+ * Prompt for skeleton extraction — Russian per Language Contract
+ */
+export function getSkeletonExtractionPrompt(narrative: string, mediaType: MediaType): string {
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Извлеки скелет нарратива из данного концепта (${mediaType}):
+
+${safeNarrative}
+
+Извлеки следующие 8 структурных элементов:
+
+1. **Тематический закон**: Один вопрос, выраженный как физический закон мира
+   - Тест: Убрать тему — ломает физику/экономику или только сюжет?
+
+2. **Корневая травма**: Событие, разрушившее прежний порядок
+   - Без травмы: мир статичен, идеологии картонные
+
+3. **Хамартия протагониста**: Черта персонажа, неотвратимо ведущая к финалу
+   - Вытекает ли финал из хамартии? Если нет, трагедия случайна
+
+4. **3 Несокрушимых столпа**: Цикл A→B→C→A, без которого мир перестаёт быть собой
+   - Нецикличный = аморфный мир
+
+5. **Эмоциональный двигатель**: Доминантная стадия горя мира
+   - Нет доминанты = эмоционально нейтральный мир
+
+6. **Авторский запрет**: Что концепт явно избегает
+   - Защита от «улучшений», уводящих от замысла
+
+7. **Целевой опыт**: Что агент чувствует в финале
+   - Одна эмоция = провал; конфликт чувств = успех
+
+8. **Центральный вопрос**: Один вопрос, который протагонист несёт через весь путь
+   - Нет вопроса = нет причины следить
+
+Проведи анализ слабостей на русском языке. Все описания, диагнозы и рекомендации должны быть на русском.
+
+Верни ответ в формате JSON:
+{
+  "thematicLaw": "текст на русском или null",
+  "rootTrauma": "текст на русском или null",
+  "hamartia": "текст на русском или null",
+  "pillars": ["столп1 на русском", "столп2 на русском", "столп3 на русском"],
+  "emotionalEngine": "denial" | "anger" | "bargaining" | "depression" | "acceptance",
+  "authorProhibition": "текст на русском или null",
+  "targetExperience": "текст на русском или null",
+  "centralQuestion": "текст на русском или null"
+}
+
+Если элемент не удаётся извлечь, используй null для этого поля.`;
+}
+
+// ============================================================================
+// STEP 4: SCREENING PROMPT
+// ============================================================================
+
+/**
+ * Prompt for quick screening — Russian per Language Contract
+ */
+export function getScreeningPrompt(narrative: string): string {
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Проведи быстрый скрининг данного нарратива (отвечай только ДА/НЕТ):
+
+${safeNarrative}
+
+Ответь на 7 вопросов:
+
+1. Можно ли сформулировать тему мира как правило («В этом мире [X] всегда ведёт к [Y]»)?
+   - Если НЕТ: отметить для полного аудита §0, §1.4
+
+2. Если убрать протагониста — продолжает ли мир жить (рутина, история, конфликты без героя)?
+   - Если НЕТ: критично §3, §4
+
+3. Есть ли хотя бы одна сцена, где персонаж устал, заплатил деньги или почувствовал запах?
+   - Если НЕТ: необходимо §1.5, §5
+
+4. Несёт ли ключевой персонаж черту, которая одновременно является его силой и его гибелью?
+   - Если НЕТ: критично §6
+
+5. Есть ли момент, когда «правильный» выбор также имеет болезненную цену?
+   - Если НЕТ: необходимо §2, §16
+
+6. Действует ли антагонист (или главная угроза) по логике, которую можно понять и даже принять?
+   - Если НЕТ: §6, §8
+
+7. Можно ли переписать финал на «счастливый конец», не разрушив смысл всей истории?
+   - Если НЕТ (т.е. финал необратим): это правильно
+   - Если ДА: критично §16
+
+Верни ответ в формате JSON:
+{
+  "answers": [true/false для каждого вопроса 1-7],
+  "flags": ["список отмеченных секций на русском"],
+  "recommendation": "ready_for_audit" | "requires_sections" | "stop_return_to_skeleton"
+}
+
+Подсчёт:
+- 0-1 НЕТ: "ready_for_audit"
+- 2-3 НЕТ: "requires_sections"
+- 4+ НЕТ: "stop_return_to_skeleton"`;
+}
+
+// ============================================================================
+// STEP 5: GATE L1 EVALUATION PROMPT
+// ============================================================================
+
+/**
+ * Prompt for L1 (Mechanism) evaluation — Russian per Language Contract
  */
 export function getL1EvaluationPrompt(
-  narrative: string, 
+  narrative: string,
   skeleton: Skeleton,
   mediaType: MediaType,
-  checklist: string
+  checklist: string,
 ): string {
-  return `Evaluate L1 (Mechanism) level for this ${mediaType}:
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Оцени уровень L1 (Механизм) для данного ${mediaType}:
 
-SKELETON:
+СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
-NARRATIVE:
-"""
-${narrative}
-"""
+НАРРАТИВ:
+${safeNarrative}
 
-L1 CHECKLIST (applicable items only):
+ЧЕКЛИСТ L1 (применимые пункты):
 ${checklist}
 
-For each applicable checklist item, evaluate:
+Для каждого применимого пункта чеклиста оцени:
 - Status: PASS / FAIL / INSUFFICIENT_DATA
-- Evidence: Direct quote from narrative (if available)
-- Functional Role: How this serves the criterion functionally
+- Evidence: Прямая цитата из нарратива (если доступна)
+- Functional Role: Как это функционально служит критерию
 
-CRITICAL RULES:
-1. Do NOT score INSUFFICIENT_DATA items in the pass/fail calculation
-2. If >50% items have INSUFFICIENT_DATA, flag for more source material
-3. Gate threshold is 60% - score = (passed / (passed + failed)) × 100%
+КРИТИЧЕСКИЕ ПРАВИЛА:
+1. НЕ включай пункты INSUFFICIENT_DATA в расчёт пройдено/провалено
+2. Если >50% пунктов имеют INSUFFICIENT_DATA, отметь потребность в дополнительном материале
+3. Порог гейта зависит от режима аудита (60% конфликт, 50% кирё, 55% гибрид)
+4. Балл = (пройдено / (пройдено + провалено)) × 100%
 
-Evaluate ONLY items applicable to ${mediaType}:
-- CORE: All media
-- GAME: Only for games
-- VISUAL: Only for film/anime/series
+Оценивай ТОЛЬКО пункты, применимые к ${mediaType}:
+- CORE: Все медиа
+- GAME: Только для игр
+- VISUAL: Только для фильм/аниме/сериал
 
-Return as JSON:
+Верни ответ в формате JSON:
 {
   "evaluations": [
     {
       "id": "item_id",
       "status": "PASS" | "FAIL" | "INSUFFICIENT_DATA",
-      "evidence": "direct quote or null",
-      "functionalRole": "explanation or null"
+      "evidence": "прямая цитата или null",
+      "functionalRole": "объяснение на русском или null"
     }
   ],
-  "score": number,
+  "score": число,
   "gatePassed": true/false,
   "fixList": [
     {
       "id": "fix_id",
-      "description": "what to fix",
+      "description": "что исправить на русском",
       "severity": "critical" | "major" | "minor",
       "type": "motivation" | "competence" | "scale" | "resources" | "memory" | "ideology" | "time",
       "recommendedApproach": "conservative" | "compromise" | "radical"
@@ -204,167 +282,181 @@ Return as JSON:
 }`;
 }
 
+// ============================================================================
+// STEP 6: GATE L2 EVALUATION PROMPT
+// ============================================================================
+
 /**
- * Prompt for L2 (Body) evaluation
+ * Prompt for L2 (Body) evaluation — Russian per Language Contract
  */
 export function getL2EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
   l1Score: number,
-  checklist: string
+  checklist: string,
 ): string {
-  return `Evaluate L2 (Body) level - only if L1 passed (score: ${l1Score}%):
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Оцени уровень L2 (Тело) — только если L1 пройден (балл: ${l1Score}%):
 
-SKELETON:
+СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
-NARRATIVE:
-"""
-${narrative}
-"""
+НАРРАТИВ:
+${safeNarrative}
 
-L2 CHECKLIST:
+ЧЕКЛИСТ L2:
 ${checklist}
 
-L2 focuses on:
-- Embodiment: fatigue, pain, smell, money in key scenes
-- Character depth: hamartia, Mary Sue test, Price of Greatness
-- Scene quality: body anchor, silence/slow time
-- Narrative infrastructure: debt paid, misdirection
+L2 фокусируется на:
+- Воплощённость: усталость, боль, запах, деньги в ключевых сценах
+- Глубина персонажей: хамартия, тест Мэри Сью, Цена Величия
+- Качество сцен: телесный якорь, тишина/медленное время
+- Нарративная инфраструктура: долг уплачен, отвлечение внимания
 
-For each applicable item, evaluate with evidence:
+Для каждого применимого пункта оцени с доказательствами:
 - Status: PASS / FAIL / INSUFFICIENT_DATA
-- Evidence: Direct quote from narrative
-- Functional Role: How this serves the criterion functionally
+- Evidence: Прямая цитата из нарратива
+- Functional Role: Как это функционально служит критерию
 
-Return as JSON with same structure as L1.`;
+Верни ответ в формате JSON с той же структурой, что и L1.`;
 }
 
+// ============================================================================
+// STEP 7: GATE L3 EVALUATION PROMPT
+// ============================================================================
+
 /**
- * Prompt for L3 (Psyche) evaluation
+ * Prompt for L3 (Psyche) evaluation — Russian per Language Contract
  */
 export function getL3EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
   l2Score: number,
-  griefMatrixContext: string
+  griefMatrixContext: string,
 ): string {
-  return `Evaluate L3 (Psyche) level - only if L2 passed (score: ${l2Score}%):
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Оцени уровень L3 (Психика) — только если L2 пройден (балл: ${l2Score}%):
 
-SKELETON:
+СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
-NARRATIVE:
-"""
-${narrative}
-"""
+НАРРАТИВ:
+${safeNarrative}
 
-GRIEF ARCHITECTURE CONTEXT:
+КОНТЕКСТ АРХИТЕКТУРЫ ГОРЯ:
 ${griefMatrixContext}
 
-L3 focuses on:
-- Grief Architecture: All 5 stages materialized across 4 levels (Character, Location, Mechanic, Act)
-- Dominant grief stage defined
-- Character psychotypes: no duplicate stages among key characters
+L3 фокусируется на:
+- Архитектура Горя: Все 5 стадий материализованы на 4 уровнях (Персонаж, Локация, Механика, Акт)
+- Определена доминантная стадия горя
+- Психотипы персонажей: нет дублирующихся стадий среди ключевых персонажей
 
-For grief architecture, map each stage to:
-- Which character embodies it
-- Which location embodies it
-- Which mechanic/system embodies it
-- Which narrative act embodies it
+Для архитектуры горя соотнеси каждую стадию с:
+- Какой персонаж её воплощает
+- Какая локация её воплощает
+- Какая механика/система её воплощает
+- Какой нарративный акт её воплощает
 
-CRITICAL: Only require dominant stage fully filled. Other stages can be partial/absent.
+КРИТИЧЕСКИ: Требуется только чтобы доминантная стадия была полностью заполнена. Остальные стадии могут быть частичными/отсутствовать.
 
-Return as JSON:
+Верни ответ в формате JSON:
 {
   "evaluations": [...],
   "griefMatrix": {
     "dominantStage": "denial" | "anger" | "bargaining" | "depression" | "acceptance",
     "cells": [
       {
-        "stage": "stage_name",
+        "stage": "имя_стадии",
         "level": "character" | "location" | "mechanic" | "act",
-        "character": "who/what embodies this",
-        "evidence": "direct quote",
+        "character": "кто/что воплощает это на русском",
+        "evidence": "прямая цитата на русском",
         "confidence": "high" | "medium" | "low" | "absent"
       }
     ]
   },
-  "score": number,
+  "score": число,
   "gatePassed": true/false
 }`;
 }
 
+// ============================================================================
+// STEP 8: GATE L4 EVALUATION PROMPT (including Cult Potential)
+// ============================================================================
+
 /**
- * Prompt for L4 (Meta) evaluation
+ * Prompt for L4 (Meta) evaluation — Russian per Language Contract
+ * Cult potential is merged into L4 per Section 0.8
  */
 export function getL4EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
-  l3Score: number
+  l3Score: number,
 ): string {
-  return `Evaluate L4 (Meta) level - only if L3 passed (score: ${l3Score}%):
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Оцени уровень L4 (Мета) — только если L3 пройден (балл: ${l3Score}%):
 
-SKELETON:
+СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
-NARRATIVE:
-"""
-${narrative}
-"""
+НАРРАТИВ:
+${safeNarrative}
 
-L4 focuses on:
-1. Three Layers of Reality (destruction test):
-   - Personal layer: What agent wants, what they'd do without it
-   - Plot layer: Why B follows A, what happens without causality
-   - Meta-author layer: Question the finale asks the audience
+L4 фокусируется на:
+1. Три Слоя Реальности (тест разрушения):
+   - Личный слой: Чего хочет агент, что бы он делал без этого
+   - Сюжетный слой: Почему B следует за A, что происходит без причинности
+   - Мета-авторский слой: Какой вопрос финал задаёт аудитории
 
-2. Cornelian Dilemma:
-   - Type: Value vs Value (not good vs evil)
-   - Irreversibility: Choice physically changes world
-   - Identity: "Who did you become?" not "what did you get?"
-   - Price of victory: Victory = betraying one truth
+2. Корнелиева Дилемма:
+   - Тип: Ценность vs Ценность (не добро vs зло)
+   - Необратимость: Выбор физически меняет мир
+   - Идентичность: «Кем ты стал?» а не «что ты получил?»
+   - Цена победы: Победа = предательство одной истины
 
-3. Agent Mirror:
-   - Does finale prompt self-question in audience?
-   - Direct question to audience: "[Narrative] asks: are you capable of ___?"
+3. Зеркало Агента:
+   - Побуждает ли финал к самоанализу у аудитории?
+   - Прямой вопрос аудитории: «[Нарратив] спрашивает: способен ли ты на ___?»
 
-4. Cult Potential (11 criteria):
-   - Iceberg lore, resistance to understanding, interpretation provocation
-   - Aesthetic uniqueness, playable antagonist, finale reinterprets beginning
-   - Uncomfortable truth, logical expansion, memorable symbol
-   - Theme relevance, unexplained depth enhances
+4. Культовый Потенциал (11 критериев):
+   - Айсберг-лора, сопротивление пониманию, провокация интерпретаций
+   - Эстетическая уникальность, играбельный антагонист, финал переосмысляет начало
+   - Неудобная истина, логическое расширение, запоминающийся символ
+   - Релевантность темы, необъяснимая глубина усиливает
 
-Return as JSON:
+Верни ответ в формате JSON:
 {
   "evaluations": [...],
   "threeLayers": {
-    "personal": { "stable": true/false, "proof": "..." },
-    "plot": { "stable": true/false, "proof": "..." },
-    "meta": { "stable": true/false, "proof": "..." }
+    "personal": { "stable": true/false, "proof": "доказательство на русском" },
+    "plot": { "stable": true/false, "proof": "доказательство на русском" },
+    "meta": { "stable": true/false, "proof": "доказательство на русском" }
   },
   "cornelianDilemma": {
     "valid": true/false,
-    "valueA": "...",
-    "valueB": "...",
+    "valueA": "ценность А на русском",
+    "valueB": "ценность Б на русском",
     "irreversible": true/false,
-    "thirdPath": "exists or not"
+    "thirdPath": "существует или нет на русском"
   },
   "agentMirror": {
     "integrated": true/false,
-    "directQuestion": "..."
+    "directQuestion": "прямой вопрос аудитории на русском"
   },
   "cultPotential": {
-    "score": number,
-    "criteria": [true/false for each of 11]
+    "score": число,
+    "criteria": [true/false для каждого из 11]
   },
-  "score": number,
+  "score": число,
   "gatePassed": true/false
 }`;
 }
 
+// ============================================================================
+// FULL REPORT GENERATION PROMPT
+// ============================================================================
+
 /**
- * Prompt for full audit report generation
+ * Prompt for full audit report generation — Russian per Language Contract
  */
 export function getFullReportPrompt(
   narrative: string,
@@ -375,104 +467,75 @@ export function getFullReportPrompt(
   screeningResult: object,
   allGateResults: object,
   checklistResults: object,
-  griefMatrix: object
+  griefMatrix: object,
 ): string {
-  return `Generate complete audit report for this ${mediaType}:
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
+  return `Сгенерируй полный отчёт аудита для данного ${mediaType}:
 
-AUDIT CONTEXT:
-- Mode: ${auditMode}
-- Author Profile: ${authorProfile.type} (${authorProfile.percentage}%)
+КОНТЕКСТ АУДИТА:
+- Режим: ${auditMode}
+- Профиль автора: ${authorProfile.type} (${authorProfile.percentage}%)
 
-SKELETON:
+СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
-SCREENING:
+СКРИНИНГ:
 ${JSON.stringify(screeningResult, null, 2)}
 
-GATE RESULTS:
+РЕЗУЛЬТАТЫ ГЕЙТОВ:
 ${JSON.stringify(allGateResults, null, 2)}
 
-CHECKLIST:
+ЧЕКЛИСТ:
 ${JSON.stringify(checklistResults, null, 2)}
 
-GRIEF ARCHITECTURE:
+АРХИТЕКТУРА ГОРИ:
 ${JSON.stringify(griefMatrix, null, 2)}
 
-Generate TWO outputs:
+НАРРАТИВ:
+${safeNarrative}
 
-=== PASS 1: HUMAN-READABLE REPORT ===
+Сгенерируй ДВА вывода:
 
-Generate a comprehensive markdown report with these 15 sections:
+=== ПРОХОД 1: ЧИТАЕМЫЙ ОТЧЁТ ===
 
-1. **Audit Mode** - Conflict/Kishō/Hybrid + justification
-2. **Author Profile** - Gardener/Architect + % + main risks
-3. **Extracted Skeleton** - Law, hamartia, trauma, pillars, engine, prohibition, question
-4. **Quick Screening** - 7 YES/NO + depth flags
-5. **Gate Results L1-L4** - % for each level
-6. **Scores** - Connectedness/Vitality/Characters/Theme/Embodiment (0-5)
-7. **Critical Holes** - Must-fix items with IDs
-8. **Characters** - Hamartia/Mary Sue/anti-patterns/cult potential
-9. **Grief Architecture** - Stages present/absent, dominant stage
-10. **Finale and Dilemma** - Choice type, debt paid, agent mirror
-11. **Patches** - Recommended approach via decision tree
-12. **Cult Potential** - What works, what blocks
-13. **Contrastive Analysis** - Compare to 2-3 references
-14. **Final Score** - X/Y + % by level
-15. **3 Priority Actions** - Do this now
+Сгенерируй подробный отчёт в формате Markdown со следующими 15 секциями:
 
-=== PASS 2: JSON OUTPUT ===
+1. **Режим аудита** — Конфликт/Кирё/Гибрид + обоснование
+2. **Профиль автора** — Садовник/Архитектор + % + главные риски
+3. **Извлечённый скелет** — Закон, хамартия, травма, столпы, двигатель, запрет, вопрос
+4. **Быстрый скрининг** — 7 ДА/НЕТ + флаги глубины
+5. **Результаты гейтов L1-L4** — % для каждого уровня
+6. **Баллы** — Связность/Живость/Персонажи/Тема/Воплощённость (0-5)
+7. **Критические дыры** — Обязательные к исправлению пункты с ID
+8. **Персонажи** — Хамартия/Мэри Сью/антипаттерны/культовый потенциал
+9. **Архитектура горя** — Стадии присутствуют/отсутствуют, доминантная стадия
+10. **Финал и дилемма** — Тип выбора, долг уплачен, зеркало агента
+11. **Исправления** — Рекомендуемый подход через дерево решений
+12. **Культовый потенциал** — Что работает, что блокирует
+13. **Контрастивный анализ** — Сравнение с 2-3 референсами
+14. **Итоговый балл** — X/Y + % по уровням
+15. **3 приоритетных действия** — Сделай это сейчас
 
-Complete JSON with:
+=== ПРОХОД 2: JSON ВЫВОД ===
+
+Полный JSON:
 {
-  "audit_meta": { "mode", "media_type", "applicable_items" },
-  "author_profile": { "type", "percentage", "confidence" },
-  "skeleton": { "thematic_law", "root_trauma", "hamartia", "dominant_grief_stage" },
-  "gate_results": { L1_score, L1_passed, L2_score, L2_passed, L3_score, L3_passed, L4_score },
-  "overall_score": { "checklist", "percentage", "classification" },
-  "critical_issues": [{ id, level, severity, narrative_justification }],
-  "priority_actions": [action1, action2, action3]
+  "audit_meta": { "mode": "conflict|kishō|hybrid", "media_type": "тип медиа", "applicable_items": число },
+  "author_profile": { "type": "gardener|hybrid|architect", "percentage": число, "confidence": "high|medium|low" },
+  "skeleton": { "thematic_law": "текст", "root_trauma": "текст", "hamartia": "текст", "dominant_grief_stage": "стадия" },
+  "gate_results": { "L1_score": "строка", "L1_passed": true/false, "L2_score": "строка", "L2_passed": true/false, "L3_score": "строка", "L3_passed": true/false, "L4_score": "строка" },
+  "overall_score": { "checklist": "строка", "percentage": "строка", "classification": "cult_masterpiece|powerful|living_weak_soul|decoration" },
+  "critical_issues": [{ "id": "строка", "level": "L0|L1|L2|L3|L4", "severity": "critical|major|minor|cosmetic", "narrative_justification": "обоснование на русском" }],
+  "priority_actions": ["действие1 на русском", "действие2 на русском", "действие3 на русском"]
 }`;
 }
 
-/**
- * Prompt for author profile determination
- */
-export function getAuthorProfilePrompt(narrative: string): string {
-  return `Determine author profile based on this narrative approach:
-
-"""
-${narrative}
-"""
-
-Answer these 7 questions about the author's working method (YES/NO):
-
-1. When a character "must" do something stupid for the plot — does the author look for a way to make it organic?
-2. Does the author know how characters behave in situations not described in the narrative?
-3. Did plot twists emerge because characters arrived at them, not because the author planned them in advance? [KEY SIGNAL - weight 1.5]
-4. Has the author ever been surprised by their own character's action?
-5. Could the final scene have changed if one key character made a different decision at the midpoint? [KEY SIGNAL - weight 1.5]
-6. Does the antagonist do the right things in the author's eyes — by their own logic?
-7. Did the tragedy grow from the character's nature, not from plot necessity? [KEY SIGNAL - weight 1.5]
-
-Classification:
-- 80-100% YES → Gardener (organic chaos, logistics/scale holes)
-- 50-70% YES → Hybrid (optimal for most narratives)
-- 0-40% YES → Architect (characters serve plot, competence holes)
-
-Return as JSON:
-{
-  "answers": { "Q1": true/false, ... "Q7": true/false },
-  "weightedScore": number,
-  "percentage": number,
-  "type": "gardener" | "hybrid" | "architect",
-  "confidence": "high" | "medium" | "low",
-  "mainRisks": ["risk1", "risk2"],
-  "auditPriorities": ["section1", "section2"]
-}`;
-}
+// ============================================================================
+// COMBINED ANALYSIS PROMPT (legacy — for one-shot mode)
+// ============================================================================
 
 /**
- * Combine prompts for multi-step analysis
+ * Combine prompts for multi-step analysis — Russian per Language Contract
  */
 export function getCombinedAnalysisPrompt(
   narrative: string,
@@ -480,38 +543,37 @@ export function getCombinedAnalysisPrompt(
   options?: {
     skipScreening?: boolean;
     stopAtLevel?: 'L1' | 'L2' | 'L3';
-  }
+  },
 ): string {
   const skipScreening = options?.skipScreening ?? false;
   const stopAt = options?.stopAtLevel;
+  const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
 
-  let prompt = `Perform complete Universe Audit Protocol v10.0 analysis.
+  let prompt = `Выполни полный анализ по Протоколу Аудита Вселенной v10.0.
 
-NARRATIVE:
-"""
-${narrative}
-"""
+НАРРАТИВ:
+${safeNarrative}
 
-MEDIA TYPE: ${mediaType}
+ТИП МЕДИА: ${mediaType}
 
-STEPS TO PERFORM:
-1. Determine audit mode (conflict/kishō/hybrid)
-2. Extract skeleton (8 structural elements)
-${skipScreening ? '' : '3. Quick screening (7 questions)'}
+ШАГИ ДЛЯ ВЫПОЛНЕНИЯ:
+1. Определи режим аудита (conflict/kishō/hybrid)
+2. Извлеки скелет (8 структурных элементов)
+${skipScreening ? '' : '3. Быстрый скрининг (7 вопросов)'}
 
-Then for each level (STOP if gate fails):
-4. L1 (Mechanism) - 60% threshold
-${!stopAt || stopAt !== 'L1' ? '5. L2 (Body) - 60% threshold' : ''}
-${!stopAt || stopAt !== 'L1' && stopAt !== 'L2' ? '6. L3 (Psyche) - 60% threshold' : ''}
-${!stopAt ? '7. L4 (Meta)' : ''}
+Затем для каждого уровня (СТОП если гейт не пройден):
+4. L1 (Механизм) — порог зависит от режима
+${!stopAt || stopAt !== 'L1' ? '5. L2 (Тело) — порог зависит от режима' : ''}
+${!stopAt || stopAt !== 'L1' && stopAt !== 'L2' ? '6. L3 (Психика) — порог зависит от режима' : ''}
+${!stopAt ? '7. L4 (Мета) — включая культовый потенциал' : ''}
 
-8. Generate full report (human-readable + JSON)
+8. Сгенерируй полный отчёт (читаемый + JSON)
 
-CRITICAL GATING RULE:
-If any level scores <60%, STOP immediately and provide fix list.
-Do NOT proceed to next level.
+КРИТИЧЕСКОЕ ПРАВИЛО ГЕЙТИНГА:
+Если любой уровень набирает балл ниже порога, СТОП немедленно и предоставь список исправлений.
+НЕ продолжай на следующий уровень.
 
-Return complete analysis.`;
+Верни полный анализ.`;
 
   return prompt;
 }

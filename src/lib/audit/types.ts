@@ -38,7 +38,6 @@ export type AuditPhase =
   | 'L1_evaluation'
   | 'L2_evaluation'
   | 'L3_evaluation'
-  | 'self_audit'
   | 'L4_evaluation'
   | 'issue_generation'
   | 'generative_modules'
@@ -698,7 +697,18 @@ export interface ValidationRule {
   errorMessage?: string;
 }
 
-export interface ValidationResult {
+// ValidationResult for pipeline step validation (AuditStep.validate)
+// NOTE: A separate type for input validation with richer fields exists below
+// as InputValidationResult — the simple {valid, errors, canRetry} form is
+// used by the AuditStep lifecycle.
+export interface StepValidationResult {
+  valid: boolean;
+  errors: string[];
+  canRetry: boolean;
+}
+
+// Full input validation result with typed errors/warnings
+export interface InputValidationResult {
   valid: boolean;
   errors: ValidationError[];
   warnings: ValidationWarning[];
@@ -754,4 +764,45 @@ export interface ProtocolLimitation {
   description: string;
   impact: 'low' | 'medium' | 'high';
   mitigation?: string;
+}
+
+// ============================================================================
+// SCREENING RECOMMENDATION TYPE
+// ============================================================================
+
+/** Per Section 0.6 — count-based screening recommendation */
+export type ScreeningRecommendation =
+  | 'ready_for_audit'
+  | 'requires_sections'
+  | 'stop_return_to_skeleton';
+
+// ============================================================================
+// GATE THRESHOLDS (Section 0.7 — mode-specific)
+// ============================================================================
+
+/** Thresholds per audit mode, per gate level */
+export interface GateThresholds {
+  conflict: { L1: number; L2: number; L3: number; L4: number };
+  kisho:   { L1: number; L2: number; L3: number; L4: number };
+  hybrid:  { L1: number; L2: number; L3: number; L4: number };
+}
+
+/** Default gate thresholds per COMPLETION_PLAN Section 0.7 */
+export const DEFAULT_THRESHOLDS: GateThresholds = {
+  conflict: { L1: 60, L2: 60, L3: 60, L4: 60 },
+  kisho:    { L1: 50, L2: 50, L3: 50, L4: 50 },
+  hybrid:   { L1: 55, L2: 55, L3: 55, L4: 55 },
+};
+
+/**
+ * Get the gate threshold for a given audit mode and level.
+ * Falls back to conflict mode defaults for unknown modes.
+ */
+export function getGateThreshold(
+  mode: AuditMode,
+  level: 'L1' | 'L2' | 'L3' | 'L4',
+): number {
+  const key = mode === 'kishō' ? 'kisho' : mode;
+  const thresholds = DEFAULT_THRESHOLDS[key as keyof GateThresholds] ?? DEFAULT_THRESHOLDS.conflict;
+  return thresholds[level];
 }

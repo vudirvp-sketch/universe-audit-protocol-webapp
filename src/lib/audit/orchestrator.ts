@@ -23,6 +23,7 @@ import type {
 
 import { validateInput, type ValidationResult } from './input-validator';
 import { detectAuditMode, getModeExecutionConfig, type ModeExecutionConfig } from './modes';
+import { getGateThreshold } from './types';
 import { calculateAuthorProfile } from './author-profile';
 import { extractSkeleton, type SkeletonExtractionResult } from './skeleton-extraction';
 import { executeGate, validatePrerequisites, type GateLevel } from './gate-executor';
@@ -86,31 +87,31 @@ interface AuditSection {
 function getAuditSections(): AuditSection[] {
   return [
     // L1 sections - Core structural elements
-    { id: 'A_structure', tags: ['L1', 'CORE'], content: 'Structure analysis', level: 'L1' },
-    { id: 'B_thematic_law', tags: ['L1', 'CORE'], content: 'Thematic law validation', level: 'L1' },
-    { id: 'C_root_trauma', tags: ['L1', 'CORE'], content: 'Root trauma analysis', level: 'L1' },
-    { id: 'D_hamartia', tags: ['L1', 'CORE'], content: 'Hamartia validation', level: 'L1' },
-    { id: 'E_world_law', tags: ['L1', 'CORE'], content: 'World law integration', level: 'L1' },
-    { id: 'F_skeleton', tags: ['L1', 'CORE'], content: 'Skeleton completeness', level: 'L1' },
+    { id: 'A_structure', tags: ['L1', 'CORE'], content: 'Анализ структуры', level: 'L1' },
+    { id: 'B_thematic_law', tags: ['L1', 'CORE'], content: 'Валидация тематического закона', level: 'L1' },
+    { id: 'C_root_trauma', tags: ['L1', 'CORE'], content: 'Анализ корневой травмы', level: 'L1' },
+    { id: 'D_hamartia', tags: ['L1', 'CORE'], content: 'Валидация хамартии', level: 'L1' },
+    { id: 'E_world_law', tags: ['L1', 'CORE'], content: 'Интеграция закона мира', level: 'L1' },
+    { id: 'F_skeleton', tags: ['L1', 'CORE'], content: 'Полнота скелета', level: 'L1' },
     
     // L2 sections - Secondary validation
-    { id: '1.1_mechanics', tags: ['L2'], content: 'Mechanism analysis', level: 'L2' },
-    { id: '1.3_aesthetic', tags: ['L2', 'VISUAL'], content: 'Aesthetic experience', level: 'L2' },
-    { id: '1.5_limitation', tags: ['L2'], content: 'Physical limitation', level: 'L2' },
-    { id: '1.6_routine', tags: ['L2'], content: 'Body routine', level: 'L2' },
-    { id: 'character_arcs', tags: ['L2'], content: 'Character development', level: 'L2' },
-    { id: 'dialogue', tags: ['L2'], content: 'Dialogue quality', level: 'L2' },
-    { id: 'world_consistency', tags: ['L2'], content: 'World logic consistency', level: 'L2' },
+    { id: '1.1_mechanics', tags: ['L2'], content: 'Анализ механизма', level: 'L2' },
+    { id: '1.3_aesthetic', tags: ['L2', 'VISUAL'], content: 'Эстетический опыт', level: 'L2' },
+    { id: '1.5_limitation', tags: ['L2'], content: 'Физическое ограничение', level: 'L2' },
+    { id: '1.6_routine', tags: ['L2'], content: 'Телесная рутина', level: 'L2' },
+    { id: 'character_arcs', tags: ['L2'], content: 'Развитие персонажей', level: 'L2' },
+    { id: 'dialogue', tags: ['L2'], content: 'Качество диалогов', level: 'L2' },
+    { id: 'world_consistency', tags: ['L2'], content: 'Логическая связность мира', level: 'L2' },
     
     // L3 sections - Grief architecture
-    { id: '2.1_grief', tags: ['L3'], content: 'Grief architecture', level: 'L3' },
-    { id: '2.2_trauma', tags: ['L3'], content: 'Trauma analysis', level: 'L3' },
-    { id: '3.1_mda', tags: ['L3'], content: 'MDA analysis', level: 'L3' },
+    { id: '2.1_grief', tags: ['L3'], content: 'Архитектура горя', level: 'L3' },
+    { id: '2.2_trauma', tags: ['L3'], content: 'Анализ травмы', level: 'L3' },
+    { id: '3.1_mda', tags: ['L3'], content: 'MDA-анализ', level: 'L3' },
     
     // L4 sections - Final synthesis
-    { id: '4.1_cult', tags: ['L4'], content: 'Cult potential', level: 'L4' },
-    { id: '4.2_mirror', tags: ['L4'], content: 'Mirror test', level: 'L4' },
-    { id: 'final_synthesis', tags: ['L4'], content: 'Final integration', level: 'L4' },
+    { id: '4.1_cult', tags: ['L4'], content: 'Культовый потенциал', level: 'L4' },
+    { id: '4.2_mirror', tags: ['L4'], content: 'Тест зеркала', level: 'L4' },
+    { id: 'final_synthesis', tags: ['L4'], content: 'Финальная интеграция', level: 'L4' },
   ];
 }
 
@@ -242,8 +243,9 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   // === STEP 5: GATE L1 ===
   state.phase = 'L1_evaluation';
   
+  const auditMode = state.audit_mode_config?.mode ?? 'conflict';
   const l1Sections = getAuditSections().filter(s => s.level === 'L1');
-  state.gate_L1 = executeGateWithBreakdown('L1', l1Sections, 60);
+  state.gate_L1 = executeGateWithBreakdown('L1', l1Sections, auditMode);
 
   // RULE_5: If gate fails, STOP and output fixes for that level ONLY
   if (state.gate_L1.halt) {
@@ -255,7 +257,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   state.phase = 'L2_evaluation';
   
   const l2Sections = getAuditSections().filter(s => s.level === 'L2');
-  state.gate_L2 = executeGateWithBreakdown('L2', l2Sections, 60);
+  state.gate_L2 = executeGateWithBreakdown('L2', l2Sections, auditMode);
 
   if (state.gate_L2.halt) {
     state.issues = generateIssuesFromGate(state.gate_L2, 'L2');
@@ -297,7 +299,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   }
 
   const l3Sections = getAuditSections().filter(s => s.level === 'L3');
-  state.gate_L3 = executeGateWithBreakdown('L3', l3Sections, 60);
+  state.gate_L3 = executeGateWithBreakdown('L3', l3Sections, auditMode);
 
   if (state.gate_L3.halt) {
     state.issues = generateIssuesFromGate(state.gate_L3, 'L3');
@@ -335,7 +337,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   state.phase = 'L4_evaluation';
   
   const l4Sections = getAuditSections().filter(s => s.level === 'L4');
-  state.gate_L4 = executeGateWithBreakdown('L4', l4Sections, 60);
+  state.gate_L4 = executeGateWithBreakdown('L4', l4Sections, auditMode);
 
   if (state.gate_L4.halt) {
     state.issues = generateIssuesFromGate(state.gate_L4, 'L4');
@@ -538,10 +540,15 @@ function performScreening(concept: string): ScreeningResult {
 function executeGateWithBreakdown(
   level: string,
   sections: AuditSection[],
-  threshold: number
+  mode: import('./types').AuditMode
 ): GateResult {
-  // PHASE_2_STUB: This function always returns 100% (all sections pass).
-  // Phase 2 will replace this with real LLM-based gate evaluation.
+  // Use mode-specific threshold from types.ts (Section 0.7)
+  const gateLevel = level as 'L1' | 'L2' | 'L3' | 'L4';
+  const threshold = getGateThreshold(mode, gateLevel);
+
+  // PHASE_2_STUB: This function currently returns 100% (all sections pass).
+  // Phase 2 will replace this with real LLM-based gate evaluation via
+  // the AuditStepRunner and individual step modules (step-gate-L1.ts etc.).
   // The score is artificially 100% because keyword matching cannot evaluate
   // whether a narrative section actually satisfies protocol criteria.
   //

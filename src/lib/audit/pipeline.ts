@@ -121,7 +121,6 @@ function toPipelinePhase(phase: string): AuditPhase {
     'L1_evaluation',
     'L2_evaluation',
     'L3_evaluation',
-    'self_audit',
     'L4_evaluation',
     'issue_generation',
     'generative_modules',

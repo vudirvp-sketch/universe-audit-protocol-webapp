@@ -318,13 +318,13 @@ export function shouldTransitionMode(
 // ============================================================================
 
 export const MODE_LABELS: Record<AuditMode, string> = {
-  conflict: 'CONFLICT — Canonical Resolution Mode',
-  kishō: 'KISHŌ — Author Clarification Mode',
-  hybrid: 'HYBRID — Combined Resolution Mode'
+  conflict: 'КОНФЛИКТ — Режим канонического разрешения',
+  kishō: 'КИРЁ — Режим уточнения у автора',
+  hybrid: 'ГИБРИД — Комбинированный режим'
 };
 
 export const MODE_DESCRIPTIONS: Record<AuditMode, string> = {
-  conflict: 'For narratives with clear canonical contradictions requiring resolution based on source authority.',
-  kishō: 'For narratives with author uncertainty or intentional ambiguity requiring clarification dialogue.',
-  hybrid: 'For narratives with mixed contradiction types requiring both canonical resolution and author dialogue.'
+  conflict: 'Для нарративов с явными каноническими противоречиями, требующими разрешения на основе авторитетности источника.',
+  kishō: 'Для нарративов с авторской неопределённостью или намеренной двусмысленностью, требующими диалога уточнения.',
+  hybrid: 'Для нарративов со смешанными типами противоречий, требующими и канонического разрешения, и диалога с автором.'
 };
