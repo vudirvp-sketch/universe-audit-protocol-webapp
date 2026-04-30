@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Heart, Scale, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
+import { Sparkles, Heart, Scale, CheckCircle2, XCircle } from 'lucide-react';
 import type { GenerativeOutput, GriefMappingResult, DilemmaResult } from '@/lib/audit/types';
 import { t } from '@/lib/i18n/ru';
 

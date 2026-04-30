@@ -176,72 +176,6 @@ export interface GriefPresence {
 }
 
 // ============================================================================
-// CULT POTENTIAL TYPES
-// ============================================================================
-
-export interface CultCriterion {
-  id: string;
-  name: string;
-  description: string;
-  weight: number;
-  mandatory: boolean;
-  category: 'philosophical' | 'narrative' | 'character' | 'world';
-}
-
-export interface CultEvaluationInput {
-  hasRootTrauma: boolean;
-  rootTraumaDepth: number;
-  ideologicalSystem: boolean;
-  hasThematicLaw: boolean;
-  thematicLawIntegration: number;
-  themeUniversality: boolean;
-  characterComplexity: number;
-  moralAmbiguity: boolean;
-  worldConsistency: number;
-  transformativePotential: boolean;
-  ritualizableElements: boolean;
-  communalExperience: boolean;
-  interpretiveDepth: number;
-  rewatchValue: boolean;
-  memeticPotential: boolean;
-}
-
-export interface CultEvaluationResult {
-  passed: boolean;
-  phase1Result: {
-    passed: boolean;
-    criteria: {
-      id: string;
-      name: string;
-      passed: boolean;
-      blocking: boolean;
-    }[];
-  };
-  phase2Result: {
-    score: number;
-    maxScore: number;
-    percentage: number;
-    passed: boolean;
-    criteria: {
-      id: string;
-      name: string;
-      passed: boolean;
-      score: number;
-      maxScore: number;
-    }[];
-  };
-  classification: CultClassification;
-  recommendations: string[];
-}
-
-export type CultClassification = 
-  | 'high_cult_potential'
-  | 'moderate_cult_potential'
-  | 'limited_cult_potential'
-  | 'standard_work'
-  | 'cult_failed';
-
-// ============================================================================
 // SKELETON TYPES
 // ============================================================================
 
@@ -314,30 +248,6 @@ export interface ChainResult {
 }
 
 // ============================================================================
-// FIVE CHECKS & TOUCHES
-// ============================================================================
-
-export interface FiveChecksResult {
-  pillars_enhanced: number;
-  creates_dilemma: boolean;
-  visible_cost: boolean;
-  ripple_effect: number;
-  dual_level: boolean;
-  passed: boolean;
-  failed_checks: string[];
-}
-
-export interface FiveTouchesResult {
-  dialogue: 1 | 2 | 3 | 4 | 5;
-  choice: 1 | 2 | 3 | 4 | 5;
-  texture: 1 | 2 | 3 | 4 | 5;
-  shadow: 1 | 2 | 3 | 4 | 5;
-  metaphor: 1 | 2 | 3 | 4 | 5;
-  total_score: number;
-  status: 'underdeveloped' | 'functional' | 'complete';
-}
-
-// ============================================================================
 // GENERATIVE OUTPUT TYPES (RULE_10)
 // ============================================================================
 
@@ -393,8 +303,7 @@ export interface AuthorProfile {
   confidence: 'high' | 'medium' | 'low';
   mainRisks: string[];
   auditPriorities: string[];
-  risk_flags?: string[];      // Legacy alias for mainRisks
-  priority_array?: string[];  // Legacy alias for auditPriorities
+
 }
 
 // ============================================================================
@@ -450,16 +359,8 @@ export interface GriefArchitectureMatrix {
 }
 
 // ============================================================================
-// SCORES & FIXES
+// FIXES
 // ============================================================================
-
-export interface Scores {
-  connectedness: number; // 0-5
-  vitality: number; // 0-5
-  characters: number; // 0-5
-  theme: number; // 0-5
-  embodiment: number; // 0-5
-}
 
 export interface FixItem {
   id: string;
@@ -467,18 +368,6 @@ export interface FixItem {
   severity: Severity;
   type: 'motivation' | 'competence' | 'scale' | 'resources' | 'memory' | 'ideology' | 'time';
   recommendedApproach: PatchType;
-}
-
-// ============================================================================
-// LOGIC HOLE TYPES
-// ============================================================================
-
-export interface LogicHole {
-  id: string;
-  type: 'motivation' | 'competence' | 'scale' | 'resources' | 'memory' | 'ideology' | 'time';
-  description: string;
-  severity: Severity;
-  suggestedFix: string;
 }
 
 // ============================================================================
@@ -505,94 +394,6 @@ export interface AuditReport {
   finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null;
   scores: Record<string, number>;
   generatedAt: string;
-}
-
-export interface AuditJSONOutput {
-  audit_meta: {
-    mode: AuditMode;
-    media_type: MediaType;
-    applicable_items: number;
-  };
-  author_profile: {
-    type: AuthorProfileType;
-    percentage: number;
-    confidence: 'high' | 'medium' | 'low';
-  };
-  skeleton: {
-    thematic_law: string | null;
-    root_trauma: string | null;
-    hamartia: string | null;
-    dominant_grief_stage: GriefStage | null;
-  };
-  gate_results: {
-    L1_score: string;
-    L1_passed: boolean;
-    L2_score: string;
-    L2_passed: boolean;
-    L3_score: string;
-    L3_passed: boolean;
-    L4_score: string;
-    L4_passed: boolean;
-  };
-  overall_score: {
-    checklist: string;
-    percentage: string;
-    classification: 'cult_masterpiece' | 'powerful' | 'living_weak_soul' | 'decoration';
-  };
-  critical_issues: Array<{
-    id: string;
-    level: AuditLevel;
-    severity: Severity;
-    narrative_justification: string;
-  }>;
-  priority_actions: [string, string, string];
-}
-
-// ============================================================================
-// FULL OUTPUT SCHEMA
-// ============================================================================
-
-export interface FullAuditOutput {
-  audit_meta: {
-    protocol_version: string;
-    audit_mode: AuditMode;
-    media_type: MediaType;
-    author_profile: {
-      type: AuthorProfileType;
-      priority_override: string[];
-    };
-  };
-  gating: {
-    L1?: GateResult;
-    L2?: GateResult;
-    L3?: GateResult;
-    L4?: GateResult;
-  };
-  skeleton: Skeleton;
-  grief_architecture: {
-    dominant_stage: string;
-    validation: GriefValidationResult;
-    stages: GriefStagePresence[];
-  };
-  cult_potential: CultEvaluationResult;
-  issues: Issue[];
-  generative_output: GenerativeOutput;
-  protocol_limitations: string[];
-  author_questions: string[];
-  comparative: ComparativeResult[];
-  final_score: {
-    total: string;
-    percentage: number;
-    by_level: Record<AuditLevel, number>;
-  };
-  next_actions: NextAction[];
-}
-
-export interface ComparativeResult {
-  reference: string;
-  concept_stronger_in: string[];
-  concept_weaker_in: string[];
-  evidence: string;
 }
 
 export interface NextAction {
@@ -692,85 +493,9 @@ export interface VitalityCriteria {
   passed: boolean | null;
 }
 
-// ============================================================================
-// VALIDATION TYPES
-// ============================================================================
-
-export interface ValidationRule {
-  field: string;
-  required: boolean;
-  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  minLength?: number;
-  maxLength?: number;
-  minValue?: number;
-  maxValue?: number;
-  pattern?: RegExp;
-  customValidator?: (value: unknown) => boolean;
-  errorMessage?: string;
-}
-
 // StepValidationResult is defined in audit-step.ts (canonical location).
 // It is re-exported from here for backward compatibility with existing imports.
 export type { StepValidationResult } from './audit-step';
-
-// Full input validation result with typed errors/warnings
-export interface InputValidationResult {
-  valid: boolean;
-  errors: ValidationError[];
-  warnings: ValidationWarning[];
-  normalizedInput?: Record<string, unknown>;
-}
-
-export interface ValidationError {
-  field: string;
-  message: string;
-  code: string;
-  severity: 'error';
-}
-
-export interface ValidationWarning {
-  field: string;
-  message: string;
-  code: string;
-  severity: 'warning';
-}
-
-// ============================================================================
-// DIAGNOSTIC TYPES
-// ============================================================================
-
-export interface DiagnosticResult {
-  protocolHealth: 'healthy' | 'degraded' | 'critical';
-  issues: DiagnosticIssue[];
-  recommendations: string[];
-  metrics: {
-    gatesPassed: number;
-    gatesTotal: number;
-    issuesFound: number;
-    criticalIssues: number;
-  };
-}
-
-export interface DiagnosticIssue {
-  id: string;
-  type: 'logic' | 'schema' | 'integration' | 'performance';
-  severity: Severity;
-  description: string;
-  location: string;
-  suggestedFix: string;
-}
-
-// ============================================================================
-// PROTOCOL LIMITATION TYPES
-// ============================================================================
-
-export interface ProtocolLimitation {
-  id: string;
-  type: 'structural' | 'conceptual' | 'scope';
-  description: string;
-  impact: 'low' | 'medium' | 'high';
-  mitigation?: string;
-}
 
 // ============================================================================
 // SCREENING RECOMMENDATION TYPE

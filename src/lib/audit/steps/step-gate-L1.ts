@@ -152,6 +152,11 @@ export const stepGateL1: AuditStep<GateL1Output> = {
       breakdown[e.id] = e.status;
     }
 
+    const applicableItems = output.evaluations.length;
+    const passedItems = output.evaluations.filter(e => e.status === 'PASS').length;
+    const failedItems = output.evaluations.filter(e => e.status === 'FAIL').length;
+    const insufficientDataItems = output.evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length;
+
     const gateResult: GateResult = {
       gateId: 'GATE-L1',
       gateName: 'Гейт L1: Механизм',
@@ -163,6 +168,10 @@ export const stepGateL1: AuditStep<GateL1Output> = {
       fixes: output.fixList.map(f => f.description),
       metadata: { breakdown, level: 'L1' },
       level: 'L1',
+      applicableItems,
+      passedItems,
+      failedItems,
+      insufficientDataItems,
       fixList: output.fixList.map(f => ({
         id: f.id,
         description: f.description,

@@ -230,6 +230,10 @@ export const stepGateL3: AuditStep<GateL3Output> = {
           ? [`Гейт L3: балл ${output.score}% ниже порога ${threshold}%`]
           : [],
       metadata: { breakdown, level: 'L3' }, level: 'L3',
+      applicableItems: output.evaluations.length,
+      passedItems: output.evaluations.filter(e => e.status === 'PASS').length,
+      failedItems: output.evaluations.filter(e => e.status === 'FAIL').length,
+      insufficientDataItems: output.evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length,
     };
 
     return {

@@ -21,7 +21,7 @@ import {
   Circle,
   ChevronRight,
 } from 'lucide-react';
-import type { ChecklistItem, ChecklistItemStatus, AuditLevel } from '@/lib/audit/types';
+import type { ChecklistItem, ChecklistItemStatus } from '@/lib/audit/types';
 import { getGateThreshold } from '@/lib/audit/types';
 import { MASTER_CHECKLIST } from '@/lib/audit/protocol-data';
 import { t } from '@/lib/i18n/ru';

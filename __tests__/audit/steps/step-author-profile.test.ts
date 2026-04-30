@@ -260,7 +260,7 @@ describe('stepAuthorProfile (Step 2: Author Profile)', () => {
       expect(newState.authorProfile!.auditPriorities).toContain('Приоритет 1');
     });
 
-    test('Includes legacy field aliases', () => {
+    test('Maps mainRisks and auditPriorities correctly', () => {
       const state = createMockState();
       const output = stepAuthorProfile.parseResponse(
         JSON.stringify({
@@ -274,8 +274,8 @@ describe('stepAuthorProfile (Step 2: Author Profile)', () => {
         })
       );
       const newState = stepAuthorProfile.reduce(state, output);
-      expect(newState.authorProfile!.risk_flags).toEqual(['Risk']);
-      expect(newState.authorProfile!.priority_array).toEqual(['Priority']);
+      expect(newState.authorProfile!.mainRisks).toEqual(['Risk']);
+      expect(newState.authorProfile!.auditPriorities).toEqual(['Priority']);
     });
 
     test('Preserves other state fields', () => {

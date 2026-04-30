@@ -111,8 +111,6 @@ export const stepAuthorProfile: AuditStep<AuthorProfileOutput> = {
       confidence: output.confidence,
       mainRisks: output.mainRisks,
       auditPriorities: output.auditPriorities,
-      risk_flags: output.mainRisks,
-      priority_array: output.auditPriorities,
     };
 
     return {

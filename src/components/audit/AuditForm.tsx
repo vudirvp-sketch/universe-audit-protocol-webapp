@@ -47,7 +47,6 @@ export function AuditForm() {
     isLoading,
   } = useAuditState();
 
-  const [showAuthorQuiz, setShowAuthorQuiz] = React.useState(false);
   const [authorQuizExpanded, setAuthorQuizExpanded] = React.useState(false);
 
   // Debounce text input to avoid excessive Zustand writes on every keystroke

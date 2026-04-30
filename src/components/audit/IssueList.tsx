@@ -4,7 +4,7 @@ import * as React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AlertTriangle, AlertCircle, Info, Wrench, CheckCircle2 } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle2 } from 'lucide-react';
 import type { Issue, Severity, PatchType } from '@/lib/audit/types';
 import { t } from '@/lib/i18n/ru';
 
