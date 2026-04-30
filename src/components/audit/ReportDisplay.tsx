@@ -115,9 +115,141 @@ function HumanReadableReport({
   classification: string;
   percentage: number;
 }) {
+  const [copied, setCopied] = React.useState(false);
+  const [promptCopied, setPromptCopied] = React.useState(false);
+
+  // Generate markdown text from the report for download/copy
+  const generateMarkdown = React.useCallback(() => {
+    const lines: string[] = [];
+    lines.push(`# ${t.report.title}`);
+    lines.push(`${t.report.protocolVersion}\n`);
+
+    if (report.auditMode) {
+      lines.push(`## ${t.report.auditMode}`);
+      lines.push(report.auditMode.toUpperCase() + '\n');
+    }
+
+    if (report.authorProfile) {
+      lines.push(`## ${t.report.authorProfile}`);
+      lines.push(`- **${t.report.confidenceLabel}**: ${report.authorProfile.confidence}`);
+      lines.push(`- **%**: ${report.authorProfile.percentage}%`);
+      if (report.authorProfile.mainRisks.length > 0) {
+        lines.push(`- **${t.report.mainRisks}** ${report.authorProfile.mainRisks.join(', ')}`);
+      }
+      lines.push('');
+    }
+
+    if (report.skeleton) {
+      lines.push(`## ${t.report.skeleton}`);
+      lines.push(`**${report.skeleton.status}**\n`);
+      for (const el of report.skeleton.elements) {
+        lines.push(`- **${el.name}**: ${el.value || t.report.notExtracted}`);
+      }
+      lines.push('');
+    }
+
+    if (report.screeningResult) {
+      lines.push(`## ${t.report.screening}`);
+      lines.push(`**${report.screeningResult.recommendation}**\n`);
+      lines.push('');
+    }
+
+    lines.push(`## ${t.report.gateResults}`);
+    for (const level of ['L1', 'L2', 'L3', 'L4'] as const) {
+      const gate = report.gateResults[level];
+      lines.push(`- **${level}**: ${gate?.score || 0}% ${gate?.passed ? '✅' : '❌'}`);
+    }
+    lines.push('');
+
+    if (report.issues.length > 0) {
+      lines.push(`## ${t.report.criticalHoles} (${report.issues.length})`);
+      for (const issue of report.issues) {
+        lines.push(`- [${issue.id}] **${issue.severity}**: ${issue.diagnosis}`);
+      }
+      lines.push('');
+    }
+
+    if (report.finalScore) {
+      lines.push(`## ${t.report.finalScore}`);
+      lines.push(`**${report.finalScore.total}** (${percentage}%)`);
+      lines.push(`**${CLASSIFICATION_LABELS[classification] || classification}**`);
+    }
+
+    return lines.join('\n');
+  }, [report, classification, percentage]);
+
+  const handleDownloadMarkdown = () => {
+    const md = generateMarkdown();
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'audit-report.md';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCopyMarkdown = async () => {
+    const md = generateMarkdown();
+    await navigator.clipboard.writeText(md);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyPrompt = async () => {
+    // Build the final prompt that the user can paste into an LLM chat to continue
+    const promptParts: string[] = [];
+    promptParts.push('Продолжи аудит следующего концепта:\n');
+    if (report.skeleton) {
+      promptParts.push('## Скелет:');
+      for (const el of report.skeleton.elements) {
+        promptParts.push(`- ${el.name}: ${el.value || 'не извлечено'}`);
+      }
+      promptParts.push('');
+    }
+    for (const level of ['L1', 'L2', 'L3', 'L4'] as const) {
+      const gate = report.gateResults[level];
+      if (gate) {
+        promptParts.push(`## ${level}: ${gate.score}% ${gate.passed ? 'ПРОЙДЕН' : 'НЕ ПРОЙДЕН'}`);
+        for (const c of gate.conditions.filter(c => !c.passed)) {
+          promptParts.push(`- ❌ ${c.id}: ${c.message || ''}`);
+        }
+        promptParts.push('');
+      }
+    }
+    if (report.issues.length > 0) {
+      promptParts.push('## Проблемы:');
+      for (const issue of report.issues) {
+        promptParts.push(`- [${issue.id}] ${issue.severity}: ${issue.diagnosis}`);
+      }
+    }
+
+    await navigator.clipboard.writeText(promptParts.join('\n'));
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 2000);
+  };
+
   return (
     <ScrollArea className="h-[600px] pr-4">
       <div className="space-y-6">
+        {/* Action buttons — plan Section 3.4 */}
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={handleCopyMarkdown}>
+            {copied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+            {copied ? t.report.copied : t.report.copy}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadMarkdown}>
+            <Download className="h-4 w-4 mr-2" />
+            {t.report.downloadMarkdown}
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleCopyPrompt} title={t.report.copyPromptHint}>
+            {promptCopied ? <Check className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
+            {promptCopied ? t.report.copied : t.report.copyPrompt}
+          </Button>
+        </div>
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

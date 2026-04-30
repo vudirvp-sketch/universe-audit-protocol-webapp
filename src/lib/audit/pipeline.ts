@@ -311,6 +311,7 @@ export async function resumeAuditFromStep(
   llmClientOrConfig: LLMClient | { provider: LLMProvider; apiKey: string; model?: string | null; proxyUrl?: string },
   onProgress?: (phase: AuditPhase, state: PipelineState) => void,
   abortSignal?: AbortSignal,
+  rpmLimit?: number,
 ): Promise<PipelineState> {
   const overallStart = Date.now();
 
@@ -362,8 +363,8 @@ export async function resumeAuditFromStep(
     return { ...savedState, error: `Невозможно возобновить: шаг "${fromStep}" не найден в конвейере.` };
   }
 
-  // Rate limiting: use the shared rate limiter factory
-  const { enforce: enforceRateLimitResume } = createRateLimiter(10);
+  // Rate limiting: use the shared rate limiter factory with the provided rpmLimit
+  const { enforce: enforceRateLimitResume } = createRateLimiter(rpmLimit || 10);
 
   // Execute steps from the resume point onward
   for (let i = resumeIndex; i < stepOrder.length; i++) {

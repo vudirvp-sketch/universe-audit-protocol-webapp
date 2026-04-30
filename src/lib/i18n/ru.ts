@@ -242,6 +242,10 @@ export const t = {
     proxyUrl: 'URL Прокси',
     proxyUrlHint:
       'URL вашего Cloudflare Worker CORS-прокси. Развёртывается из директории worker/',
+    proxyUrlPlaceholder: 'URL прокси ещё не настроен! Замените <your-subdomain> на ваш реальный поддомен Cloudflare Workers.',
+    rpmLimit: 'Лимит запросов/мин',
+    rpmLimitHint: 'Максимальное количество запросов к API в минуту. Автозаполняется по провайдеру, но можно изменить.',
+    rpmLimitLabel: 'Лимит: {rpm} запросов/мин',
     testConnection: 'Проверить подключение',
     testing: 'Проверяем...',
     testSuccess: 'Подключение успешно!',
@@ -580,6 +584,9 @@ export const t = {
     copy: 'Копировать',
     copied: 'Скопировано!',
     downloadJson: 'Скачать JSON',
+    downloadMarkdown: 'Скачать Markdown',
+    copyPrompt: 'Скопировать промпт',
+    copyPromptHint: 'Скопируйте итоговый промпт для продолжения в чате с LLM',
   },
 
   // Home page description — referenced in page.tsx as t.homeDescription

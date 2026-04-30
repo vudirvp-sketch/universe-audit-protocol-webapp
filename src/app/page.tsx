@@ -214,7 +214,6 @@ export default function Home() {
         setPhase('cancelled');
         setError(null);
       } else {
-        console.error('Ошибка аудита:', err);
         setError(err instanceof Error ? err.message : t.errors.unknown);
         setPhase('failed');
       }
@@ -302,6 +301,7 @@ export default function Home() {
           if (state.stepTimings && Object.keys(state.stepTimings).length > 0) setStepTimings(state.stepTimings);
         },
         controller.signal,
+        rpmLimit,
       );
 
       // Update with final results
@@ -334,7 +334,6 @@ export default function Home() {
         setPhase('cancelled');
         setError(null);
       } else {
-        console.error('Resume error:', err);
         setError(err instanceof Error ? err.message : t.errors.unknown);
         setPhase('failed');
       }

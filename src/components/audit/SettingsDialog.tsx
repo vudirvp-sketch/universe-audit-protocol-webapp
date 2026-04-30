@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, Server, XCircle } from 'lucide-react';
-import { useSettings } from '@/hooks/useSettings';
+import { useSettings, isProxyUrlPlaceholder } from '@/hooks/useSettings';
 import {
   LLM_PROVIDERS,
   AVAILABLE_PROVIDERS,
@@ -36,11 +36,12 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
-  const { provider, apiKey, model, proxyUrl, isLoaded, setProvider, setApiKey, setModel, setProxyUrl, loadSettings, clearSettings } = useSettings();
+  const { provider, apiKey, model, proxyUrl, rpmLimit, isLoaded, setProvider, setApiKey, setModel, setProxyUrl, setRpmLimit, loadSettings, clearSettings } = useSettings();
   const [open, setOpen] = React.useState(false);
   const [inputKey, setInputKey] = React.useState('');
   const [inputModel, setInputModel] = React.useState('');
   const [inputProxyUrl, setInputProxyUrl] = React.useState('');
+  const [inputRpmLimit, setInputRpmLimit] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [testConnection, setTestConnection] = React.useState<{ loading: boolean; success: boolean; error: string | null }>({
@@ -62,6 +63,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setInputKey(apiKey || '');
       setInputModel(model || '');
       setInputProxyUrl(proxyUrl || '');
+      setInputRpmLimit(String(rpmLimit));
       setSaved(false);
     }
   }, [open, apiKey, model, proxyUrl]);
@@ -102,6 +104,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setProxyUrl(trimmedProxyUrl);
     }
 
+    const parsedRpm = parseInt(inputRpmLimit, 10);
+    if (!isNaN(parsedRpm) && parsedRpm > 0) {
+      setRpmLimit(parsedRpm);
+    }
+
     onSettingsChange?.({
       provider,
       apiKey: trimmedKey || null,
@@ -116,6 +123,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     setInputKey('');
     setInputModel('');
     setInputProxyUrl('');
+    setInputRpmLimit('');
     clearSettings();
     onSettingsChange?.({ provider: 'zai', apiKey: null, model: null });
     setSaved(false);
@@ -272,6 +280,33 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             />
             <p className="text-xs text-muted-foreground">
               {t.settings.proxyUrlHint}
+            </p>
+            {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
+              <Alert className="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900">
+                <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-xs">
+                  {t.settings.proxyUrlPlaceholder}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          {/* RPM Limit — plan Section 3.6 / Finding 17 */}
+          <div className="space-y-2">
+            <Label htmlFor="rpm-limit" className="flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              {t.settings.rpmLimit}
+            </Label>
+            <Input
+              id="rpm-limit"
+              type="number"
+              min={1}
+              max={120}
+              placeholder={String(rpmLimit || 10)}
+              value={inputRpmLimit}
+              onChange={(e) => setInputRpmLimit(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t.settings.rpmLimitHint}
             </p>
           </div>
 
