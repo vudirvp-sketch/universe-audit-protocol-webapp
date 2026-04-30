@@ -24,22 +24,22 @@ interface PhaseInfo {
 }
 
 const PHASES: PhaseInfo[] = [
-  { id: 'idle', name: 'Готов', description: 'Введите нарратив для начала' },
-  { id: 'input_validation', name: 'Валидация', description: 'Проверка ввода' },
-  { id: 'mode_detection', name: 'Определение режима', description: 'Определение режима аудита' },
-  { id: 'author_profile', name: 'Профиль автора', description: 'Анализ профиля автора' },
-  { id: 'skeleton_extraction', name: 'Скелет', description: 'Извлечение скелета нарратива' },
-  { id: 'screening', name: 'Скрининг', description: 'Быстрый 7-вопросный скрининг' },
-  { id: 'L1_evaluation', name: 'L1: Механизм', description: 'Проверка системной связности' },
-  { id: 'L2_evaluation', name: 'L2: Тело', description: 'Воплощённость и последствия' },
-  { id: 'L3_evaluation', name: 'L3: Психика', description: 'Проверка психологической глубины' },
-  { id: 'L4_evaluation', name: 'L4: Мета', description: 'Мета-нарративный уровень' },
-  { id: 'issue_generation', name: 'Проблемы', description: 'Генерация проблем и цепочек' },
-  { id: 'generative_modules', name: 'Генерация', description: 'Генеративные модули' },
-  { id: 'final_output', name: 'Итог', description: 'Финальная диагностика' },
-  { id: 'complete', name: 'Завершено', description: 'Аудит завершён' },
-  { id: 'failed', name: 'Ошибка', description: 'Гейт не пройден — требуется исправление' },
-  { id: 'blocked', name: 'Заблокировано', description: 'Аудит остановлен' },
+  { id: 'idle', name: t.phases.idle, description: t.phaseDescriptions.idle },
+  { id: 'input_validation', name: t.phases.input_validation, description: t.phaseDescriptions.input_validation },
+  { id: 'mode_detection', name: t.phases.mode_detection, description: t.phaseDescriptions.mode_detection },
+  { id: 'author_profile', name: t.phases.author_profile, description: t.phaseDescriptions.author_profile },
+  { id: 'skeleton_extraction', name: t.phases.skeleton_extraction, description: t.phaseDescriptions.skeleton_extraction },
+  { id: 'screening', name: t.phases.screening, description: t.phaseDescriptions.screening },
+  { id: 'L1_evaluation', name: t.phases.L1_evaluation, description: t.phaseDescriptions.L1_evaluation },
+  { id: 'L2_evaluation', name: t.phases.L2_evaluation, description: t.phaseDescriptions.L2_evaluation },
+  { id: 'L3_evaluation', name: t.phases.L3_evaluation, description: t.phaseDescriptions.L3_evaluation },
+  { id: 'L4_evaluation', name: t.phases.L4_evaluation, description: t.phaseDescriptions.L4_evaluation },
+  { id: 'issue_generation', name: t.phases.issue_generation, description: t.phaseDescriptions.issue_generation },
+  { id: 'generative_modules', name: t.phases.generative_modules, description: t.phaseDescriptions.generative_modules },
+  { id: 'final_output', name: t.phases.final_output, description: t.phaseDescriptions.final_output },
+  { id: 'complete', name: t.phases.complete, description: t.phaseDescriptions.complete },
+  { id: 'failed', name: t.phases.failed, description: t.phaseDescriptions.failed },
+  { id: 'blocked', name: t.phases.blocked, description: t.phaseDescriptions.blocked },
 ];
 
 export function AuditProgress() {

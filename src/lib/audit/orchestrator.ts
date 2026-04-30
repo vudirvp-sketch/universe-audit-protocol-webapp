@@ -445,6 +445,11 @@ function mapToChainResult(wfcr: WhatForChainResult): ChainResult {
 }
 
 function performScreening(concept: string): ScreeningResult {
+  // [Section 0.6] Screening uses count-based logic from protocol v10.0.
+  // The LLM answers 7 screening questions (in Russian).
+  // The code then: (1) counts NO answers deterministically,
+  // (2) applies count→recommendation mapping, (3) code's count wins over LLM opinion.
+  //
   // PHASE_2_TODO: Replace keyword matching with LLM-based screening.
   // Current implementation uses Russian keywords per Language Contract (Finding 1):
   // English keyword matching (includes('theme'), includes('character')) is FORBIDDEN.
@@ -452,36 +457,78 @@ function performScreening(concept: string): ScreeningResult {
   let no_count = 0;
   const flags: string[] = [];
 
-  // Check for key structural elements using Russian keywords
-  // (user narrative is in Russian per Language Contract)
+  // Q1: Does the narrative have a thematic law?
   const q1 = lowerConcept.includes('закон') || lowerConcept.includes('правило') || lowerConcept.includes('тематическ');
   if (!q1) {
     no_count++;
     flags.push('§0: Тематический закон не обнаружен');
   }
 
-  const q3 = lowerConcept.includes('персонаж') || lowerConcept.includes('герой') || lowerConcept.includes('протагонист');
-  if (!q3) {
+  // Q2: Is there a world that exists independent of the protagonist?
+  const q2 = lowerConcept.includes('мир') || lowerConcept.includes('обществ') || lowerConcept.includes('цивилизац') || lowerConcept.includes('город') || lowerConcept.includes('королевств') || lowerConcept.includes('государств');
+  if (!q2) {
     no_count++;
-    flags.push('§3: Нет явного протагониста');
+    flags.push('§1: Мир без протагониста не описан');
   }
 
-  const q6 = lowerConcept.includes('конфликт') || lowerConcept.includes('борьба') || lowerConcept.includes('противост');
+  // Q3: Is the thematic law embodied in the world's mechanics/systems?
+  const q3 = lowerConcept.includes('механик') || lowerConcept.includes('систем') || lowerConcept.includes('физик') || lowerConcept.includes('устройств') || lowerConcept.includes('правило мира') || lowerConcept.includes('работает');
+  if (!q3) {
+    no_count++;
+    flags.push('§2: Воплощённость тематического закона в механике мира не обнаружена');
+  }
+
+  // Q4: Is there a hamartia (fatal flaw) in the narrative?
+  const q4 = lowerConcept.includes('недостат') || lowerConcept.includes('изъян') || lowerConcept.includes('слабост') || lowerConcept.includes('хамарти') || lowerConcept.includes('роковой') || lowerConcept.includes('порок') || lowerConcept.includes('ошибк');
+  if (!q4) {
+    no_count++;
+    flags.push('§3: Хамартия (роковой недостаток) не обнаружена');
+  }
+
+  // Q5: Is there a painful choice / cornelian dilemma?
+  const q5 = lowerConcept.includes('выбор') || lowerConcept.includes('дилемм') || lowerConcept.includes('решени') || lowerConcept.includes('жертв') || lowerConcept.includes('цена') || lowerConcept.includes('разрыв');
+  if (!q5) {
+    no_count++;
+    flags.push('§4: Болезненный выбор / корнелиева дилемма не обнаружены');
+  }
+
+  // Q6: Does the antagonist have internally consistent logic?
+  const q6 = lowerConcept.includes('конфликт') || lowerConcept.includes('борьба') || lowerConcept.includes('противост') || lowerConcept.includes('антагонист') || lowerConcept.includes('враг') || lowerConcept.includes('противник') || lowerConcept.includes('злодей');
   if (!q6) {
     no_count++;
-    flags.push('§6: Нет явного конфликта');
+    flags.push('§5: Антагонистическая сила с логичной мотивацией не обнаружена');
+  }
+
+  // Q7: Is the ending irreversible (no way back to status quo)?
+  const q7 = lowerConcept.includes('финал') || lowerConcept.includes('конец') || lowerConcept.includes('заверш') || lowerConcept.includes('необратим') || lowerConcept.includes('безвозвратн') || lowerConcept.includes('исход') || lowerConcept.includes('последстви');
+  if (!q7) {
+    no_count++;
+    flags.push('§6: Необратимость финала не подтверждена');
+  }
+
+  // [Section 0.6] Count-based screening recommendation
+  // 0-1 NO answers → ready_for_audit
+  // 2-3 NO answers → requires_sections (full audit but flag weak sections)
+  // 4+ NO answers  → stop_return_to_skeleton
+  let recommendation: ScreeningResult['recommendation'];
+  if (no_count <= 1) {
+    recommendation = 'ready_for_audit';
+  } else if (no_count <= 3) {
+    recommendation = 'requires_sections';
+  } else {
+    recommendation = 'stop_return_to_skeleton';
   }
 
   return {
     question1_thematicLaw: q1,
-    question2_worldWithoutProtagonist: q3,
-    question3_embodiment: false, // PHASE_2_STUB: Requires LLM-based analysis
-    question4_hamartia: false, // PHASE_2_STUB: Requires LLM-based analysis
-    question5_painfulChoice: false, // PHASE_2_STUB: Requires LLM-based analysis
+    question2_worldWithoutProtagonist: q2,
+    question3_embodiment: q3,
+    question4_hamartia: q4,
+    question5_painfulChoice: q5,
     question6_antagonistLogic: q6,
-    question7_finalIrreversible: false, // PHASE_2_STUB: Requires LLM-based analysis
+    question7_finalIrreversible: q7,
     flags,
-    recommendation: no_count >= 4 ? 'stop_return_to_skeleton' : no_count >= 2 ? 'requires_sections' : 'ready_for_audit',
+    recommendation,
     no_count,
     sections_for_deep_audit: flags,
     proceed_normally: no_count < 4

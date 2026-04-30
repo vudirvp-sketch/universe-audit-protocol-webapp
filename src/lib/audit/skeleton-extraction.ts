@@ -265,8 +265,9 @@ function applyWeaknessTest(
 
 function testThematicLaw(value: string, context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Remove theme - breaks physics or only plot?
-  const physicsKeywords = ['physics', 'law', 'rule', 'mechanic', 'system', 'force', 'nature'];
-  const plotOnlyKeywords = ['just happens', 'only affects', 'only in', 'just a', 'merely'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const physicsKeywords = ['физик', 'закон', 'правило', 'механик', 'систем', 'сил', 'природ', 'мироустройств', 'основополож'];
+  const plotOnlyKeywords = ['только сюжет', 'только истори', 'только на сюжет', 'просто случ', 'исключительн', 'лишь'];
   
   const hasPhysicsIntegration = physicsKeywords.some(kw => value.includes(kw));
   const hasPlotOnlyIndicators = plotOnlyKeywords.some(kw => value.includes(kw));
@@ -293,14 +294,15 @@ function testThematicLaw(value: string, context: Record<string, unknown>): { pas
 
 function testRootTrauma(value: string, context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Explains all ideologies?
-  const ideologyKeywords = ['ideology', 'belief', 'philosophy', 'system', 'worldview'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const ideologyKeywords = ['идеолог', 'верован', 'убежден', 'философ', 'мировоззрен', 'систем', 'учен'];
   
   // Check if root trauma connects to ideological system
   const ideologies = context.themes as string[] | undefined;
   const hasIdeologyConnection = ideologies && ideologies.length > 0;
 
   // Check for explanatory power
-  const explanatoryKeywords = ['because', 'explains', 'roots', 'origin', 'source', 'foundation'];
+  const explanatoryKeywords = ['потому что', 'объясня', 'корен', 'происхож', 'источн', 'основа', 'причин', 'ведёт к', 'порожд'];
   const hasExplanatoryPower = explanatoryKeywords.some(kw => value.includes(kw));
 
   if (hasIdeologyConnection && hasExplanatoryPower) {
@@ -316,11 +318,12 @@ function testRootTrauma(value: string, context: Record<string, unknown>): { pass
 
 function testHamartia(value: string, context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Ending follows from trait?
-  const endingKeywords = ['ending', 'conclusion', 'result', 'outcome', 'fate', 'destiny'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const endingKeywords = ['финал', 'конец', 'заверш', 'развязк', 'исход', 'судьб', 'предначертан', 'роков'];
   const hasEndingConnection = endingKeywords.some(kw => value.includes(kw));
 
   // Check for causal chain
-  const causalKeywords = ['leads to', 'causes', 'results in', 'brings about', 'ensures'];
+  const causalKeywords = ['приводит к', 'ведёт к', 'влечёт', 'становит', 'вызыв', 'обусловлен', 'порождает', 'приводит'];
   const hasCausalChain = causalKeywords.some(kw => value.includes(kw));
 
   if (hasEndingConnection || hasCausalChain) {
@@ -332,8 +335,9 @@ function testHamartia(value: string, context: Record<string, unknown>): { passed
 
 function testProtagonist(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Clear desire + obstacle?
-  const desireKeywords = ['wants', 'desires', 'seeks', 'needs', 'goal', 'aim', 'pursues'];
-  const obstacleKeywords = ['but', 'however', 'obstacle', 'prevented', 'blocked', 'opposed', 'against'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const desireKeywords = ['хочет', 'желает', 'ищет', 'нуждается', 'цель', 'стремится', 'добивает', 'мечтает', 'жаждет', 'стремлен'];
+  const obstacleKeywords = ['но ', 'однако', 'препятств', 'мешает', 'блокир', 'противостоит', 'против ', 'встречает', 'мешают', 'стоимость'];
 
   const hasDesire = desireKeywords.some(kw => value.includes(kw));
   const hasObstacle = obstacleKeywords.some(kw => value.includes(kw));
@@ -355,8 +359,9 @@ function testProtagonist(value: string, _context: Record<string, unknown>): { pa
 
 function testAntagonist(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Embodies opposite of protagonist?
-  const oppositeKeywords = ['opposite', 'contrasts', 'mirror', 'reflection', 'antithesis', 'against'];
-  const thematicKeywords = ['theme', 'represents', 'embodies', 'symbolizes', 'stands for'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const oppositeKeywords = ['противополож', 'контраст', 'зеркал', 'отражен', 'антитез', 'против ', 'обратн', 'инверс'];
+  const thematicKeywords = ['тематическ', 'представля', 'воплощает', 'символизир', 'олицетвор', 'выражает', 'отражает'];
 
   const hasOpposite = oppositeKeywords.some(kw => value.includes(kw));
   const hasThematicRole = thematicKeywords.some(kw => value.includes(kw));
@@ -370,8 +375,9 @@ function testAntagonist(value: string, _context: Record<string, unknown>): { pas
 
 function testCentralConflict(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Stakes are world-level?
-  const worldStakesKeywords = ['world', 'society', 'civilization', 'all', 'everyone', 'humanity', 'universe'];
-  const personalStakesKeywords = ['personal', 'individual', 'just', 'only', 'private'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const worldStakesKeywords = ['мир', 'обществ', 'цивилизац', 'всё', 'все', 'человечеств', 'вселенн', 'планет', 'народ', 'государств'];
+  const personalStakesKeywords = ['личн', 'индивидуальн', 'только ', 'исключительн', 'частн', 'один'];
 
   const hasWorldStakes = worldStakesKeywords.some(kw => value.includes(kw));
   const hasOnlyPersonalStakes = personalStakesKeywords.some(kw => value.includes(kw));
@@ -390,8 +396,9 @@ function testCentralConflict(value: string, _context: Record<string, unknown>): 
 
 function testWorldLaw(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Affects economy/physics, not just plot?
-  const worldAffectKeywords = ['economy', 'physics', 'nature', 'society', 'system', 'mechanic', 'rule'];
-  const plotOnlyKeywords = ['just', 'only affects story', 'only in scene'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const worldAffectKeywords = ['экономик', 'физик', 'природ', 'обществ', 'систем', 'механик', 'правило', 'закон', 'мироустройств', 'устройств'];
+  const plotOnlyKeywords = ['только сюжет', 'только сцен', 'только истори', 'просто'];
 
   const hasWorldAffect = worldAffectKeywords.some(kw => value.includes(kw));
   const hasPlotOnly = plotOnlyKeywords.some(kw => value.includes(kw));
@@ -405,8 +412,9 @@ function testWorldLaw(value: string, _context: Record<string, unknown>): { passe
 
 function testEmotionalCore(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
   // Test: Universal emotion + specific manifestation?
-  const universalEmotions = ['love', 'fear', 'grief', 'hope', 'desire', 'loss', 'belonging', 'identity'];
-  const specificIndicators = ['specific', 'particular', 'unique', 'this', 'here', 'now'];
+  // [Finding 7] Russian keywords — user narrative is in Russian per Language Contract
+  const universalEmotions = ['любовь', 'страх', 'горе', 'надежд', 'желани', 'потер', 'принадлеж', 'идентичност', 'тоска', 'одиночеств', 'смысл', 'свобод'];
+  const specificIndicators = ['конкретн', 'определённ', 'уникальн', 'именно', 'здесь', 'сейчас', 'этот', 'особенн', 'специфич'];
 
   const hasUniversal = universalEmotions.some(kw => value.includes(kw));
   const hasSpecific = specificIndicators.some(kw => value.includes(kw));

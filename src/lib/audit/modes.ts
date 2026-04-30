@@ -10,7 +10,9 @@
 // TYPE DEFINITIONS
 // ============================================================================
 
-export type AuditMode = 'conflict' | 'kishō' | 'hybrid';
+// AuditMode is the canonical type from ./types — do not duplicate here
+export type { AuditMode } from './types';
+import type { AuditMode } from './types';
 
 export interface ModeIndicators {
   hasMultipleWorldviews: boolean;
