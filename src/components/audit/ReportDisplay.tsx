@@ -303,7 +303,9 @@ function HumanReadableReport({
                       <Badge variant="outline" className="text-xs font-mono">{issue.id}</Badge>
                       <Badge variant="destructive" className="text-xs">{issue.severity}</Badge>
                     </div>
-                    <p className="text-sm">{issue.diagnosis}</p>
+                    <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                      <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{issue.diagnosis}</ReactMarkdown>
+                    </div>
                   </div>
                 ))}
               </div>

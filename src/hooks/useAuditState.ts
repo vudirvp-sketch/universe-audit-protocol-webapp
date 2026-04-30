@@ -49,6 +49,10 @@ const initialState = {
   finalScore: null as { total: string; percentage: number; by_level: Record<string, number> } | null,
   isLoading: false,
   error: null as string | null,
+  // Timing & resume fields
+  blockedAt: null as string | null,
+  elapsedMs: 0,
+  stepTimings: {} as Partial<Record<import('@/lib/audit/types').AuditPhase, number>>,
 };
 
 const AUDIT_STATE_STORAGE_KEY = 'universe-audit-state';
@@ -121,6 +125,12 @@ export const useAuditState = create<AuditState>()(
   
   setError: (error: string | null) => set({ error }),
   
+  setBlockedAt: (blockedAt: string | null) => set({ blockedAt }),
+  
+  setElapsedMs: (elapsedMs: number) => set({ elapsedMs }),
+  
+  setStepTimings: (stepTimings: Partial<Record<import('@/lib/audit/types').AuditPhase, number>>) => set({ stepTimings }),
+  
   reset: () => {
     set({
       ...initialState,
@@ -150,6 +160,9 @@ export const useAuditState = create<AuditState>()(
         nextActions: state.nextActions,
         finalScore: state.finalScore,
         error: state.error,
+        blockedAt: state.blockedAt,
+        elapsedMs: state.elapsedMs,
+        stepTimings: state.stepTimings,
       }),
     }
   )

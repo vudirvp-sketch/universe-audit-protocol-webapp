@@ -12,6 +12,7 @@
 import { createLLMClient, type LLMClient, type LLMProvider } from '@/lib/llm-client';
 import { runStep, type PipelineRunState } from './audit-step';
 import { getStep, getStepOrder, stepRegistry } from './step-registry';
+import { classifyLLMError } from './error-handler';
 import type {
   AuditPhase,
   MediaType,
@@ -45,6 +46,7 @@ export interface AuditInput {
   apiKey?: string | null;
   model?: string | null;
   proxyUrl?: string;
+  rpmLimit?: number;
 }
 
 export interface PipelineProgress {
@@ -174,6 +176,38 @@ export async function runAuditPipeline(
   let runState: PipelineRunState = createInitialRunState(input);
   const stepOrder = getStepOrder();
 
+  // Rate limiting: track request timestamps to enforce rpmLimit
+  const requestTimestamps: number[] = [];
+  const rpmLimit = input.rpmLimit || 10; // Default 10 RPM
+  const minIntervalMs = Math.ceil(60000 / rpmLimit); // Minimum ms between requests
+
+  /**
+   * Enforce rate limit by sleeping if the last request was too recent.
+   * Removes timestamps older than 60 seconds, then checks if we need to wait.
+   */
+  async function enforceRateLimit(): Promise<void> {
+    const now = Date.now();
+    // Prune timestamps older than 60 seconds
+    while (requestTimestamps.length > 0 && now - requestTimestamps[0] > 60000) {
+      requestTimestamps.shift();
+    }
+    // If we've hit the RPM limit, wait until the oldest request expires
+    if (requestTimestamps.length >= rpmLimit) {
+      const waitMs = 60000 - (now - requestTimestamps[0]) + 100; // +100ms buffer
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    } else if (requestTimestamps.length > 0) {
+      // Ensure minimum interval between requests
+      const lastRequest = requestTimestamps[requestTimestamps.length - 1];
+      const elapsed = now - lastRequest;
+      if (elapsed < minIntervalMs) {
+        await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
+      }
+    }
+    requestTimestamps.push(Date.now());
+  }
+
   // Notify: starting
   onProgress?.('input_validation', mapToPipelineState(runState));
 
@@ -195,6 +229,11 @@ export async function runAuditPipeline(
     const stepStart = Date.now();
 
     try {
+      // Enforce rate limit before LLM-calling steps
+      if (!step.skipLLM) {
+        await enforceRateLimit();
+      }
+
       // Execute the step via AuditStepRunner
       runState = await runStep(step, runState, llmClient, (p) => {
         onProgress?.(p, mapToPipelineState(runState));
@@ -216,12 +255,13 @@ export async function runAuditPipeline(
         break;
       }
     } catch (error) {
-      // AuditStepError or unexpected error — mark as failed
-      const message = error instanceof Error ? error.message : String(error);
+      // AuditStepError or unexpected error — classify and mark as failed
+      const classified = classifyLLMError(error);
+      const message = error instanceof Error ? error.message : classified.userMessage;
       runState = {
         ...runState,
         phase: 'failed',
-        error: message,
+        error: classified.type !== 'provider' ? classified.userMessage : message,
         elapsedMs: Date.now() - overallStart,
         stepTimings: { ...runState.stepTimings, [phase]: Date.now() - stepStart },
       };
@@ -237,6 +277,130 @@ export async function runAuditPipeline(
   // Final progress callback
   onProgress?.(runState.phase, mapToPipelineState(runState));
 
+  return mapToPipelineState(runState);
+}
+
+/**
+ * Resume the audit pipeline from a specific step.
+ *
+ * This is used when the pipeline was blocked at a gate and the user
+ * wants to re-run starting from the failed step, keeping all previously
+ * completed step results intact.
+ *
+ * @param savedState - The PipelineState from the blocked/failed run
+ * @param fromStep - The AuditPhase to resume from
+ * @param llmClientOrConfig - LLM client or config to create one
+ * @param onProgress - Callback for per-step progress updates
+ * @param abortSignal - Optional AbortSignal for cancelling
+ * @returns The final pipeline state after resuming
+ */
+export async function resumeAuditFromStep(
+  savedState: PipelineState,
+  fromStep: AuditPhase,
+  llmClientOrConfig: LLMClient | { provider: LLMProvider; apiKey: string; model?: string | null; proxyUrl?: string },
+  onProgress?: (phase: AuditPhase, state: PipelineState) => void,
+  abortSignal?: AbortSignal,
+): Promise<PipelineState> {
+  const overallStart = Date.now();
+
+  if (abortSignal?.aborted) {
+    return { ...createEmptyPipelineState(), phase: 'cancelled', elapsedMs: 0 };
+  }
+
+  // Create or reuse LLM client
+  let llmClient: LLMClient;
+  if ('chatCompletion' in llmClientOrConfig) {
+    llmClient = llmClientOrConfig;
+  } else {
+    const config = llmClientOrConfig;
+    llmClient = createLLMClient({
+      provider: config.provider,
+      apiKey: config.apiKey,
+      model: config.model || undefined,
+      proxyUrl: config.proxyUrl,
+    });
+  }
+
+  // Reconstruct PipelineRunState from the saved PipelineState
+  let runState: PipelineRunState = {
+    phase: savedState.phase,
+    inputText: '', // Will be set from the saved narrative — not stored in PipelineState
+    mediaType: (savedState.gateResults.L1?.metadata?.mediaType as MediaType | undefined) ?? 'novel',
+    auditMode: savedState.auditMode,
+    authorProfile: savedState.authorProfile,
+    skeleton: savedState.skeleton,
+    screeningResult: savedState.screeningResult,
+    gateResults: savedState.gateResults,
+    griefMatrix: savedState.griefMatrix,
+    issues: savedState.issues,
+    whatForChains: savedState.whatForChains,
+    generativeOutput: savedState.generativeOutput,
+    nextActions: savedState.nextActions,
+    finalScore: savedState.finalScore,
+    error: null,
+    blockedAt: null,
+    elapsedMs: 0, // Reset elapsed for the resume portion
+    stepTimings: { ...savedState.stepTimings },
+  };
+
+  const stepOrder = getStepOrder();
+  const resumeIndex = stepOrder.indexOf(fromStep);
+  if (resumeIndex < 0) {
+    return { ...savedState, error: `Невозможно возобновить: шаг "${fromStep}" не найден в конвейере.` };
+  }
+
+  // Execute steps from the resume point onward
+  for (let i = resumeIndex; i < stepOrder.length; i++) {
+    const phase = stepOrder[i];
+
+    if (abortSignal?.aborted) {
+      runState = { ...runState, phase: 'cancelled' };
+      break;
+    }
+
+    if (!stepRegistry.hasStep(phase)) {
+      continue;
+    }
+
+    const step = getStep(phase);
+    const stepStart = Date.now();
+
+    try {
+      runState = await runStep(step, runState, llmClient, (p) => {
+        onProgress?.(p, mapToPipelineState(runState));
+      });
+
+      const stepElapsed = Date.now() - stepStart;
+      runState = {
+        ...runState,
+        elapsedMs: Date.now() - overallStart,
+        stepTimings: { ...runState.stepTimings, [phase]: stepElapsed },
+      };
+
+      onProgress?.(runState.phase, mapToPipelineState(runState));
+
+      if (runState.phase === 'blocked') {
+        break;
+      }
+    } catch (error) {
+      const classified = classifyLLMError(error);
+      const message = classified.userMessage;
+      runState = {
+        ...runState,
+        phase: 'failed',
+        error: message,
+        elapsedMs: Date.now() - overallStart,
+        stepTimings: { ...runState.stepTimings, [phase]: Date.now() - stepStart },
+      };
+      break;
+    }
+  }
+
+  if (runState.phase !== 'blocked' && runState.phase !== 'failed' && runState.phase !== 'cancelled') {
+    runState = { ...runState, phase: 'complete' };
+  }
+
+  onProgress?.(runState.phase, mapToPipelineState(runState));
   return mapToPipelineState(runState);
 }
 

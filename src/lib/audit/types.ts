@@ -631,7 +631,11 @@ export interface AuditState {
   finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null;
   isLoading: boolean;
   error: string | null;
-  
+  // Timing & resume fields
+  blockedAt: string | null;
+  elapsedMs: number;
+  stepTimings: Partial<Record<AuditPhase, number>>;
+
   // Actions
   setPhase: (phase: AuditPhase) => void;
   setInputText: (text: string) => void;
@@ -655,6 +659,9 @@ export interface AuditState {
   setFinalScore: (score: { total: string; percentage: number; by_level: Record<string, number> } | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setBlockedAt: (blockedAt: string | null) => void;
+  setElapsedMs: (ms: number) => void;
+  setStepTimings: (timings: Partial<Record<AuditPhase, number>>) => void;
   reset: () => void;
 }
 

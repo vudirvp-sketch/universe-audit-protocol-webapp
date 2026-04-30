@@ -28,6 +28,7 @@ import type {
 } from './types';
 
 import type { ChatMessage } from '@/lib/llm-client';
+import { classifyLLMError } from './error-handler';
 
 // ---------------------------------------------------------------------------
 // LLMClient — inferred from the factory to avoid coupling to internals
@@ -333,26 +334,43 @@ export async function runStep<TOutput = unknown>(
         throw error;
       }
 
-      // Wrap unexpected errors — network failures etc. are handled by the
-      // error-handler module upstream; here we just ensure the retry loop
-      // can continue if there are attempts left.
-      if (attempt >= step.maxRetries) {
+      // Classify the error for better user messaging and retry decisions
+      const classified = classifyLLMError(error);
+
+      // Non-retryable errors (auth, CORS, etc.) — fail immediately
+      if (!classified.retryable) {
         throw new AuditStepError(
           step.id,
           attempt + 1,
-          `Шаг ${step.id}: необработанная ошибка — ${error instanceof Error ? error.message : String(error)}`,
+          classified.userMessage,
           error,
         );
       }
 
-      // Retry on transient errors — append a generic retry prompt
+      // Retryable errors — if retries exhausted, throw
+      if (attempt >= step.maxRetries) {
+        throw new AuditStepError(
+          step.id,
+          attempt + 1,
+          classified.userMessage,
+          error,
+        );
+      }
+
+      // Retry on transient errors — append a contextual retry prompt
+      const retryPrompt = classified.type === 'rate_limit'
+        ? 'Сервер перегружен. Подождите немного и повторите ответ в формате валидного JSON.'
+        : classified.type === 'timeout'
+          ? 'Ответ занял слишком много времени. Пожалуйста, ответьте более кратко в формате валидного JSON.'
+          : classified.type === 'invalid_json'
+            ? 'Ваш ответ не был валидным JSON. Пожалуйста, ответьте строго в формате валидного JSON.'
+            : 'Произошла ошибка при обработке предыдущего ответа. Пожалуйста, повторите ответ в формате валидного JSON.';
+
       accumulatedMessages = [
         ...accumulatedMessages,
         {
           role: 'user',
-          content:
-            'Произошла ошибка при обработке предыдущего ответа. ' +
-            'Пожалуйста, повторите ответ в формате валидного JSON.',
+          content: retryPrompt,
         },
       ];
     }

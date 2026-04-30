@@ -48,8 +48,36 @@ export function AuditProgress() {
   const overallProgress = useAuditState(selectOverallProgress);
   const isLoading = useAuditState((state) => state.isLoading);
   const error = useAuditState((state) => state.error);
+  const elapsedMs = useAuditState((state) => state.elapsedMs);
+  const stepTimings = useAuditState((state) => state.stepTimings);
+
+  // Live timer for current step
+  const [liveElapsed, setLiveElapsed] = React.useState(0);
+  React.useEffect(() => {
+    if (!isLoading) {
+      setLiveElapsed(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setLiveElapsed((prev) => prev + 1000);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isLoading]);
 
   const currentPhaseIndex = PHASES.findIndex((p) => p.id === phase);
+
+  // Calculate total elapsed (from stepTimings + live)
+  const totalElapsed = elapsedMs || Object.values(stepTimings).reduce((sum, ms) => sum + (ms || 0), 0) + liveElapsed;
+
+  // Estimate remaining time based on average step time
+  const completedTimings = Object.values(stepTimings).filter((ms): ms is number => ms != null && ms > 0);
+  const avgStepMs = completedTimings.length > 0
+    ? completedTimings.reduce((sum, ms) => sum + ms, 0) / completedTimings.length
+    : 0;
+  const completedStepCount = completedTimings.length;
+  const totalSteps = PHASES.filter((p) => p.id !== 'idle' && p.id !== 'failed' && p.id !== 'complete' && p.id !== 'blocked' && p.id !== 'cancelled').length;
+  const remainingSteps = Math.max(0, totalSteps - completedStepCount);
+  const estimatedRemainingMs = avgStepMs > 0 ? avgStepMs * remainingSteps : 0;
 
   const getPhaseIcon = (phaseId: AuditPhase, index: number) => {
     if (phaseId === 'failed') {
@@ -100,6 +128,16 @@ export function AuditProgress() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Timing Info */}
+        {(totalElapsed > 0 || isLoading) && (
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>{t.progress.elapsed.replace('{time}', formatDuration(totalElapsed))}</span>
+            {estimatedRemainingMs > 0 && isLoading && (
+              <span>{t.progress.estimatedRemaining.replace('{time}', formatDuration(estimatedRemainingMs))}</span>
+            )}
+          </div>
+        )}
+
         {/* Overall Progress Bar */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
@@ -185,4 +223,23 @@ export function AuditProgress() {
       </CardContent>
     </Card>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Format milliseconds into a human-readable duration string.
+ * Returns "Xм Yс" for minutes+seconds, or "Yс" for seconds only.
+ */
+function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes > 0) {
+    return `${minutes}м ${seconds}с`;
+  }
+  return `${seconds}с`;
 }

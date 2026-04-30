@@ -38,7 +38,7 @@ import {
   Link2,
 } from 'lucide-react';
 import type { MediaType, AuthorProfileAnswers, AuditPhase, AuthorProfile, Skeleton, ScreeningResult, GateResult, Issue, ChainResult, GenerativeOutput, NextAction } from '@/lib/audit/types';
-import { runAuditPipeline, type PipelineState } from '@/lib/audit/pipeline';
+import { runAuditPipeline, resumeAuditFromStep, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { BlockedState } from '@/components/audit/BlockedState';
 import { useSettings } from '@/hooks/useSettings';
@@ -72,12 +72,15 @@ export default function Home() {
     setGenerativeOutput,
     setNextActions,
     setFinalScore,
+    setBlockedAt,
+    setElapsedMs,
+    setStepTimings,
     reset,
   } = useAuditState();
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
-  const { provider, apiKey, model, proxyUrl, loadSettings, isLoaded } = useSettings();
+  const { provider, apiKey, model, proxyUrl, rpmLimit, loadSettings, isLoaded } = useSettings();
 
   // Load settings on mount
   React.useEffect(() => {
@@ -121,6 +124,7 @@ export default function Home() {
           narrative: inputText,
           mediaType,
           authorAnswers: authorAnswers ?? undefined,
+          rpmLimit,
         },
         {
           provider,
@@ -151,6 +155,10 @@ export default function Home() {
           if (state.nextActions && state.nextActions.length > 0) setNextActions(state.nextActions);
           if (state.finalScore) setFinalScore(state.finalScore);
           if (state.checklist && state.checklist.length > 0) setChecklist(state.checklist);
+          // Timing & blocked info
+          if (state.blockedAt) setBlockedAt(state.blockedAt);
+          if (state.elapsedMs) setElapsedMs(state.elapsedMs);
+          if (state.stepTimings && Object.keys(state.stepTimings).length > 0) setStepTimings(state.stepTimings);
         },
         controller.signal,
       );
@@ -216,6 +224,118 @@ export default function Home() {
   const cancelAudit = () => {
     if (abortController) {
       abortController.abort();
+      setAbortController(null);
+    }
+  };
+
+  // Resume audit from a blocked step
+  const resumeAudit = async (fromStep: AuditPhase) => {
+    if (!apiKey) {
+      setError(t.errors.noApiKey);
+      return;
+    }
+    if (!proxyUrl) {
+      setError(t.errors.proxy);
+      return;
+    }
+
+    const controller = new AbortController();
+    setAbortController(controller);
+
+    setLoading(true);
+    setError(null);
+    setBlockedAt(null);
+    setPhase(fromStep);
+
+    try {
+      // Build current state from Zustand store for resume
+      const currentState: PipelineState = {
+        auditMode,
+        authorProfile: useAuditState.getState().authorProfile,
+        skeleton: useAuditState.getState().skeleton,
+        screeningResult: useAuditState.getState().screeningResult,
+        gateResults: useAuditState.getState().gateResults,
+        checklist: useAuditState.getState().checklist,
+        griefMatrix: useAuditState.getState().griefMatrix,
+        report: useAuditState.getState().report,
+        issues,
+        whatForChains,
+        generativeOutput,
+        nextActions: useAuditState.getState().nextActions,
+        finalScore: useAuditState.getState().finalScore,
+        phase: fromStep,
+        blockedAt: null,
+        error: null,
+        elapsedMs: 0,
+        stepTimings: useAuditState.getState().stepTimings,
+      };
+
+      const result = await resumeAuditFromStep(
+        currentState,
+        fromStep,
+        { provider, apiKey, model, proxyUrl },
+        (phase: AuditPhase, state: PipelineState) => {
+          setPhase(phase);
+          if (state.auditMode) setAuditMode(state.auditMode);
+          if (state.authorProfile) setAuthorProfile(state.authorProfile);
+          if (state.skeleton) setSkeleton(state.skeleton);
+          if (state.screeningResult) setScreeningResult(state.screeningResult);
+          if (state.gateResults) {
+            if (state.gateResults.L1) setGateResult('L1', state.gateResults.L1);
+            if (state.gateResults.L2) setGateResult('L2', state.gateResults.L2);
+            if (state.gateResults.L3) setGateResult('L3', state.gateResults.L3);
+            if (state.gateResults.L4) setGateResult('L4', state.gateResults.L4);
+          }
+          if (state.griefMatrix) setGriefMatrix(state.griefMatrix);
+          if (state.issues && state.issues.length > 0) setIssues(state.issues);
+          if (state.whatForChains && state.whatForChains.length > 0) setWhatForChains(state.whatForChains);
+          if (state.generativeOutput) setGenerativeOutput(state.generativeOutput);
+          if (state.nextActions && state.nextActions.length > 0) setNextActions(state.nextActions);
+          if (state.finalScore) setFinalScore(state.finalScore);
+          if (state.checklist && state.checklist.length > 0) setChecklist(state.checklist);
+          if (state.blockedAt) setBlockedAt(state.blockedAt);
+          if (state.elapsedMs) setElapsedMs(state.elapsedMs);
+          if (state.stepTimings && Object.keys(state.stepTimings).length > 0) setStepTimings(state.stepTimings);
+        },
+        controller.signal,
+      );
+
+      // Update with final results
+      if (result.authorProfile) setAuthorProfile(result.authorProfile);
+      if (result.skeleton) setSkeleton(result.skeleton);
+      if (result.screeningResult) setScreeningResult(result.screeningResult);
+      if (result.gateResults) {
+        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1);
+        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2);
+        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3);
+        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4);
+      }
+      if (result.issues && result.issues.length > 0) setIssues(result.issues);
+      if (result.whatForChains && result.whatForChains.length > 0) setWhatForChains(result.whatForChains);
+      if (result.generativeOutput) setGenerativeOutput(result.generativeOutput);
+      if (result.nextActions && result.nextActions.length > 0) setNextActions(result.nextActions);
+      if (result.finalScore) setFinalScore(result.finalScore);
+      if (result.blockedAt) setBlockedAt(result.blockedAt);
+      if (result.elapsedMs) setElapsedMs(result.elapsedMs);
+      if (result.stepTimings && Object.keys(result.stepTimings).length > 0) setStepTimings(result.stepTimings);
+
+      if (result.error) {
+        setPhase(result.phase === 'blocked' ? 'blocked' : 'failed');
+        setError(result.error);
+      } else {
+        setPhase('complete');
+      }
+    } catch (err) {
+      if (controller.signal.aborted) {
+        setPhase('cancelled');
+        setError(null);
+      } else {
+        console.error('Resume error:', err);
+        setError(err instanceof Error ? err.message : t.errors.unknown);
+        setPhase('failed');
+      }
+    } finally {
+      setLoading(false);
       setAbortController(null);
     }
   };
@@ -354,7 +474,7 @@ export default function Home() {
             <ResizablePanel defaultSize={75}>
               <div className="p-4 h-full overflow-auto">
                 {/* Show blocked state prominently when blocked */}
-                {phase === 'blocked' && <div className="mb-4"><BlockedState /></div>}
+                {phase === 'blocked' && <div className="mb-4"><BlockedState onResume={resumeAudit} /></div>}
 
                 <Tabs defaultValue="report" className="h-full">
                   <TabsList className="mb-4 flex-wrap h-auto gap-1">

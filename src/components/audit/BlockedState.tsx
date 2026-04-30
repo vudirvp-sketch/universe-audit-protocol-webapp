@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import {
   AlertTriangle,
   Download,
@@ -17,9 +19,10 @@ import {
   ShieldAlert,
   ShieldX,
   Zap,
+  Play,
 } from 'lucide-react';
 import { t } from '@/lib/i18n/ru';
-import type { GateResult, FixItem } from '@/lib/audit/types';
+import type { GateResult, FixItem, AuditPhase } from '@/lib/audit/types';
 
 // ---------------------------------------------------------------------------
 // Patch type labels in Russian
@@ -35,11 +38,13 @@ const PATCH_LABELS: Record<string, { label: string; icon: React.ReactNode }> = {
 // BlockedState component
 // ---------------------------------------------------------------------------
 
-export function BlockedState() {
+export function BlockedState({ onResume }: { onResume?: (blockedAt: AuditPhase) => void }) {
   const phase = useAuditState((s) => s.phase);
   const error = useAuditState((s) => s.error);
   const gateResults = useAuditState((s) => s.gateResults);
   const issues = useAuditState((s) => s.issues);
+  const blockedAt = useAuditState((s) => s.blockedAt);
+  const isLoading = useAuditState((s) => s.isLoading);
   const reset = useAuditState((s) => s.reset);
 
   const [copied, setCopied] = React.useState(false);
@@ -136,7 +141,9 @@ export function BlockedState() {
                     {issue.severity}
                   </Badge>
                 </div>
-                <p className="text-sm">{issue.diagnosis}</p>
+                <div className="text-sm prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{issue.diagnosis}</ReactMarkdown>
+                </div>
 
                 {/* Three patch variants */}
                 {issue.patches && (
@@ -157,9 +164,9 @@ export function BlockedState() {
                     {(['conservative', 'compromise', 'radical'] as const).map(
                       (type) => (
                         <TabsContent key={type} value={type} className="mt-1">
-                          <p className="text-xs text-muted-foreground">
-                            {issue.patches[type]?.description || t.blocked.noDescription}
-                          </p>
+                          <div className="text-xs text-muted-foreground prose prose-sm dark:prose-invert max-w-none">
+                            <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{issue.patches[type]?.description || t.blocked.noDescription}</ReactMarkdown>
+                          </div>
                           {issue.patches[type]?.impact && (
                             <p className="text-xs text-muted-foreground mt-1">
                               {t.blocked.impact} {issue.patches[type].impact}
@@ -187,6 +194,17 @@ export function BlockedState() {
 
         {/* Action buttons */}
         <div className="flex flex-wrap gap-2">
+          {onResume && blockedAt && (
+            <Button
+              variant="default"
+              onClick={() => onResume(blockedAt as AuditPhase)}
+              disabled={isLoading}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {isLoading ? t.blocked.resuming : t.blocked.resumeFromStep}
+            </Button>
+          )}
           <Button variant="default" onClick={reset}>
             <RotateCcw className="h-4 w-4 mr-2" />
             {t.blocked.editAndRestart}
@@ -204,6 +222,13 @@ export function BlockedState() {
             {copied ? t.blocked.copied : t.blocked.copyRecommendations}
           </Button>
         </div>
+
+        {/* Resume hint */}
+        {onResume && blockedAt && (
+          <p className="text-xs text-muted-foreground">
+            {t.blocked.resumeHint}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

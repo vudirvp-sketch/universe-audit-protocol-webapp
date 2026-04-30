@@ -194,6 +194,10 @@ export const t = {
     patchConservative: 'Осторожный',
     patchCompromise: 'Компромиссный',
     patchRadical: 'Радикальный',
+    // Resume from blocked stage (Phase 3.3 / 4.5)
+    resumeFromStep: 'Возобновить с этого этапа',
+    resuming: 'Возобновление...',
+    resumeHint: 'Исправьте текст нарратива, затем нажмите эту кнопку, чтобы перезапустить аудит с заблокированного этапа, сохранив результаты предыдущих шагов.',
   },
 
   errors: {
