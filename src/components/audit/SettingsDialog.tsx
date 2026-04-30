@@ -10,6 +10,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,8 +30,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, Server, XCircle } from 'lucide-react';
 import { useSettings, isProxyUrlPlaceholder } from '@/hooks/useSettings';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   LLM_PROVIDERS,
   AVAILABLE_PROVIDERS,
@@ -37,6 +48,7 @@ interface SettingsDialogProps {
 
 export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const { provider, apiKey, model, proxyUrl, rpmLimit, isLoaded, setProvider, setApiKey, setModel, setProxyUrl, setRpmLimit, loadSettings, clearSettings } = useSettings();
+  const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(false);
   const [inputKey, setInputKey] = React.useState('');
   const [inputModel, setInputModel] = React.useState('');
@@ -162,25 +174,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const currentProvider = LLM_PROVIDERS[provider];
   const hasFreeTier = ['google', 'groq', 'huggingface', 'openrouter', 'together'].includes(provider);
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title={t.app.settings}>
-          <Settings className="h-5 w-5" />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto max-w-[95vw] sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            {t.settings.title}
-          </DialogTitle>
-          <DialogDescription>
-            {t.settings.description}
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-5 py-4">
+  // The settings form body — shared between Dialog (desktop) and Sheet (mobile)
+  const settingsForm = (
+    <>
+      <div className="space-y-5 py-4">
           {/* Provider Selection */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
@@ -374,8 +371,81 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               {t.settings.keySecurityNote}
             </p>
           </div>
-        </div>
+      </div>
 
+      <div className="flex flex-col sm:flex-row gap-2 pt-2">
+        <Button
+          variant="outline"
+          onClick={handleClear}
+          disabled={!inputKey && !hasKey}
+          className="w-full sm:w-auto"
+        >
+          <Trash2 className="h-4 w-4 mr-2" />
+          {t.app.clear}
+        </Button>
+        <Button
+          onClick={handleSave}
+          disabled={saved}
+          className="w-full sm:w-auto"
+        >
+          {saved ? (
+            <>
+              <Check className="h-4 w-4 mr-2" />
+              {t.app.saved}
+            </>
+          ) : (
+            t.app.save
+          )}
+        </Button>
+      </div>
+    </>
+  );
+
+  // Desktop: Dialog (modal), Mobile: Sheet (fullscreen side panel)
+  if (isMobile) {
+    return (
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button variant="ghost" size="icon" title={t.app.settings}>
+            <Settings className="h-5 w-5" />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="bottom" className="h-[95vh] rounded-t-xl p-0">
+          <SheetHeader className="px-4 pt-4 pb-0">
+            <SheetTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              {t.settings.title}
+            </SheetTitle>
+            <SheetDescription>
+              {t.settings.description}
+            </SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="flex-1 overflow-y-auto px-4">
+            {settingsForm}
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" title={t.app.settings}>
+          <Settings className="h-5 w-5" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto max-w-[95vw] sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Settings className="h-5 w-5" />
+            {t.settings.title}
+          </DialogTitle>
+          <DialogDescription>
+            {t.settings.description}
+          </DialogDescription>
+        </DialogHeader>
+        {settingsForm}
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button
             variant="outline"

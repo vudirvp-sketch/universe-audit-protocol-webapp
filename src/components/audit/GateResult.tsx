@@ -130,7 +130,7 @@ function getProceedTarget(level: 'L1' | 'L2' | 'L3' | 'L4'): string {
   }
 }
 
-export function GateResultCard({ level, result, onProceed }: GateResultCardProps) {
+export const GateResultCard = React.memo(function GateResultCard({ level, result, onProceed }: GateResultCardProps) {
   const info = LEVEL_INFO[level];
   const auditMode = useAuditState((s) => s.auditMode) ?? 'conflict';
   const modeThreshold = getGateThreshold(auditMode, level);
@@ -197,7 +197,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+        <div className="grid grid-cols-2 gap-2 text-center">
           <div className="p-2 rounded bg-muted">
             <div className="text-lg font-bold">{result.applicableItems}</div>
             <div className="text-xs text-muted-foreground">{t.gates.total}</div>
@@ -304,7 +304,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
       </CardContent>
     </Card>
   );
-}
+});
 
 export function GateResults() {
   const gateResults = useAuditState((state) => state.gateResults);
@@ -331,7 +331,7 @@ export function GateResults() {
           )}
         </div>
 
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
           {(['L1', 'L2', 'L3', 'L4'] as const).map((level) => (
             <GateResultCard
               key={level}

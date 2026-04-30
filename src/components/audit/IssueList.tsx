@@ -54,7 +54,7 @@ const PATCH_LABELS: Record<PatchType, string> = {
   radical: t.issues.radical,
 };
 
-function IssueCard({ issue }: { issue: Issue }) {
+const IssueCard = React.memo(function IssueCard({ issue }: { issue: Issue }) {
   const severityConfig = SEVERITY_CONFIG[issue.severity];
 
   return (
@@ -82,7 +82,7 @@ function IssueCard({ issue }: { issue: Issue }) {
         <p className="text-sm">{issue.diagnosis}</p>
 
         {/* Axes */}
-        <div className="grid grid-cols-3 gap-4 p-3 bg-muted/50 rounded-lg">
+        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2 sm:gap-4 p-2 sm:p-3 bg-muted/50 rounded-lg">
           <div className="text-center">
             <div className={`text-2xl font-bold ${issue.axes.criticality >= 7 ? 'text-red-500' : issue.axes.criticality >= 4 ? 'text-orange-500' : 'text-green-500'}`}>
               {issue.axes.criticality}
@@ -206,7 +206,7 @@ function IssueCard({ issue }: { issue: Issue }) {
       </CardContent>
     </Card>
   );
-}
+});
 
 export function IssueList({ issues }: IssueListProps) {
   if (issues.length === 0) {

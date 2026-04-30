@@ -142,6 +142,14 @@ export default function Home() {
           // as each pipeline step completes, not only after the entire run.
           setPhase(phase);
 
+          // Preserve original inputText in Zustand for correct resume
+          if (state.inputText) {
+            const currentInputText = useAuditState.getState().inputText;
+            if (!currentInputText && state.inputText) {
+              useAuditState.getState().setInputText(state.inputText);
+            }
+          }
+
           if (state.auditMode) setAuditMode(state.auditMode);
           if (state.authorProfile) setAuthorProfile(state.authorProfile);
           if (state.skeleton) setSkeleton(state.skeleton);
@@ -252,25 +260,29 @@ export default function Home() {
 
     try {
       // Build current state from Zustand store for resume
+      // Include original inputText so resumeAuditFromStep can reconstruct
+      // the correct PipelineRunState without falling back to skeleton recovery
+      const fullState = useAuditState.getState();
       const currentState: PipelineState = {
+        inputText: fullState.inputText,
         auditMode,
-        authorProfile: useAuditState.getState().authorProfile,
-        skeleton: useAuditState.getState().skeleton,
-        screeningResult: useAuditState.getState().screeningResult,
-        gateResults: useAuditState.getState().gateResults,
-        checklist: useAuditState.getState().checklist,
-        griefMatrix: useAuditState.getState().griefMatrix,
-        report: useAuditState.getState().report,
+        authorProfile: fullState.authorProfile,
+        skeleton: fullState.skeleton,
+        screeningResult: fullState.screeningResult,
+        gateResults: fullState.gateResults,
+        checklist: fullState.checklist,
+        griefMatrix: fullState.griefMatrix,
+        report: fullState.report,
         issues,
         whatForChains,
         generativeOutput,
-        nextActions: useAuditState.getState().nextActions,
-        finalScore: useAuditState.getState().finalScore,
+        nextActions: fullState.nextActions,
+        finalScore: fullState.finalScore,
         phase: fromStep,
         blockedAt: null,
         error: null,
         elapsedMs: 0,
-        stepTimings: useAuditState.getState().stepTimings,
+        stepTimings: fullState.stepTimings,
       };
 
       const result = await resumeAuditFromStep(

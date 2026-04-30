@@ -436,12 +436,12 @@ export function GriefArchitectureMatrix() {
       </CardHeader>
       <CardContent>
         {/* Desktop: tabs + scroll area (hidden on mobile) */}
-        <div className="hidden sm:block">
+        <div className="hidden md:block">
           <GriefMatrixDesktop />
         </div>
 
-        {/* Mobile: accordion per stage (shown on mobile only) */}
-        <div className="block sm:hidden">
+        {/* Mobile: vertical cards with accordion per stage (shown on mobile only) */}
+        <div className="block md:hidden">
           <GriefMatrixMobile />
         </div>
       </CardContent>

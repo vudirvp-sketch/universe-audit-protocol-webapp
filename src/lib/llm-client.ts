@@ -57,6 +57,8 @@ export interface ChatCompletionOptions {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  /** Maximum number of 429 rate-limit retries before giving up. Default: 3 */
+  maxRateLimitRetries?: number;
 }
 
 export interface ChatCompletionResponse {
@@ -377,6 +379,7 @@ export function createLLMClient(config: LLMClientConfig) {
    */
   async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse> {
     const effectiveModel = options.model || model;
+    const max429Retries = options.maxRateLimitRetries ?? 3;
 
     // Determine target URL
     let targetUrl: string;
@@ -411,21 +414,66 @@ export function createLLMClient(config: LLMClientConfig) {
       );
     }
 
-    const response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(proxyRequest),
-    });
+    // 429 Rate Limit auto-retry with exponential backoff + countdown
+    let last429Error: Error | null = null;
+    for (let retryAttempt = 0; retryAttempt <= max429Retries; retryAttempt++) {
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proxyRequest),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${errorText}`);
+      // Handle 429 Rate Limit with auto-retry and countdown
+      if (response.status === 429) {
+        const retryAfterHeader = response.headers.get('retry-after');
+        let waitSeconds: number;
+
+        if (retryAfterHeader) {
+          // retry-after can be seconds or an HTTP date
+          const parsed = parseInt(retryAfterHeader, 10);
+          if (!isNaN(parsed) && parsed > 0) {
+            waitSeconds = parsed;
+          } else {
+            const retryDate = new Date(retryAfterHeader).getTime();
+            waitSeconds = Math.max(1, Math.ceil((retryDate - Date.now()) / 1000));
+          }
+        } else {
+          // Exponential backoff: 5s, 15s, 45s
+          waitSeconds = 5 * Math.pow(3, retryAttempt);
+        }
+
+        // Cap at 60 seconds to avoid excessively long waits
+        waitSeconds = Math.min(waitSeconds, 60);
+
+        if (retryAttempt < max429Retries) {
+          console.warn(
+            `[429 Rate Limit] Retry ${retryAttempt + 1}/${max429Retries} — waiting ${waitSeconds}s before retry...`
+          );
+          // Wait with countdown — allows UI to show progress if needed
+          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+          continue;
+        }
+
+        // Final 429 after all retries — throw with clear Russian message
+        last429Error = new Error(
+          `Превышен лимит запросов (${response.status}). Попытки автоповтора исчерпаны (${max429Retries}). ` +
+          `Подождите немного и попробуйте снова.`
+        );
+        throw last429Error;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${errorText}`);
+      }
+
+      // Successful response — parse and normalize
+      const responseData = await response.json();
+      return normalizeProviderResponse(config.provider, responseData);
     }
 
-    const responseData = await response.json();
-
-    // Normalize provider-specific response into standard format
-    return normalizeProviderResponse(config.provider, responseData);
+    // Should not reach here, but just in case
+    throw last429Error || new Error('Неожиданная ошибка при обработке запроса к LLM.');
   }
 
   return {

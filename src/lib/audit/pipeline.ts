@@ -95,6 +95,7 @@ export interface PipelineProgress {
 }
 
 export interface PipelineState {
+  inputText: string; // Original user narrative — needed for correct resume
   auditMode: import('./types').AuditMode | null;
   authorProfile: import('./types').AuthorProfile | null;
   skeleton: Skeleton | null;
@@ -125,6 +126,7 @@ export interface PipelineState {
  */
 function createEmptyPipelineState(): PipelineState {
   return {
+    inputText: '',
     auditMode: null,
     authorProfile: null,
     skeleton: null,
@@ -336,9 +338,9 @@ export async function resumeAuditFromStep(
   // Reconstruct PipelineRunState from the saved PipelineState
   let runState: PipelineRunState = {
     phase: savedState.phase,
-    inputText: savedState.report?.skeleton?.elements
+    inputText: savedState.inputText || (savedState.report?.skeleton?.elements
       ? savedState.report.skeleton.elements.map(e => e.extracted ?? e.value ?? '').filter(Boolean).join('\n')
-      : '', // Best-effort recovery from skeleton; original narrative not stored in PipelineState
+      : ''), // Prefer original inputText; fall back to skeleton recovery
     mediaType: (savedState.gateResults.L1?.metadata?.mediaType as MediaType | undefined) ?? 'novel',
     auditMode: savedState.auditMode,
     authorProfile: savedState.authorProfile,
@@ -447,6 +449,7 @@ function mapToPipelineState(runState: PipelineRunState): PipelineState {
   }
 
   return {
+    inputText: runState.inputText,
     auditMode: runState.auditMode,
     authorProfile: runState.authorProfile,
     skeleton: runState.skeleton,

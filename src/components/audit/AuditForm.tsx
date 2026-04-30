@@ -50,6 +50,35 @@ export function AuditForm() {
   const [showAuthorQuiz, setShowAuthorQuiz] = React.useState(false);
   const [authorQuizExpanded, setAuthorQuizExpanded] = React.useState(false);
 
+  // Debounce text input to avoid excessive Zustand writes on every keystroke
+  const [localInput, setLocalInput] = React.useState(inputText);
+  const debounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync local input when external inputText changes (e.g. on reset)
+  React.useEffect(() => {
+    setLocalInput(inputText);
+  }, [inputText]);
+
+  const handleInputTextChange = (value: string) => {
+    setLocalInput(value);
+    // Debounce Zustand write: 300ms after last keystroke
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setInputText(value);
+    }, 300);
+  };
+
+  // Cleanup debounce timer on unmount
+  React.useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   // Handle author quiz answers
   const handleAuthorAnswer = (questionId: keyof AuthorProfileAnswers, checked: boolean) => {
     const newAnswers = {
@@ -93,13 +122,13 @@ export function AuditForm() {
             <Textarea
               id="narrative"
               placeholder={t.form.narrativePlaceholder}
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
+              value={localInput}
+              onChange={(e) => handleInputTextChange(e.target.value)}
               className="min-h-[200px] resize-y"
               disabled={isLoading}
             />
             <p className="text-xs text-muted-foreground">
-              {t.form.characterCount.replace('{count}', String(inputText.length))}
+              {t.form.characterCount.replace('{count}', String(localInput.length))}
             </p>
           </div>
 
@@ -234,6 +263,7 @@ export function AuditForm() {
         <Button
           variant="outline"
           onClick={() => {
+            setLocalInput('');
             setInputText('');
             setAuditMode(null);
             setAuthorAnswers(null);
@@ -244,7 +274,7 @@ export function AuditForm() {
         </Button>
         <Button
           onClick={handleStartAudit}
-          disabled={!inputText.trim() || inputText.length < 50 || isLoading}
+          disabled={!localInput.trim() || localInput.length < 50 || isLoading}
           className="min-w-[150px]"
         >
           {isLoading ? (
