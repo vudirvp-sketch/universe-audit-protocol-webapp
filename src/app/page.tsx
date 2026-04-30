@@ -5,9 +5,14 @@ import { useAuditState } from '@/hooks/useAuditState';
 import { AuditForm } from '@/components/audit/AuditForm';
 import { AuditProgress } from '@/components/audit/AuditProgress';
 import { ChecklistDisplay } from '@/components/audit/ChecklistDisplay';
-import { GriefArchitectureMatrix } from '@/components/audit/GriefArchitectureMatrix';
+// Lazy-load heavy components for performance (plan §5.3)
+const GriefArchitectureMatrix = React.lazy(() =>
+  import('@/components/audit/GriefArchitectureMatrix').then(m => ({ default: m.GriefArchitectureMatrix }))
+);
+const ReportDisplay = React.lazy(() =>
+  import('@/components/audit/ReportDisplay').then(m => ({ default: m.ReportDisplay }))
+);
 import { GateResults } from '@/components/audit/GateResult';
-import { ReportDisplay } from '@/components/audit/ReportDisplay';
 import { IssueList } from '@/components/audit/IssueList';
 import { WhatForChains } from '@/components/audit/WhatForChains';
 import { GenerativeOutputDisplay } from '@/components/audit/GenerativeOutput';
@@ -30,12 +35,10 @@ import {
   Heart,
   BarChart3,
   RotateCcw,
-  Settings,
-  Key,
   AlertTriangle,
   Link2,
 } from 'lucide-react';
-import type { MediaType, AuthorProfileAnswers, AuditPhase, AuthorProfile, Skeleton, ScreeningResult, GateResult, Issue, ChainResult, GenerativeOutput, NextAction } from '@/lib/audit/types';
+import type { AuditPhase } from '@/lib/audit/types';
 import { runAuditPipeline, resumeAuditFromStep, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { BlockedState } from '@/components/audit/BlockedState';
@@ -417,134 +420,222 @@ export default function Home() {
             <AuditForm />
           </div>
         ) : (
-          /* Analysis Phase */
-          <ResizablePanelGroup direction="horizontal" className="min-h-[calc(100vh-8rem)]">
-            {/* Left Panel - Progress & Input Summary */}
-            <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
-              <div className="p-4 space-y-4 h-full overflow-auto">
-                <AuditProgress />
+          /* Analysis Phase — responsive layout */
+          <>
+            {/* Mobile: stacked single column. Desktop: resizable panels. */}
 
-                {/* Quick Stats */}
-                <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">{t.config.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">{t.config.media}:</span>
-                        <Badge variant="outline">{mediaType}</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">{t.config.mode}:</span>
-                        <Badge variant="outline">{auditMode || t.config.modeDetecting}</Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">{t.config.input}:</span>
-                        <span>{t.config.characters.replace('{count}', String(inputText.length))}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
+            {/* --- Mobile layout (≤640px): stacked --- */}
+            <div className="block sm:hidden space-y-4">
+              {/* Compact progress bar for mobile */}
+              <AuditProgress />
 
-                {/* Cancel / Reset Buttons */}
-                <div className="space-y-2">
-                  {isLoading && (
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={cancelAudit}
-                    >
-                      {t.app.cancelAudit}
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => reset()}
-                    disabled={isLoading}
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    {t.app.newAudit}
+              {/* Quick Stats — compact */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">{t.config.title}</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t.config.media}:</span>
+                    <Badge variant="outline">{mediaType}</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t.config.mode}:</span>
+                    <Badge variant="outline">{auditMode || t.config.modeDetecting}</Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">{t.config.input}:</span>
+                    <span>{t.config.characters.replace('{count}', String(inputText.length))}</span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Cancel / Reset */}
+              <div className="flex gap-2">
+                {isLoading && (
+                  <Button variant="destructive" className="flex-1" onClick={cancelAudit}>
+                    {t.app.cancelAudit}
                   </Button>
-                </div>
+                )}
+                <Button variant="outline" className="flex-1" onClick={() => reset()} disabled={isLoading}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  {t.app.newAudit}
+                </Button>
               </div>
-            </ResizablePanel>
 
-            <ResizableHandle withHandle />
+              {/* Blocked state */}
+              {phase === 'blocked' && <BlockedState onResume={resumeAudit} />}
 
-            {/* Right Panel - Results */}
-            <ResizablePanel defaultSize={75}>
-              <div className="p-4 h-full overflow-auto">
-                {/* Show blocked state prominently when blocked */}
-                {phase === 'blocked' && <div className="mb-4"><BlockedState onResume={resumeAudit} /></div>}
+              {/* Results tabs — scrollable on mobile */}
+              <Tabs defaultValue="report">
+                <TabsList className="w-full flex-wrap h-auto gap-1">
+                  <TabsTrigger value="report" className="flex items-center gap-1 text-xs">
+                    <FileText className="h-3 w-3" />
+                    {t.tabs.report}
+                  </TabsTrigger>
+                  <TabsTrigger value="gates" className="flex items-center gap-1 text-xs">
+                    <BarChart3 className="h-3 w-3" />
+                    {t.tabs.gates}
+                  </TabsTrigger>
+                  <TabsTrigger value="issues" className="flex items-center gap-1 text-xs">
+                    <AlertTriangle className="h-3 w-3" />
+                    {t.tabs.issues}
+                    {issues.length > 0 && (
+                      <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
+                        {issues.length}
+                      </Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="chains" className="flex items-center gap-1 text-xs">
+                    <Link2 className="h-3 w-3" />
+                    {t.tabs.chains}
+                  </TabsTrigger>
+                  <TabsTrigger value="generative" className="flex items-center gap-1 text-xs">
+                    <Sparkles className="h-3 w-3" />
+                    {t.tabs.generative}
+                  </TabsTrigger>
+                  <TabsTrigger value="checklist" className="flex items-center gap-1 text-xs">
+                    <ListChecks className="h-3 w-3" />
+                    {t.tabs.checklist}
+                  </TabsTrigger>
+                  <TabsTrigger value="grief" className="flex items-center gap-1 text-xs">
+                    <Heart className="h-3 w-3" />
+                    {t.tabs.grief}
+                  </TabsTrigger>
+                </TabsList>
 
-                <Tabs defaultValue="report" className="h-full">
-                  <TabsList className="mb-4 flex-wrap h-auto gap-1">
-                    <TabsTrigger value="report" className="flex items-center gap-1">
-                      <FileText className="h-4 w-4" />
-                      {t.tabs.report}
-                    </TabsTrigger>
-                    <TabsTrigger value="gates" className="flex items-center gap-1">
-                      <BarChart3 className="h-4 w-4" />
-                      {t.tabs.gates}
-                    </TabsTrigger>
-                    <TabsTrigger value="issues" className="flex items-center gap-1">
-                      <AlertTriangle className="h-4 w-4" />
-                      {t.tabs.issues}
-                      {issues.length > 0 && (
-                        <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
-                          {issues.length}
-                        </Badge>
+                <TabsContent value="report"><React.Suspense fallback={<div className="p-8 text-center text-muted-foreground">{t.progress.processing}</div>}><ReportDisplay /></React.Suspense></TabsContent>
+                <TabsContent value="gates"><GateResults /></TabsContent>
+                <TabsContent value="issues"><IssueList issues={issues} /></TabsContent>
+                <TabsContent value="chains"><WhatForChains chains={whatForChains} /></TabsContent>
+                <TabsContent value="generative"><GenerativeOutputDisplay output={generativeOutput} /></TabsContent>
+                <TabsContent value="checklist"><ChecklistDisplay /></TabsContent>
+                <TabsContent value="grief"><React.Suspense fallback={<div className="p-8 text-center text-muted-foreground">{t.progress.processing}</div>}><GriefArchitectureMatrix /></React.Suspense></TabsContent>
+              </Tabs>
+            </div>
+
+            {/* --- Desktop layout (≥640px): resizable panels --- */}
+            <div className="hidden sm:block">
+              <ResizablePanelGroup direction="horizontal" className="min-h-[calc(100vh-8rem)]">
+                {/* Left Panel - Progress & Input Summary */}
+                <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+                  <div className="p-4 space-y-4 h-full overflow-auto">
+                    <AuditProgress />
+
+                    {/* Quick Stats */}
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">{t.config.title}</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t.config.media}:</span>
+                          <Badge variant="outline">{mediaType}</Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t.config.mode}:</span>
+                          <Badge variant="outline">{auditMode || t.config.modeDetecting}</Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">{t.config.input}:</span>
+                          <span>{t.config.characters.replace('{count}', String(inputText.length))}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Cancel / Reset Buttons */}
+                    <div className="space-y-2">
+                      {isLoading && (
+                        <Button variant="destructive" className="w-full" onClick={cancelAudit}>
+                          {t.app.cancelAudit}
+                        </Button>
                       )}
-                    </TabsTrigger>
-                    <TabsTrigger value="chains" className="flex items-center gap-1">
-                      <Link2 className="h-4 w-4" />
-                      {t.tabs.chains}
-                    </TabsTrigger>
-                    <TabsTrigger value="generative" className="flex items-center gap-1">
-                      <Sparkles className="h-4 w-4" />
-                      {t.tabs.generative}
-                    </TabsTrigger>
-                    <TabsTrigger value="checklist" className="flex items-center gap-1">
-                      <ListChecks className="h-4 w-4" />
-                      {t.tabs.checklist}
-                    </TabsTrigger>
-                    <TabsTrigger value="grief" className="flex items-center gap-1">
-                      <Heart className="h-4 w-4" />
-                      {t.tabs.grief}
-                    </TabsTrigger>
-                  </TabsList>
+                      <Button variant="outline" className="w-full" onClick={() => reset()} disabled={isLoading}>
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        {t.app.newAudit}
+                      </Button>
+                    </div>
+                  </div>
+                </ResizablePanel>
 
-                  <TabsContent value="report" className="h-full">
-                    <ReportDisplay />
-                  </TabsContent>
+                <ResizableHandle withHandle />
 
-                  <TabsContent value="gates" className="h-full">
-                    <GateResults />
-                  </TabsContent>
+                {/* Right Panel - Results */}
+                <ResizablePanel defaultSize={75}>
+                  <div className="p-4 h-full overflow-auto">
+                    {/* Show blocked state prominently when blocked */}
+                    {phase === 'blocked' && <div className="mb-4"><BlockedState onResume={resumeAudit} /></div>}
 
-                  <TabsContent value="issues" className="h-full">
-                    <IssueList issues={issues} />
-                  </TabsContent>
+                    <Tabs defaultValue="report" className="h-full">
+                      <TabsList className="mb-4 flex-wrap h-auto gap-1">
+                        <TabsTrigger value="report" className="flex items-center gap-1">
+                          <FileText className="h-4 w-4" />
+                          {t.tabs.report}
+                        </TabsTrigger>
+                        <TabsTrigger value="gates" className="flex items-center gap-1">
+                          <BarChart3 className="h-4 w-4" />
+                          {t.tabs.gates}
+                        </TabsTrigger>
+                        <TabsTrigger value="issues" className="flex items-center gap-1">
+                          <AlertTriangle className="h-4 w-4" />
+                          {t.tabs.issues}
+                          {issues.length > 0 && (
+                            <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
+                              {issues.length}
+                            </Badge>
+                          )}
+                        </TabsTrigger>
+                        <TabsTrigger value="chains" className="flex items-center gap-1">
+                          <Link2 className="h-4 w-4" />
+                          {t.tabs.chains}
+                        </TabsTrigger>
+                        <TabsTrigger value="generative" className="flex items-center gap-1">
+                          <Sparkles className="h-4 w-4" />
+                          {t.tabs.generative}
+                        </TabsTrigger>
+                        <TabsTrigger value="checklist" className="flex items-center gap-1">
+                          <ListChecks className="h-4 w-4" />
+                          {t.tabs.checklist}
+                        </TabsTrigger>
+                        <TabsTrigger value="grief" className="flex items-center gap-1">
+                          <Heart className="h-4 w-4" />
+                          {t.tabs.grief}
+                        </TabsTrigger>
+                      </TabsList>
 
-                  <TabsContent value="chains" className="h-full">
-                    <WhatForChains chains={whatForChains} />
-                  </TabsContent>
+                      <TabsContent value="report" className="h-full">
+                        <React.Suspense fallback={<div className="p-8 text-center text-muted-foreground">{t.progress.processing}</div>}><ReportDisplay /></React.Suspense>
+                      </TabsContent>
 
-                  <TabsContent value="generative" className="h-full">
-                    <GenerativeOutputDisplay output={generativeOutput} />
-                  </TabsContent>
+                      <TabsContent value="gates" className="h-full">
+                        <GateResults />
+                      </TabsContent>
 
-                  <TabsContent value="checklist" className="h-full">
-                    <ChecklistDisplay />
-                  </TabsContent>
+                      <TabsContent value="issues" className="h-full">
+                        <IssueList issues={issues} />
+                      </TabsContent>
 
-                  <TabsContent value="grief" className="h-full">
-                    <GriefArchitectureMatrix />
-                  </TabsContent>
-                </Tabs>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
+                      <TabsContent value="chains" className="h-full">
+                        <WhatForChains chains={whatForChains} />
+                      </TabsContent>
+
+                      <TabsContent value="generative" className="h-full">
+                        <GenerativeOutputDisplay output={generativeOutput} />
+                      </TabsContent>
+
+                      <TabsContent value="checklist" className="h-full">
+                        <ChecklistDisplay />
+                      </TabsContent>
+
+                      <TabsContent value="grief" className="h-full">
+                        <React.Suspense fallback={<div className="p-8 text-center text-muted-foreground">{t.progress.processing}</div>}><GriefArchitectureMatrix /></React.Suspense>
+                      </TabsContent>
+                    </Tabs>
+                  </div>
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </div>
+          </>
         )}
       </main>
 

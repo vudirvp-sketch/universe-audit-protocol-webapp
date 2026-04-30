@@ -243,7 +243,7 @@ function HumanReadableReport({
             <CardTitle className="text-base">{t.report.gateResults}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {(['L1', 'L2', 'L3', 'L4'] as const).map((level) => {
                 const gate = report.gateResults[level];
                 return (
@@ -275,7 +275,7 @@ function HumanReadableReport({
               <CardTitle className="text-base">{t.report.scores}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {Object.entries(report.scores).map(([key, value]) => (
                   <div key={key} className="p-2 rounded bg-muted text-center">
                     <div className="text-lg font-bold">{value}%</div>

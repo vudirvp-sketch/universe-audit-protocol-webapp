@@ -197,7 +197,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
           <div className="p-2 rounded bg-muted">
             <div className="text-lg font-bold">{result.applicableItems}</div>
             <div className="text-xs text-muted-foreground">{t.gates.total}</div>
@@ -331,7 +331,7 @@ export function GateResults() {
           )}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           {(['L1', 'L2', 'L3', 'L4'] as const).map((level) => (
             <GateResultCard
               key={level}

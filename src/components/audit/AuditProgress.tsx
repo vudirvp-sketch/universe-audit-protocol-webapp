@@ -116,7 +116,9 @@ export function AuditProgress() {
           <div>
             <CardTitle className="text-lg">{t.app.title} — {t.progress.progress}</CardTitle>
             <CardDescription>
-              {isLoading ? t.progress.processing : t.progress.percentComplete.replace('{percent}', String(overallProgress.percentage))}
+              {isLoading
+                ? PHASES.find(p => p.id === phase)?.description || t.progress.processing
+                : t.progress.percentComplete.replace('{percent}', String(overallProgress.percentage))}
             </CardDescription>
           </div>
           {error && (
@@ -147,8 +149,8 @@ export function AuditProgress() {
           <Progress value={overallProgress.percentage} className="h-2" />
         </div>
 
-        {/* Phase Timeline */}
-        <div className="space-y-2">
+        {/* Phase Timeline — compact on mobile */}
+        <div className="space-y-1 sm:space-y-2">
           {PHASES.filter((p) => p.id !== 'idle' && p.id !== 'failed').map((p, index) => {
             const isActive = p.id === phase;
             const isPast = index < currentPhaseIndex;
@@ -156,21 +158,21 @@ export function AuditProgress() {
             return (
               <div
                 key={p.id}
-                className={`flex items-center gap-3 p-2 rounded-md transition-colors ${
+                className={`flex items-center gap-2 sm:gap-3 p-1.5 sm:p-2 rounded-md transition-colors ${
                   isActive ? 'bg-accent' : isPast ? 'opacity-70' : 'opacity-50'
                 }`}
               >
                 {getPhaseIcon(p.id, index)}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">{p.name}</span>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <span className="text-xs sm:text-sm font-medium truncate">{p.name}</span>
                     {isActive && isLoading && (
-                      <Badge variant="secondary" className="text-xs animate-pulse">
+                      <Badge variant="secondary" className="text-xs animate-pulse hidden sm:inline-flex">
                         {t.progress.processing}
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">{p.description}</p>
+                  <p className="text-xs text-muted-foreground truncate hidden sm:block">{p.description}</p>
                 </div>
               </div>
             );
@@ -180,7 +182,7 @@ export function AuditProgress() {
         {/* Gate Status */}
         <div className="border-t pt-4">
           <h4 className="text-sm font-medium mb-3">{t.gates.status}</h4>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {(['L1', 'L2', 'L3', 'L4'] as const).map((level) => {
               const status = gateStatus[level];
               return (
