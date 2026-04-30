@@ -14,21 +14,29 @@
  * - RULE_10: Generative templates MUST activate automatically
  */
 
+import type { 
+  AuditPhase, MediaType, AuditMode, AuthorProfileAnswers, AuthorProfile,
+  AuthorProfileType, ScreeningResult, GateResult, GriefValidationResult, GriefPresence,
+  CultEvaluationResult, Issue, ChainResult, GenerativeOutput, NextAction,
+  GriefArchitectureMatrix
+} from './types';
+
 import { validateInput, type ValidationResult } from './input-validator';
-import { detectAuditMode, getModeExecutionConfig, type AuditMode, type ModeExecutionConfig } from './modes';
-import { calculateAuthorProfile, type AuthorProfile } from './author-profile';
+import { detectAuditMode, getModeExecutionConfig, type ModeExecutionConfig } from './modes';
+import { calculateAuthorProfile } from './author-profile';
 import { extractSkeleton, type SkeletonExtractionResult } from './skeleton-extraction';
-import { executeGate, validatePrerequisites, type GateResult, type GateLevel } from './gate-executor';
-import { validateGriefArchitecture, executeL3GateWithGriefCheck, type GriefValidationResult, type GriefPresence } from './grief-validation';
-import { evaluateCultPotential, type CultEvaluationResult } from './cult-potential';
+import { executeGate, validatePrerequisites, type GateLevel } from './gate-executor';
+import { validateGriefArchitecture, executeL3GateWithGriefCheck } from './grief-validation';
+import type { GriefPresence as LocalGriefPresence } from './grief-validation';
+import { evaluateCultPotential } from './cult-potential';
 import { assignLevel, partitionByLevel, type AuditLevel } from './level-assignment';
 import { runWhatForChain, type WhatForChainResult } from './what-for-chain';
-import { validateIssue, createIssue, type Issue, type Severity, type Axes } from './issue-schema';
-import { applyMediaTransformation, type MediaType, type TransformationResult } from './media-transformation';
+import { validateIssue, createIssue } from './issue-schema';
+import { applyMediaTransformation, type TransformationResult } from './media-transformation';
 import { generateDiagnostics, type DiagnosticResult } from './diagnostics';
 
 // ============================================================================
-// TYPE DEFINITIONS
+// TYPE DEFINITIONS — All canonical types imported from ./types
 // ============================================================================
 
 export interface AuditInput {
@@ -40,31 +48,13 @@ export interface AuditInput {
   final_dilemma?: string;
 }
 
-export interface AuthorProfileAnswers {
-  Q1: boolean;
-  Q2: boolean;
-  Q3: boolean;
-  Q4: boolean;
-  Q5: boolean;
-  Q6: boolean;
-  Q7: boolean;
-}
-
-export interface AuthorProfileResult {
-  type: AuthorProfile;
-  percentage: number;
-  confidence: 'high' | 'medium' | 'low';
-  priority_array: string[];
-  risk_flags: string[];
-}
-
-export interface AuditState {
+export interface OrchestratorState {
   phase: AuditPhase;
   input: AuditInput;
-  validation_result?: ValidationResult;
-  audit_mode_config?: ModeExecutionConfig;
-  author_profile_result?: AuthorProfileResult;
-  skeleton?: SkeletonExtractionResult;
+  validation_result?: import('./input-validator').ValidationResult;
+  audit_mode_config?: import('./modes').ModeExecutionConfig;
+  author_profile_result?: AuthorProfile;
+  skeleton?: import('./skeleton-extraction').SkeletonExtractionResult;
   screening_result?: ScreeningResult;
   gate_L1?: GateResult;
   gate_L2?: GateResult;
@@ -73,61 +63,13 @@ export interface AuditState {
   grief_validation?: GriefValidationResult;
   cult_potential?: CultEvaluationResult;
   issues: Issue[];
-  what_for_chains: WhatForChainResult[];
+  what_for_chains: ChainResult[];
   generative_output?: GenerativeOutput;
-  diagnostics?: DiagnosticResult;
-  final_score?: FinalScore;
+  diagnostics?: import('./diagnostics').DiagnosticResult;
+  final_score?: { total: string; percentage: number; by_level: Record<string, number> };
   next_actions: NextAction[];
-  media_transformation?: TransformationResult;
+  media_transformation?: import('./media-transformation').TransformationResult;
   error?: string;
-}
-
-export type AuditPhase = 
-  | 'blocked' 
-  | 'input_validation' 
-  | 'mode_detection' 
-  | 'author_profile' 
-  | 'skeleton_extraction' 
-  | 'screening' 
-  | 'gate_L1' 
-  | 'gate_L2' 
-  | 'gate_L3' 
-  | 'gate_L4' 
-  | 'issue_generation' 
-  | 'generative_modules' 
-  | 'final_output' 
-  | 'complete';
-
-export interface ScreeningResult {
-  no_count: number;
-  flags: string[];
-  sections_for_deep_audit: string[];
-  proceed_normally: boolean;
-}
-
-export interface GenerativeOutput {
-  grief_mapping?: {
-    derived_stage: string;
-    justification: string[];
-  };
-  dilemma?: {
-    value_A: string;
-    value_B: string;
-    conflict_description: string;
-  };
-}
-
-export interface FinalScore {
-  total: string;
-  percentage: number;
-  by_level: Record<string, number>;
-}
-
-export interface NextAction {
-  priority: number;
-  action: string;
-  rationale: string;
-  estimated_effort: 'hours' | 'days' | 'weeks';
 }
 
 // ============================================================================
@@ -180,8 +122,8 @@ function getAuditSections(): AuditSection[] {
  * Runs the full audit pipeline
  * This is the ONLY entry point for audit execution
  */
-export async function runFullAudit(input: AuditInput): Promise<AuditState> {
-  const state: AuditState = {
+export async function runFullAudit(input: AuditInput): Promise<OrchestratorState> {
+  const state: OrchestratorState = {
     phase: 'input_validation',
     input,
     issues: [],
@@ -233,21 +175,27 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
       characterDepth: input.author_answers.Q2 ? 0.8 : 0.5
     });
     
+    const priorityArray = getPriorityArray(profileType);
     state.author_profile_result = {
       type: profileType,
       percentage: 50,
       confidence: 'medium',
-      priority_array: getPriorityArray(profileType),
+      mainRisks: [],
+      auditPriorities: priorityArray,
+      priority_array: priorityArray,
       risk_flags: []
     };
   } else {
     // Default profile
+    const defaultPriorityArray = getPriorityArray('hybrid');
     state.author_profile_result = {
       type: 'hybrid',
       percentage: 50,
       confidence: 'low',
-      priority_array: getPriorityArray('hybrid'),
-      risk_flags: ['Unknown profile - using defaults']
+      mainRisks: ['Unknown profile — using defaults'],
+      auditPriorities: defaultPriorityArray,
+      priority_array: defaultPriorityArray,
+      risk_flags: ['Unknown profile — using defaults']
     };
   }
 
@@ -282,7 +230,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   state.screening_result = performScreening(input.concept);
 
   // Handle screening results
-  if (state.screening_result.no_count >= 4) {
+  if (!state.screening_result.proceed_normally) {
     state.phase = 'blocked';
     state.error = 'Screening failed: too many NO answers';
     return state; // TERMINATE
@@ -292,7 +240,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   state.media_transformation = applyMediaTransformation(input.media_type);
 
   // === STEP 5: GATE L1 ===
-  state.phase = 'gate_L1';
+  state.phase = 'L1_evaluation';
   
   const l1Sections = getAuditSections().filter(s => s.level === 'L1');
   state.gate_L1 = executeGateWithBreakdown('L1', l1Sections, 60);
@@ -304,7 +252,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   }
 
   // === STEP 6: GATE L2 ===
-  state.phase = 'gate_L2';
+  state.phase = 'L2_evaluation';
   
   const l2Sections = getAuditSections().filter(s => s.level === 'L2');
   state.gate_L2 = executeGateWithBreakdown('L2', l2Sections, 60);
@@ -315,11 +263,11 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   }
 
   // === STEP 7: GATE L3 (with Grief Validation HARD CHECK) ===
-  state.phase = 'gate_L3';
+  state.phase = 'L3_evaluation';
 
   // RULE_3: GRIEF VALIDATION is a HARD CHECK before L3 scoring
   const griefData = analyzeGriefStages(input.concept, input.dominant_stage);
-  state.grief_validation = validateGriefArchitecture(griefData);
+  state.grief_validation = validateGriefArchitecture(griefData as LocalGriefPresence[]);
 
   // L3 gate fails regardless of score if grief validation fails
   if (!state.grief_validation.valid) {
@@ -384,7 +332,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   }
 
   // === STEP 8: GATE L4 ===
-  state.phase = 'gate_L4';
+  state.phase = 'L4_evaluation';
   
   const l4Sections = getAuditSections().filter(s => s.level === 'L4');
   state.gate_L4 = executeGateWithBreakdown('L4', l4Sections, 60);
@@ -401,7 +349,7 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
   const elementsToChain = extractElementsForChain(input.concept);
   for (const element of elementsToChain) {
     const chainResult = runWhatForChain(element, []);
-    state.what_for_chains.push(chainResult);
+    state.what_for_chains.push(mapToChainResult(chainResult));
 
     // RULE_2: BREAK at step ≤4 = critical
     if (chainResult.terminal === 'BREAK' && chainResult.terminalStep <= 4) {
@@ -466,13 +414,34 @@ export async function runFullAudit(input: AuditInput): Promise<AuditState> {
 // HELPER FUNCTIONS
 // ============================================================================
 
-function getPriorityArray(profile: AuthorProfile): string[] {
-  const priorities: Record<AuthorProfile, string[]> = {
+function getPriorityArray(profile: AuthorProfileType): string[] {
+  const priorities: Record<AuthorProfileType, string[]> = {
     gardener: ['character_arcs', 'dialogue', 'root_trauma', 'thematic_law', 'world_consistency'],
     architect: ['thematic_law', 'world_consistency', 'root_trauma', 'character_arcs', 'dialogue'],
     hybrid: ['thematic_law', 'root_trauma', 'character_arcs', 'world_consistency', 'dialogue']
   };
   return priorities[profile];
+}
+
+/**
+ * Maps WhatForChainResult (from what-for-chain module) to ChainResult (canonical type from ./types)
+ */
+function mapToChainResult(wfcr: WhatForChainResult): ChainResult {
+  return {
+    terminal_type: wfcr.terminal === 'UNCLASSIFIED' ? null : wfcr.terminal,
+    terminal: wfcr.terminal,
+    terminalStep: wfcr.terminalStep,
+    step_reached: wfcr.chain.length,
+    action: wfcr.action as ChainResult['action'],
+    iterations: wfcr.chain.map(step => ({
+      step: step.stepNumber,
+      question: step.question,
+      answer: step.answer,
+      analysis: step.analysis
+    })),
+    valid: wfcr.valid,
+    reasoning: wfcr.reasoning
+  };
 }
 
 function performScreening(concept: string): ScreeningResult {
@@ -485,24 +454,35 @@ function performScreening(concept: string): ScreeningResult {
 
   // Check for key structural elements using Russian keywords
   // (user narrative is in Russian per Language Contract)
-  if (!lowerConcept.includes('закон') && !lowerConcept.includes('правило') && !lowerConcept.includes('тематическ')) {
+  const q1 = lowerConcept.includes('закон') || lowerConcept.includes('правило') || lowerConcept.includes('тематическ');
+  if (!q1) {
     no_count++;
     flags.push('§0: Тематический закон не обнаружен');
   }
 
-  if (!lowerConcept.includes('персонаж') && !lowerConcept.includes('герой') && !lowerConcept.includes('протагонист')) {
+  const q3 = lowerConcept.includes('персонаж') || lowerConcept.includes('герой') || lowerConcept.includes('протагонист');
+  if (!q3) {
     no_count++;
     flags.push('§3: Нет явного протагониста');
   }
 
-  if (!lowerConcept.includes('конфликт') && !lowerConcept.includes('борьба') && !lowerConcept.includes('противост')) {
+  const q6 = lowerConcept.includes('конфликт') || lowerConcept.includes('борьба') || lowerConcept.includes('противост');
+  if (!q6) {
     no_count++;
     flags.push('§6: Нет явного конфликта');
   }
 
   return {
-    no_count,
+    question1_thematicLaw: q1,
+    question2_worldWithoutProtagonist: q3,
+    question3_embodiment: false, // PHASE_2_STUB: Requires LLM-based analysis
+    question4_hamartia: false, // PHASE_2_STUB: Requires LLM-based analysis
+    question5_painfulChoice: false, // PHASE_2_STUB: Requires LLM-based analysis
+    question6_antagonistLogic: q6,
+    question7_finalIrreversible: false, // PHASE_2_STUB: Requires LLM-based analysis
     flags,
+    recommendation: no_count >= 4 ? 'stop_return_to_skeleton' : no_count >= 2 ? 'requires_sections' : 'ready_for_audit',
+    no_count,
     sections_for_deep_audit: flags,
     proceed_normally: no_count < 4
   };
@@ -557,9 +537,9 @@ function generateIssuesFromSkeleton(skeleton: SkeletonExtractionResult): Issue[]
       axes: { criticality: weakness.severity === 'critical' ? 9 : 5, risk: 3, time_cost: 4 },
       diagnosis: weakness.testQuestion,
       patches: {
-        conservative: { description: weakness.action, impact: 'Minimal fix', sideEffects: [] },
-        compromise: { description: weakness.action, impact: 'Balanced fix', sideEffects: [] },
-        radical: { description: weakness.action, impact: 'Comprehensive fix', sideEffects: [] }
+        conservative: { description: weakness.action, impact: 'Минимальное исправление', sideEffects: [] },
+        compromise: { description: weakness.action, impact: 'Сбалансированное исправление', sideEffects: [] },
+        radical: { description: weakness.action, impact: 'Комплексное исправление', sideEffects: [] }
       }
     }));
   }
@@ -581,9 +561,9 @@ function generateIssuesFromGate(gate: GateResult | undefined, level: string): Is
         axes: { criticality: 7, risk: 4, time_cost: 5 },
         diagnosis: condition.message,
         patches: {
-          conservative: { description: 'Minor adjustment', impact: 'Quick fix', sideEffects: [] },
-          compromise: { description: 'Balanced revision', impact: 'Moderate improvement', sideEffects: [] },
-          radical: { description: 'Complete restructuring', impact: 'Full resolution', sideEffects: [] }
+          conservative: { description: 'Незначительная корректировка', impact: 'Быстрое исправление', sideEffects: [] },
+          compromise: { description: 'Сбалансированная переработка', impact: 'Умеренное улучшение', sideEffects: [] },
+          radical: { description: 'Полная реструктуризация', impact: 'Полное разрешение', sideEffects: [] }
         }
       }));
     }
@@ -603,9 +583,9 @@ function generateIssuesFromGriefValidation(validation: GriefValidationResult): I
       axes: { criticality: 9, risk: 5, time_cost: 6 },
       diagnosis: error.message,
       patches: {
-        conservative: { description: 'Add grief stage manifestation', impact: 'Minimal addition', sideEffects: ['May need minor revisions'] },
-        compromise: { description: 'Restructure grief progression', impact: 'Better emotional flow', sideEffects: ['Moderate restructuring'] },
-        radical: { description: 'Redesign grief architecture', impact: 'Complete emotional coherence', sideEffects: ['Major structural changes'] }
+        conservative: { description: 'Добавить проявление стадии горя', impact: 'Минимальное дополнение', sideEffects: ['Могут потребоваться небольшие доработки'] },
+        compromise: { description: 'Реструктурировать прогрессию горя', impact: 'Лучший эмоциональный поток', sideEffects: ['Умеренная реструктуризация'] },
+        radical: { description: 'Перепроектировать архитектуру горя', impact: 'Полная эмоциональная связность', sideEffects: ['Серьёзные структурные изменения'] }
       }
     }));
   }
@@ -623,11 +603,11 @@ function generateIssuesFromCultPotential(result: CultEvaluationResult): Issue[] 
         location: 'L4.cult_potential',
         severity: 'critical',
         axes: { criticality: 9, risk: 4, time_cost: 7 },
-        diagnosis: `${criterion.name} failed - mandatory criterion`,
+        diagnosis: `${criterion.name} failed — обязательный критерий`,
         patches: {
-          conservative: { description: 'Add minimum viable element', impact: 'Meets threshold', sideEffects: [] },
-          compromise: { description: 'Develop thematic integration', impact: 'Stronger foundation', sideEffects: ['Related revisions'] },
-          radical: { description: 'Restructure narrative foundation', impact: 'Complete thematic coherence', sideEffects: ['Major revisions'] }
+          conservative: { description: 'Добавить минимально жизнеспособный элемент', impact: 'Соответствует порогу', sideEffects: [] },
+          compromise: { description: 'Развить тематическую интеграцию', impact: 'Более прочная основа', sideEffects: ['Связанные доработки'] },
+          radical: { description: 'Реструктурировать основу нарратива', impact: 'Полная тематическая связность', sideEffects: ['Серьёзные доработки'] }
         }
       }));
     }
@@ -660,7 +640,7 @@ function analyzeGriefStages(concept: string, dominantStage?: string): GriefPrese
       
       presences.push({
         stage,
-        level,
+        level: level as import('./types').GriefLevel,
         present: hasStage,
         description: hasStage ? `Обнаружена стадия ${stage} на уровне ${level}` : undefined
       });
@@ -691,42 +671,50 @@ function createIssueFromChain(chainResult: WhatForChainResult, element: string):
     location: `chain.${element}`,
     severity: chainResult.terminalStep <= 4 ? 'critical' : 'major',
     axes: { criticality: chainResult.terminalStep <= 4 ? 9 : 6, risk: 4, time_cost: 5 },
-    diagnosis: `Element "${element}" breaks at step ${chainResult.terminalStep}`,
+    diagnosis: `Элемент «${element}» обрывается на шаге ${chainResult.terminalStep}`,
     patches: {
-      conservative: { description: 'Bind element to world law', impact: 'Minimal integration', sideEffects: [] },
-      compromise: { description: 'Restructure element purpose', impact: 'Better narrative fit', sideEffects: ['Minor revisions'] },
-      radical: { description: 'Remove or replace element', impact: 'Clean narrative', sideEffects: ['May affect related elements'] }
+      conservative: { description: 'Привязать элемент к закону мира', impact: 'Минимальная интеграция', sideEffects: [] },
+      compromise: { description: 'Реструктурировать назначение элемента', impact: 'Лучшая нарративная связь', sideEffects: ['Небольшие доработки'] },
+      radical: { description: 'Удалить или заменить элемент', impact: 'Чистый нарратив', sideEffects: ['Может повлиять на связанные элементы'] }
     }
   });
 }
 
 function deriveGriefFromLaw(law: string): GenerativeOutput['grief_mapping'] {
-  // Simplified derivation - in production would use LLM
+  // PHASE_2_TODO: Replace keyword matching with LLM-based grief derivation.
+  // Russian keywords per Language Contract (Finding 1).
   const lowerLaw = law.toLowerCase();
   
-  if (lowerLaw.includes('loss') || lowerLaw.includes('death')) {
-    return { derived_stage: 'depression', justification: ['Law involves loss', 'Characters grieve'] };
+  if (lowerLaw.includes('потеря') || lowerLaw.includes('смерть') || lowerLaw.includes('утрата')) {
+    return { law, derived_stage: 'depression', justification_chain: ['Закон связан с потерей', 'Персонажи переживают горе'], justification: ['Закон связан с потерей', 'Персонажи переживают горе'] };
   }
-  if (lowerLaw.includes('reject') || lowerLaw.includes('deny')) {
-    return { derived_stage: 'denial', justification: ['Law involves rejection', 'Denial theme'] };
+  if (lowerLaw.includes('отрицан') || lowerLaw.includes('отверга') || lowerLaw.includes('отказ')) {
+    return { law, derived_stage: 'denial', justification_chain: ['Закон связан с отрицанием', 'Тема непринятия'], justification: ['Закон связан с отрицанием', 'Тема непринятия'] };
   }
-  if (lowerLaw.includes('anger') || lowerLaw.includes('rage')) {
-    return { derived_stage: 'anger', justification: ['Law involves anger', 'Conflict-driven'] };
+  if (lowerLaw.includes('гнев') || lowerLaw.includes('ярость') || lowerLaw.includes('злость')) {
+    return { law, derived_stage: 'anger', justification_chain: ['Закон связан с гневом', 'Конфликтная природа'], justification: ['Закон связан с гневом', 'Конфликтная природа'] };
   }
   
-  return { derived_stage: 'depression', justification: ['Default to depression', 'Central narrative weight'] };
+  return { law, derived_stage: 'depression', justification_chain: ['По умолчанию — депрессия', 'Центральный нарративный вес'], justification: ['По умолчанию — депрессия', 'Центральный нарративный вес'] };
 }
 
 function deriveDilemmaFromTheme(theme: string): GenerativeOutput['dilemma'] {
-  // Simplified derivation
+  // PHASE_2_TODO: Replace with LLM-based dilemma generation.
   return {
-    value_A: 'Individual freedom',
-    value_B: 'Collective responsibility',
-    conflict_description: `Theme "${theme}" creates tension between personal and societal needs`
+    value_A: 'Личная свобода',
+    value_B: 'Коллективная ответственность',
+    criteria_met: {
+      type_choice: false,
+      irreversibility: false,
+      identity: false,
+      victory_price: false
+    },
+    post_final_world: '',
+    conflict_description: `Тема «${theme}» создаёт напряжение между личными и общественными потребностями`
   };
 }
 
-function calculateFinalScore(state: AuditState): FinalScore {
+function calculateFinalScore(state: OrchestratorState): { total: string; percentage: number; by_level: Record<string, number> } {
   const by_level: Record<string, number> = {
     L1: state.gate_L1?.score || 0,
     L2: state.gate_L2?.score || 0,
@@ -744,7 +732,7 @@ function calculateFinalScore(state: AuditState): FinalScore {
   };
 }
 
-function generateNextActions(state: AuditState): NextAction[] {
+function generateNextActions(state: OrchestratorState): NextAction[] {
   const actions: NextAction[] = [];
 
   // Priority 1: Critical issues
@@ -752,8 +740,8 @@ function generateNextActions(state: AuditState): NextAction[] {
   if (criticalIssues.length > 0) {
     actions.push({
       priority: 1,
-      action: `Address ${criticalIssues.length} critical issues`,
-      rationale: 'Critical issues block narrative coherence',
+      action: `Устранить ${criticalIssues.length} критических проблем`,
+      rationale: 'Критические проблемы блокируют связность нарратива',
       estimated_effort: 'days'
     });
   }
@@ -762,8 +750,8 @@ function generateNextActions(state: AuditState): NextAction[] {
   if (state.gate_L1 && state.gate_L1.status === 'failed') {
     actions.push({
       priority: 2,
-      action: 'Fix L1 gate failures',
-      rationale: 'L1 is foundation for all other levels',
+      action: 'Исправить провал гейта L1',
+      rationale: 'L1 — основа для всех остальных уровней',
       estimated_effort: 'days'
     });
   }
@@ -772,8 +760,8 @@ function generateNextActions(state: AuditState): NextAction[] {
   if (state.cult_potential && !state.cult_potential.passed) {
     actions.push({
       priority: 3,
-      action: 'Improve cult potential criteria',
-      rationale: state.cult_potential.recommendations[0] || 'Enhance narrative depth',
+      action: 'Улучшить критерии культового потенциала',
+      rationale: state.cult_potential.recommendations[0] || 'Углубить нарратив',
       estimated_effort: 'weeks'
     });
   }

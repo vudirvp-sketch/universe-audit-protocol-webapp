@@ -28,6 +28,7 @@ import {
   AVAILABLE_PROVIDERS,
   type LLMProvider,
 } from '@/lib/llm-client';
+import { t } from '@/lib/i18n/ru';
 
 interface SettingsDialogProps {
   onSettingsChange?: (settings: { provider: LLMProvider; apiKey: string | null; model: string | null }) => void;
@@ -121,7 +122,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title="Settings">
+        <Button variant="ghost" size="icon" title={t.app.settings}>
           <Settings className="h-5 w-5" />
         </Button>
       </DialogTrigger>
@@ -129,10 +130,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            LLM Settings
+            {t.settings.title}
           </DialogTitle>
           <DialogDescription>
-            Choose your AI provider and configure the API key.
+            {t.settings.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -141,11 +142,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <Sparkles className="h-4 w-4" />
-              AI Provider
+              {t.settings.provider}
             </Label>
             <Select value={provider} onValueChange={(v) => handleProviderChange(v as LLMProvider)}>
               <SelectTrigger>
-                <SelectValue placeholder="Select provider" />
+                <SelectValue placeholder={t.settings.providerSelect} />
               </SelectTrigger>
               <SelectContent className="max-h-[300px]">
                 {AVAILABLE_PROVIDERS.map((p) => (
@@ -154,7 +155,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                       <span>{p.name}</span>
                       {p.hasFreeTier && (
                         <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-1.5 py-0.5 rounded">
-                          FREE
+                          {t.settings.freeTier}
                         </span>
                       )}
                     </div>
@@ -165,7 +166,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             {hasFreeTier && (
               <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
                 <Zap className="h-3 w-3" />
-                This provider has a free tier!
+                {t.settings.freeTierAvailable}
               </p>
             )}
           </div>
@@ -174,7 +175,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
               <Globe className="h-4 w-4" />
-              Model
+              {t.settings.model}
             </Label>
             <Input
               placeholder={currentProvider?.defaultModel || 'model-name'}
@@ -182,7 +183,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               onChange={(e) => setInputModel(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Default: {currentProvider?.defaultModel}
+              {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
             </p>
           </div>
 
@@ -190,7 +191,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <div className="space-y-2">
             <Label htmlFor="api-key" className="flex items-center gap-2">
               <Key className="h-4 w-4" />
-              API Key
+              {t.settings.apiKey}
             </Label>
             <div className="relative">
               <Input
@@ -199,7 +200,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 placeholder={
                   currentProvider?.apiKeyPrefix
                     ? `${currentProvider.apiKeyPrefix}...`
-                    : 'Enter your API key...'
+                    : t.settings.apiKeyPlaceholder
                 }
                 value={inputKey}
                 onChange={(e) => setInputKey(e.target.value)}
@@ -225,7 +226,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <div className="space-y-2">
             <Label htmlFor="proxy-url" className="flex items-center gap-2">
               <Server className="h-4 w-4" />
-              Proxy URL
+              {t.settings.proxyUrl}
             </Label>
             <Input
               id="proxy-url"
@@ -235,7 +236,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               onChange={(e) => setInputProxyUrl(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              URL вашего Cloudflare Worker CORS-прокси. Развёртывается из директории worker/
+              {t.settings.proxyUrlHint}
             </p>
           </div>
 
@@ -244,14 +245,14 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
               <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               <AlertDescription className="text-green-700 dark:text-green-300 text-sm">
-                {currentProvider?.name} API key configured
+                {t.settings.apiKeyConfigured.replace('{provider}', currentProvider?.name || '')}
               </AlertDescription>
             </Alert>
           )}
 
           {/* Instructions */}
           <div className="rounded-lg bg-muted p-4 space-y-3">
-            <h4 className="text-sm font-medium">How to get an API key:</h4>
+            <h4 className="text-sm font-medium">{t.settings.howToGetKey}</h4>
 
             <div className="text-sm text-muted-foreground space-y-2">
               {provider === 'google' && (
@@ -355,7 +356,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             </div>
 
             <p className="text-xs text-muted-foreground pt-2 border-t">
-              Your API key is stored locally in your browser and never shared with third parties.
+              {t.settings.keySecurityNote}
             </p>
           </div>
         </div>
@@ -368,7 +369,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             className="w-full sm:w-auto"
           >
             <Trash2 className="h-4 w-4 mr-2" />
-            Clear
+            {t.app.clear}
           </Button>
           <Button
             onClick={handleSave}
@@ -378,10 +379,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             {saved ? (
               <>
                 <Check className="h-4 w-4 mr-2" />
-                Saved!
+                {t.app.saved}
               </>
             ) : (
-              'Save'
+              t.app.save
             )}
           </Button>
         </DialogFooter>

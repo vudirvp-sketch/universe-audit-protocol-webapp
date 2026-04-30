@@ -41,6 +41,7 @@ import type { MediaType, AuthorProfileAnswers, AuditPhase, AuthorProfile, Skelet
 import { runAuditPipeline, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings } from '@/hooks/useSettings';
+import { t } from '@/lib/i18n/ru';
 
 export default function Home() {
   const {
@@ -134,34 +135,34 @@ export default function Home() {
 
       // Update state with pipeline results using properly typed setters
       if (result.authorProfile) {
-        setAuthorProfile(result.authorProfile as AuthorProfile);
+        setAuthorProfile(result.authorProfile);
       }
       if (result.skeleton) {
-        setSkeleton(result.skeleton as Skeleton);
+        setSkeleton(result.skeleton);
       }
       if (result.screeningResult) {
-        setScreeningResult(result.screeningResult as ScreeningResult);
+        setScreeningResult(result.screeningResult);
       }
       if (result.gateResults) {
-        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1 as GateResult);
-        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2 as GateResult);
-        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3 as GateResult);
-        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4 as GateResult);
+        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1);
+        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2);
+        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3);
+        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4);
       }
       if (result.issues && result.issues.length > 0) {
-        setIssues(result.issues as Issue[]);
+        setIssues(result.issues);
       }
       if (result.whatForChains && result.whatForChains.length > 0) {
-        setWhatForChains(result.whatForChains as ChainResult[]);
+        setWhatForChains(result.whatForChains);
       }
       if (result.generativeOutput) {
-        setGenerativeOutput(result.generativeOutput as GenerativeOutput);
+        setGenerativeOutput(result.generativeOutput);
       }
       if (result.nextActions && result.nextActions.length > 0) {
-        setNextActions(result.nextActions as NextAction[]);
+        setNextActions(result.nextActions);
       }
       if (result.finalScore) {
-        setFinalScore(result.finalScore as { total: string; percentage: number; by_level: Record<string, number> });
+        setFinalScore(result.finalScore);
       }
 
       // Set phase based on result
@@ -195,14 +196,6 @@ export default function Home() {
       setAbortController(null);
     }
   };
-
-  // Auto-start audit when phase changes to mode_detection trigger
-  React.useEffect(() => {
-    if (phase === 'mode_detection' && inputText.trim() && !isLoading) {
-      startAudit();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -253,9 +246,7 @@ export default function Home() {
             <div className="text-center mb-8">
               <h2 className="text-3xl font-bold mb-2">Аудит вашей вселенной</h2>
               <p className="text-muted-foreground max-w-2xl mx-auto">
-                Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня:
-                Механизм, Тело, Психика и Мета. Каждый уровень требует порогового балла для прохождения
-                (60% для конфликтного режима, 50% для кирё, 55% для гибридного).
+                {t.homeDescription}
               </p>
             </div>
 

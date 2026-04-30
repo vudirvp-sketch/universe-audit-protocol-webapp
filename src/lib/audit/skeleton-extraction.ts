@@ -48,72 +48,72 @@ export interface WeaknessResult {
 const SKELETON_ELEMENTS = [
   {
     id: 'thematic_law',
-    name: 'Thematic Law',
+    name: 'Тематический закон',
     weaknessTest: {
-      question: 'Remove theme: breaks physics or only plot?',
+      question: 'Убрать тему: ломает физику или только сюжет?',
       failureAction: 'bind_to_law_or_remove',
       severity: 'critical' as const
     }
   },
   {
     id: 'root_trauma',
-    name: 'Root Trauma',
+    name: 'Корневая травма',
     weaknessTest: {
-      question: 'Explains all ideologies?',
+      question: 'Объясняет все идеологии?',
       failureAction: 'deepen_trauma_connection',
       severity: 'critical' as const
     }
   },
   {
     id: 'hamartia',
-    name: 'Hamartia (Fatal Flaw)',
+    name: 'Хамартия (Роковой недостаток)',
     weaknessTest: {
-      question: 'Ending follows from trait?',
+      question: 'Финал следует из черты?',
       failureAction: 'connect_flaw_to_ending',
       severity: 'critical' as const
     }
   },
   {
     id: 'protagonist',
-    name: 'Protagonist Core',
+    name: 'Ядро протагониста',
     weaknessTest: {
-      question: 'Clear desire + obstacle?',
+      question: 'Ясное желание + препятствие?',
       failureAction: 'clarify_protagonist_drive',
       severity: 'major' as const
     }
   },
   {
     id: 'antagonist',
-    name: 'Antagonist Force',
+    name: 'Антагонистическая сила',
     weaknessTest: {
-      question: 'Embodies opposite of protagonist?',
+      question: 'Воплощает противоположность протагониста?',
       failureAction: 'strengthen_antagonist_thematic',
       severity: 'major' as const
     }
   },
   {
     id: 'central_conflict',
-    name: 'Central Conflict',
+    name: 'Центральный конфликт',
     weaknessTest: {
-      question: 'Stakes are world-level?',
+      question: 'Ставки мирового уровня?',
       failureAction: 'raise_stakes_to_world_level',
       severity: 'major' as const
     }
   },
   {
     id: 'world_law',
-    name: 'World Law',
+    name: 'Закон мира',
     weaknessTest: {
-      question: 'Affects economy/physics, not just plot?',
+      question: 'Влияет на экономику/физику, а не только на сюжет?',
       failureAction: 'integrate_law_into_world',
       severity: 'critical' as const
     }
   },
   {
     id: 'emotional_core',
-    name: 'Emotional Core',
+    name: 'Эмоциональное ядро',
     weaknessTest: {
-      question: 'Universal emotion + specific manifestation?',
+      question: 'Универсальная эмоция + конкретное проявление?',
       failureAction: 'ground_emotion_in_specifics',
       severity: 'minor' as const
     }
@@ -227,7 +227,7 @@ function applyWeaknessTest(
   
   // Cannot test missing elements
   if (!value) {
-    return { passed: null, reason: 'Element missing' };
+    return { passed: null, reason: 'Элемент отсутствует' };
   }
 
   const testId = elementDef.id;
@@ -259,7 +259,7 @@ function applyWeaknessTest(
       return testEmotionalCore(lowerValue, context);
     
     default:
-      return { passed: null, reason: 'Unknown test' };
+      return { passed: null, reason: 'Неизвестный тест' };
   }
 }
 
@@ -276,19 +276,19 @@ function testThematicLaw(value: string, context: Record<string, unknown>): { pas
   const hasWorldIntegration = worldbuilding && Object.keys(worldbuilding).length > 0;
 
   if (hasPhysicsIntegration && !hasPlotOnlyIndicators) {
-    return { passed: true, reason: 'Thematic law integrated with world physics' };
+    return { passed: true, reason: 'Тематический закон интегрирован с физикой мира' };
   }
   
   if (hasWorldIntegration) {
-    return { passed: true, reason: 'Thematic law connected to worldbuilding' };
+    return { passed: true, reason: 'Тематический закон связан с мироустройством' };
   }
 
   if (hasPlotOnlyIndicators) {
-    return { passed: false, reason: 'Thematic law appears to affect only plot, not world mechanics' };
+    return { passed: false, reason: 'Тематический закон влияет только на сюжет, а не на механику мира' };
   }
 
   // Default: needs review
-  return { passed: false, reason: 'Unable to confirm thematic law integration with world physics' };
+  return { passed: false, reason: 'Не удалось подтвердить интеграцию тематического закона с физикой мира' };
 }
 
 function testRootTrauma(value: string, context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -304,14 +304,14 @@ function testRootTrauma(value: string, context: Record<string, unknown>): { pass
   const hasExplanatoryPower = explanatoryKeywords.some(kw => value.includes(kw));
 
   if (hasIdeologyConnection && hasExplanatoryPower) {
-    return { passed: true, reason: 'Root trauma explains ideological foundation' };
+    return { passed: true, reason: 'Корневая травма объясняет идеологическую основу' };
   }
 
   if (hasExplanatoryPower) {
-    return { passed: true, reason: 'Root trauma has explanatory power' };
+    return { passed: true, reason: 'Корневая травма обладает объяснительной силой' };
   }
 
-  return { passed: false, reason: 'Root trauma does not clearly explain ideological system' };
+  return { passed: false, reason: 'Корневая травма не объясняет идеологическую систему' };
 }
 
 function testHamartia(value: string, context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -324,10 +324,10 @@ function testHamartia(value: string, context: Record<string, unknown>): { passed
   const hasCausalChain = causalKeywords.some(kw => value.includes(kw));
 
   if (hasEndingConnection || hasCausalChain) {
-    return { passed: true, reason: 'Hamartia connects to narrative ending' };
+    return { passed: true, reason: 'Хамартия связана с финалом повествования' };
   }
 
-  return { passed: false, reason: 'Hamartia does not clearly connect to ending' };
+  return { passed: false, reason: 'Хамартия не связана с финалом' };
 }
 
 function testProtagonist(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -339,18 +339,18 @@ function testProtagonist(value: string, _context: Record<string, unknown>): { pa
   const hasObstacle = obstacleKeywords.some(kw => value.includes(kw));
 
   if (hasDesire && hasObstacle) {
-    return { passed: true, reason: 'Protagonist has clear desire and obstacle' };
+    return { passed: true, reason: 'У протагониста ясное желание и препятствие' };
   }
 
   if (hasDesire) {
-    return { passed: false, reason: 'Protagonist has desire but obstacle unclear' };
+    return { passed: false, reason: 'У протагониста есть желание, но препятствие неясно' };
   }
 
   if (hasObstacle) {
-    return { passed: false, reason: 'Protagonist has obstacle but desire unclear' };
+    return { passed: false, reason: 'У протагониста есть препятствие, но желание неясно' };
   }
 
-  return { passed: false, reason: 'Protagonist desire and obstacle both unclear' };
+  return { passed: false, reason: 'Желание и препятствие протагониста неясны' };
 }
 
 function testAntagonist(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -362,10 +362,10 @@ function testAntagonist(value: string, _context: Record<string, unknown>): { pas
   const hasThematicRole = thematicKeywords.some(kw => value.includes(kw));
 
   if (hasOpposite || hasThematicRole) {
-    return { passed: true, reason: 'Antagonist has clear thematic opposition' };
+    return { passed: true, reason: 'Антагонист имеет ясную тематическую противоположность' };
   }
 
-  return { passed: false, reason: 'Antagonist thematic opposition unclear' };
+  return { passed: false, reason: 'Тематическая противоположность антагониста неясна' };
 }
 
 function testCentralConflict(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -377,15 +377,15 @@ function testCentralConflict(value: string, _context: Record<string, unknown>): 
   const hasOnlyPersonalStakes = personalStakesKeywords.some(kw => value.includes(kw));
 
   if (hasWorldStakes && !hasOnlyPersonalStakes) {
-    return { passed: true, reason: 'Central conflict has world-level stakes' };
+    return { passed: true, reason: 'Центральный конфликт имеет ставки мирового уровня' };
   }
 
   if (hasOnlyPersonalStakes) {
-    return { passed: false, reason: 'Central conflict appears limited to personal stakes' };
+    return { passed: false, reason: 'Центральный конфликт ограничен личными ставками' };
   }
 
   // Moderate: unclear but not necessarily failing
-  return { passed: false, reason: 'Central conflict stakes level unclear' };
+  return { passed: false, reason: 'Уровень ставок центрального конфликта неясен' };
 }
 
 function testWorldLaw(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -397,10 +397,10 @@ function testWorldLaw(value: string, _context: Record<string, unknown>): { passe
   const hasPlotOnly = plotOnlyKeywords.some(kw => value.includes(kw));
 
   if (hasWorldAffect && !hasPlotOnly) {
-    return { passed: true, reason: 'World law affects world mechanics' };
+    return { passed: true, reason: 'Закон мира влияет на механику мира' };
   }
 
-  return { passed: false, reason: 'World law integration with world mechanics unclear' };
+  return { passed: false, reason: 'Интеграция закона мира с механикой мира неясна' };
 }
 
 function testEmotionalCore(value: string, _context: Record<string, unknown>): { passed: boolean; reason: string } {
@@ -412,14 +412,14 @@ function testEmotionalCore(value: string, _context: Record<string, unknown>): { 
   const hasSpecific = specificIndicators.some(kw => value.includes(kw));
 
   if (hasUniversal && hasSpecific) {
-    return { passed: true, reason: 'Emotional core combines universal with specific' };
+    return { passed: true, reason: 'Эмоциональное ядро сочетает универсальное с конкретным' };
   }
 
   if (hasUniversal) {
-    return { passed: false, reason: 'Emotional core has universal emotion but lacks specificity' };
+    return { passed: false, reason: 'Эмоциональное ядро имеет универсальную эмоцию, но не хватает конкретики' };
   }
 
-  return { passed: false, reason: 'Emotional core needs clearer universal emotion' };
+  return { passed: false, reason: 'Эмоциональному ядру не хватает ясной универсальной эмоции' };
 }
 
 // ============================================================================
@@ -432,13 +432,13 @@ function testEmotionalCore(value: string, _context: Record<string, unknown>): { 
 export function formatSkeletonResult(result: SkeletonExtractionResult): string {
   const lines: string[] = [];
   
-  lines.push('## Skeleton Extraction Results');
+  lines.push('## Результаты извлечения скелета');
   lines.push('');
-  lines.push(`**Overall Status:** ${result.overallStatus.toUpperCase()}`);
-  lines.push(`**Can Proceed to L1:** ${result.canProceedToL1 ? 'YES' : 'NO'}`);
+  lines.push(`**Общий статус:** ${result.overallStatus.toUpperCase()}`);
+  lines.push(`**Можно перейти к L1:** ${result.canProceedToL1 ? 'ДА' : 'НЕТ'}`);
   lines.push('');
 
-  lines.push('### Elements:');
+  lines.push('### Элементы:');
   for (const element of result.elements) {
     const statusIcon = element.status === 'complete' ? '✓' : 
                        element.status === 'partial' ? '◐' : '✗';
@@ -446,15 +446,15 @@ export function formatSkeletonResult(result: SkeletonExtractionResult): string {
                      element.weaknessTest.passed === false ? '✗' : '?';
     
     lines.push(`- ${statusIcon} **${element.name}**: ${element.status}`);
-    lines.push(`  - Test: "${element.weaknessTest.question}" ${testIcon}`);
+    lines.push(`  - Тест: "${element.weaknessTest.question}" ${testIcon}`);
     if (element.weaknessTest.passed === false) {
-      lines.push(`  - Action: ${element.weaknessTest.failureAction}`);
+      lines.push(`  - Действие: ${element.weaknessTest.failureAction}`);
     }
   }
   lines.push('');
 
   if (result.weaknesses.length > 0) {
-    lines.push('### Weaknesses Found:');
+    lines.push('### Обнаруженные слабости:');
     for (const w of result.weaknesses) {
       lines.push(`- [${w.severity.toUpperCase()}] ${w.element}: ${w.action}`);
     }
@@ -462,7 +462,7 @@ export function formatSkeletonResult(result: SkeletonExtractionResult): string {
 
   if (result.blockers.length > 0) {
     lines.push('');
-    lines.push('### L1 Blockers:');
+    lines.push('### Блокеры L1:');
     for (const blocker of result.blockers) {
       lines.push(`- ${blocker}`);
     }

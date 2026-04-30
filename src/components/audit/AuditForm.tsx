@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronUp, Sparkles, BookOpen, Film, Gamepad2, Tv, Dices } from 'lucide-react';
 import type { MediaType, AuditMode, AuthorProfileAnswers } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
 
 const mediaIcons: Record<MediaType, React.ReactNode> = {
   game: <Gamepad2 className="h-4 w-4" />,
@@ -80,36 +81,34 @@ export function AuditForm() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-amber-500" />
-            Narrative Input
+            {t.form.narrativeTitle}
           </CardTitle>
           <CardDescription>
-            Enter your narrative concept, story outline, or world description for analysis
+            {t.form.narrativeDescription}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="narrative">Narrative / Concept Text</Label>
+            <Label htmlFor="narrative">{t.form.narrativeLabel}</Label>
             <Textarea
               id="narrative"
-              placeholder="Enter your narrative concept, story outline, or world description here...
-
-Example: A post-apocalyptic world where memories can be extracted and traded. The protagonist, a memory dealer, discovers that their own memories have been systematically erased, leading them on a journey to recover their past while uncovering a conspiracy that threatens what remains of society..."
+              placeholder={t.form.narrativePlaceholder}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               className="min-h-[200px] resize-y"
               disabled={isLoading}
             />
             <p className="text-xs text-muted-foreground">
-              {inputText.length} characters | Minimum 100 characters recommended
+              {t.form.characterCount.replace('{count}', String(inputText.length))}
             </p>
           </div>
 
           {/* Media Type Selection */}
           <div className="space-y-2">
-            <Label>Media Type</Label>
+            <Label>{t.form.mediaType}</Label>
             <Select value={mediaType} onValueChange={(v) => setMediaType(v as MediaType)} disabled={isLoading}>
               <SelectTrigger>
-                <SelectValue placeholder="Select media type" />
+                <SelectValue placeholder={t.form.mediaTypeSelect} />
               </SelectTrigger>
               <SelectContent>
                 {(Object.entries(MEDIA_TYPE_LABELS) as [MediaType, string][]).map(([type, label]) => (
@@ -129,9 +128,9 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
       {/* Audit Mode Selection */}
       <Card>
         <CardHeader>
-          <CardTitle>Audit Mode</CardTitle>
+          <CardTitle>{t.form.auditMode}</CardTitle>
           <CardDescription>
-            Select the narrative structure mode that best fits your story
+            {t.form.auditModeDescription}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -153,7 +152,7 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
                   </div>
                   <p className="text-sm text-muted-foreground">{info.description}</p>
                   <p className="text-xs text-muted-foreground italic">
-                    Detection: {info.questions}
+                    {t.form.detection.replace('{questions}', String(info.questions))}
                   </p>
                 </div>
               </div>
@@ -169,9 +168,9 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
             <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Author Profile Quiz</CardTitle>
+                  <CardTitle>{t.form.authorProfileTitle}</CardTitle>
                   <CardDescription>
-                    Optional: Answer 7 questions to determine your author profile
+                    {t.form.authorProfileDescription}
                   </CardDescription>
                 </div>
                 {authorQuizExpanded ? (
@@ -185,8 +184,7 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
           <CollapsibleContent>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                These questions help determine if you&apos;re a &quot;Gardener&quot; (discovery writer) or &quot;Architect&quot; (planner), 
-                which affects the types of issues the audit will prioritize.
+                {t.form.authorProfileHint}
               </p>
               
               <div className="space-y-3">
@@ -206,11 +204,11 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
                       <div className="flex items-center gap-2">
                         {q.isKeySignal && (
                           <Badge variant="secondary" className="text-xs">
-                            Key Signal (×{q.weight})
+                            {t.form.keySignal.replace('{weight}', String(q.weight))}
                           </Badge>
                         )}
                         <span className="text-xs text-muted-foreground">
-                          Weight: {q.weight}
+                          {t.form.weight.replace('{weight}', String(q.weight))}
                         </span>
                       </div>
                     </div>
@@ -220,9 +218,9 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
 
               {allAuthorQuestionsAnswered && (
                 <div className="p-4 rounded-lg bg-muted">
-                  <p className="text-sm font-medium">Profile determined!</p>
+                  <p className="text-sm font-medium">{t.form.profileDetermined}</p>
                   <p className="text-xs text-muted-foreground">
-                    Your author profile will be calculated when the audit begins.
+                    {t.form.profileDeterminedHint}
                   </p>
                 </div>
               )}
@@ -242,7 +240,7 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
           }}
           disabled={isLoading}
         >
-          Clear
+          {t.app.clear}
         </Button>
         <Button
           onClick={handleStartAudit}
@@ -252,12 +250,12 @@ Example: A post-apocalyptic world where memories can be extracted and traded. Th
           {isLoading ? (
             <>
               <span className="animate-spin mr-2">⏳</span>
-              Analyzing...
+              {t.app.analyzing}
             </>
           ) : (
             <>
               <Sparkles className="h-4 w-4 mr-2" />
-              Start Audit
+              {t.app.startAudit}
             </>
           )}
         </Button>

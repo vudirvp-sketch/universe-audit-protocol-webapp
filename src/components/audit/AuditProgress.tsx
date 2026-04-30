@@ -15,6 +15,7 @@ import {
   Clock,
 } from 'lucide-react';
 import type { AuditPhase } from '@/lib/audit/types';
+import { t } from '@/lib/i18n/ru';
 
 interface PhaseInfo {
   id: AuditPhase;
@@ -85,15 +86,15 @@ export function AuditProgress() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg">Audit Progress</CardTitle>
+            <CardTitle className="text-lg">{t.app.title} — {t.progress.progress}</CardTitle>
             <CardDescription>
-              {isLoading ? 'Processing...' : `${overallProgress.percentage}% complete`}
+              {isLoading ? t.progress.processing : t.progress.percentComplete.replace('{percent}', String(overallProgress.percentage))}
             </CardDescription>
           </div>
           {error && (
             <Badge variant="destructive" className="flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
-              Error
+              Ошибка
             </Badge>
           )}
         </div>
@@ -102,7 +103,7 @@ export function AuditProgress() {
         {/* Overall Progress Bar */}
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Progress</span>
+            <span>{t.progress.progress}</span>
             <span>{overallProgress.current} / {overallProgress.total}</span>
           </div>
           <Progress value={overallProgress.percentage} className="h-2" />
@@ -127,7 +128,7 @@ export function AuditProgress() {
                     <span className="text-sm font-medium truncate">{p.name}</span>
                     {isActive && isLoading && (
                       <Badge variant="secondary" className="text-xs animate-pulse">
-                        Processing
+                        {t.progress.processing}
                       </Badge>
                     )}
                   </div>
@@ -140,7 +141,7 @@ export function AuditProgress() {
 
         {/* Gate Status */}
         <div className="border-t pt-4">
-          <h4 className="text-sm font-medium mb-3">Gate Status</h4>
+          <h4 className="text-sm font-medium mb-3">{t.gates.status}</h4>
           <div className="grid grid-cols-4 gap-2">
             {(['L1', 'L2', 'L3', 'L4'] as const).map((level) => {
               const status = gateStatus[level];
@@ -165,7 +166,7 @@ export function AuditProgress() {
             })}
           </div>
           <p className="text-xs text-muted-foreground mt-2 text-center">
-            Each gate requires ≥60% to proceed
+            {t.gates.requirement}
           </p>
         </div>
 
@@ -175,7 +176,7 @@ export function AuditProgress() {
             <div className="flex items-start gap-2">
               <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm font-medium text-destructive">Audit Stopped</p>
+                <p className="text-sm font-medium text-destructive">{t.progress.auditStopped}</p>
                 <p className="text-xs text-muted-foreground">{error}</p>
               </div>
             </div>
