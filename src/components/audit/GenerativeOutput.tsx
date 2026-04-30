@@ -256,5 +256,3 @@ export function GenerativeOutputDisplay({ output }: GenerativeOutputProps) {
     </div>
   );
 }
-
-export default GenerativeOutputDisplay;

@@ -285,7 +285,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             >
               {testConnection.loading ? (
                 <>
-                  <span className="animate-spin mr-2">\u23F3</span>
+                  <span className="animate-spin mr-2">⏳</span>
                   {t.settings.testing}
                 </>
               ) : testConnection.success ? (

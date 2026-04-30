@@ -300,5 +300,3 @@ export function IssueList({ issues }: IssueListProps) {
     </div>
   );
 }
-
-export default IssueList;

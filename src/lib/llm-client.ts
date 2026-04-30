@@ -387,7 +387,7 @@ export function createLLMClient(config: LLMClientConfig) {
     }
 
     if (!targetUrl) {
-      throw new Error(`No target URL for provider "${config.provider}". Set baseUrl in settings.`);
+      throw new Error(`URL провайдера не задан для «${config.provider}». Укажите baseUrl в настройках.`);
     }
 
     // Build the request body in the provider's native format
@@ -406,33 +406,26 @@ export function createLLMClient(config: LLMClientConfig) {
 
     if (!proxyUrl) {
       throw new Error(
-        'CORS proxy URL is not configured. Set it in Settings → Proxy URL. ' +
-        'Deploy the Worker from the worker/ directory first.'
+        'URL CORS-прокси не настроен. Укажите его в Настройки → URL прокси. ' +
+        'Сначала разверните Worker из директории worker/.'
       );
     }
 
-    try {
-      const response = await fetch(proxyUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(proxyRequest),
-      });
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(proxyRequest),
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`${providerConfig.name} proxy error (${response.status}): ${errorText}`);
-      }
-
-      const responseData = await response.json();
-
-      // Normalize provider-specific response into standard format
-      const normalized = normalizeProviderResponse(config.provider, responseData);
-
-      return normalized;
-
-    } catch (error) {
-      throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${errorText}`);
     }
+
+    const responseData = await response.json();
+
+    // Normalize provider-specific response into standard format
+    return normalizeProviderResponse(config.provider, responseData);
   }
 
   return {

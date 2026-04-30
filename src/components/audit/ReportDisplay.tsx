@@ -37,11 +37,12 @@ const CLASSIFICATION_LABELS: Record<string, string> = {
   decoration: t.report.decoration,
 };
 
-// Derive classification from percentage (same logic as step-final)
+// Derive classification from percentage — MUST match scoring-algorithm.ts thresholds
+// scoring-algorithm.ts (calculateOverallScore): 90/75/55
 function getClassification(percentage: number): string {
-  if (percentage >= 85) return 'cult_masterpiece';
-  if (percentage >= 65) return 'powerful';
-  if (percentage >= 40) return 'living_weak_soul';
+  if (percentage >= 90) return 'cult_masterpiece';
+  if (percentage >= 75) return 'powerful';
+  if (percentage >= 55) return 'living_weak_soul';
   return 'decoration';
 }
 

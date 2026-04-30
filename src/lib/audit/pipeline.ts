@@ -31,8 +31,20 @@ import type {
 import { MASTER_CHECKLIST, filterChecklistByMedia } from './protocol-data';
 import { filterByMediaType, evaluateGate } from './scoring-algorithm';
 
-// Ensure steps are registered (side-effect import triggers auto-registration)
-void stepRegistry.registeredCount;
+// Force step registration — import the step modules so their side-effect
+// registrations execute before getStep() is called.
+import './steps/step-validate';
+import './steps/step-mode-detection';
+import './steps/step-author-profile';
+import './steps/step-skeleton';
+import './steps/step-screening';
+import './steps/step-gate-L1';
+import './steps/step-gate-L2';
+import './steps/step-gate-L3';
+import './steps/step-gate-L4';
+import './steps/step-issues-chains';
+import './steps/step-generative';
+import './steps/step-final';
 
 // ============================================================================
 // PUBLIC API
@@ -349,6 +361,31 @@ export async function resumeAuditFromStep(
     return { ...savedState, error: `Невозможно возобновить: шаг "${fromStep}" не найден в конвейере.` };
   }
 
+  // Rate limiting: track request timestamps to enforce rpmLimit (same as runAuditPipeline)
+  const requestTimestamps: number[] = [];
+  const rpmLimit = savedState.auditMode ? 10 : 10; // Use a reasonable default; caller should pass rpmLimit
+  const minIntervalMs = Math.ceil(60000 / rpmLimit);
+
+  async function enforceRateLimitResume(): Promise<void> {
+    const now = Date.now();
+    while (requestTimestamps.length > 0 && now - requestTimestamps[0] > 60000) {
+      requestTimestamps.shift();
+    }
+    if (requestTimestamps.length >= rpmLimit) {
+      const waitMs = 60000 - (now - requestTimestamps[0]) + 100;
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    } else if (requestTimestamps.length > 0) {
+      const lastRequest = requestTimestamps[requestTimestamps.length - 1];
+      const elapsed = now - lastRequest;
+      if (elapsed < minIntervalMs) {
+        await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
+      }
+    }
+    requestTimestamps.push(Date.now());
+  }
+
   // Execute steps from the resume point onward
   for (let i = resumeIndex; i < stepOrder.length; i++) {
     const phase = stepOrder[i];
@@ -366,6 +403,11 @@ export async function resumeAuditFromStep(
     const stepStart = Date.now();
 
     try {
+      // Enforce rate limit before LLM-calling steps
+      if (!step.skipLLM) {
+        await enforceRateLimitResume();
+      }
+
       runState = await runStep(step, runState, llmClient, (p) => {
         onProgress?.(p, mapToPipelineState(runState));
       });

@@ -72,9 +72,9 @@ export interface IssuePatch {
 }
 
 export interface Axes {
-  criticality: number;  // 1-10 or 1-5
-  risk: number;
-  time_cost: number;
+  criticality: number;  // 1-10: How central to the narrative (canonical scale per issue-schema validation)
+  risk: number;         // 1-10
+  time_cost: number;    // 1-10
 }
 
 export interface Issue {
@@ -302,14 +302,14 @@ export interface ChainIteration {
 }
 
 export interface ChainResult {
-  terminal_type: 'BREAK' | 'DILEMMA' | null;
-  terminal?: 'BREAK' | 'DILEMMA' | 'UNCLASSIFIED';
+  terminal_type: 'BREAK' | 'DILEMMA' | null;  // Legacy field — prefer `terminal`
+  terminal?: 'BREAK' | 'DILEMMA' | 'UNCLASSIFIED';  // Canonical field
   terminalStep?: number;
-  step_reached: number;
+  step_reached: number;  // Legacy field — prefer `terminalStep`
   action: 'bind_to_law' | 'keep' | 'remove' | 'bind_to_law_or_remove' | 'retry_analysis' | null;
-  iterations: ChainIteration[];
+  iterations: ChainIteration[];  // Legacy field — prefer `chain`
   valid: boolean;
-  chain?: ChainIteration[];
+  chain?: ChainIteration[];  // Canonical field
   reasoning?: string;
 }
 
@@ -344,8 +344,8 @@ export interface FiveTouchesResult {
 export interface GriefMappingResult {
   law: string;
   derived_stage: GriefStage;
-  justification_chain: string[];
-  justification?: string[];
+  justification_chain: string[];  // Legacy field — prefer `justification`
+  justification?: string[];  // Canonical field
 }
 
 export interface DilemmaResult {
@@ -393,8 +393,8 @@ export interface AuthorProfile {
   confidence: 'high' | 'medium' | 'low';
   mainRisks: string[];
   auditPriorities: string[];
-  risk_flags?: string[];
-  priority_array?: string[];
+  risk_flags?: string[];      // Legacy alias for mainRisks
+  priority_array?: string[];  // Legacy alias for auditPriorities
 }
 
 // ============================================================================
@@ -532,6 +532,7 @@ export interface AuditJSONOutput {
     L3_score: string;
     L3_passed: boolean;
     L4_score: string;
+    L4_passed: boolean;
   };
   overall_score: {
     checklist: string;

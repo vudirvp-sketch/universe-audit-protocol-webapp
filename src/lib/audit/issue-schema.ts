@@ -8,46 +8,23 @@
  * - automatic recommendation calculation
  */
 
-// ============================================================================
-// TYPE DEFINITIONS
-// ============================================================================
+// Re-export canonical types from types.ts — no duplicate definitions
+export type { Severity, PatchType, Axes, Issue as IssueType } from './types';
 
-export type Severity = 'critical' | 'major' | 'minor' | 'cosmetic';
-
-export type PatchType = 'conservative' | 'compromise' | 'radical';
-
-export interface Axes {
-  criticality: number;  // 1-10: How central to the narrative
-  risk: number;         // 1-10: Risk of causing other issues if fixed
-  time_cost: number;    // 1-10: Effort required to fix
-}
-
-export interface Patch {
-  type: PatchType;
-  description: string;
-  impact: string;
-  sideEffects: string[];
-}
-
-export interface Issue {
-  id: string;
-  location: string;
-  severity: Severity;
-  axes: Axes;
-  diagnosis: string;
-  patches: {
-    conservative: Patch;
-    compromise: Patch;
-    radical: Patch;
-  };
-  recommended: PatchType;
-  reasoning: string;
-}
+import type { Severity, PatchType, Axes, Issue } from './types';
 
 export interface IssueValidationResult {
   valid: boolean;
   missingFields: string[];
   invalidFields: string[];
+}
+
+// Patch template type — local to this module, not in types.ts
+export interface Patch {
+  type: PatchType;
+  description: string;
+  impact: string;
+  sideEffects: string[];
 }
 
 // ============================================================================

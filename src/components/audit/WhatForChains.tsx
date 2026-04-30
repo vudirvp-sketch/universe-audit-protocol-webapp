@@ -298,5 +298,3 @@ export function WhatForChains({ chains }: WhatForChainsProps) {
     </div>
   );
 }
-
-export default WhatForChains;

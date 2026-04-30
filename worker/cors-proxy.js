@@ -102,7 +102,7 @@ export default {
       });
     } catch (error) {
       return new Response(
-        JSON.stringify({ error: 'Proxy request failed', details: error.message }),
+        JSON.stringify({ error: 'Proxy request failed', details: String(error) }),
         { status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
       );
     }

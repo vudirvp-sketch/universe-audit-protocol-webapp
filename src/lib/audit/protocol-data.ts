@@ -315,7 +315,7 @@ export const AUDIT_MODE_DESCRIPTIONS = {
 };
 
 // Thresholds
-export const GATE_THRESHOLD = 60; // Legacy — use getGateThreshold() from types.ts for mode-specific thresholds
+// GATE_THRESHOLD removed — use getGateThreshold() from types.ts for mode-specific thresholds
 export const VITALITY_THRESHOLD = 13; // 13/17 = living world
 export const CULT_THRESHOLD = 8; // 8/11 = cult potential
 export const MARY_SUE_THRESHOLD = 3; // ≤3/8 = acceptable

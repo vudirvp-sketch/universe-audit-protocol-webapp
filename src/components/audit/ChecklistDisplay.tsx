@@ -22,7 +22,8 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import type { ChecklistItem, ChecklistItemStatus } from '@/lib/audit/types';
-import { GATE_THRESHOLD } from '@/lib/audit/protocol-data';
+import { getGateThreshold } from '@/lib/audit/types';
+import { getLevelFromBlock } from '@/lib/audit/protocol-data';
 import { t } from '@/lib/i18n/ru';
 
 const BLOCK_NAMES: Record<string, string> = t.checklist.blockNames;
@@ -132,16 +133,19 @@ interface ChecklistBlockProps {
   block: string;
   items: ChecklistItem[];
   onUpdateItem: (id: string, updates: Partial<ChecklistItem>) => void;
+  level: 'L1' | 'L2' | 'L3' | 'L4';
+  auditMode: import('@/lib/audit/types').AuditMode;
 }
 
-function ChecklistBlock({ block, items, onUpdateItem }: ChecklistBlockProps) {
+function ChecklistBlock({ block, items, onUpdateItem, level, auditMode }: ChecklistBlockProps) {
   const passed = items.filter((i) => i.status === 'PASS').length;
   const failed = items.filter((i) => i.status === 'FAIL').length;
   const insufficient = items.filter((i) => i.status === 'INSUFFICIENT_DATA').length;
   const total = items.length;
 
   const score = total > 0 ? Math.round((passed / total) * 100) : 0;
-  const isPassing = score >= GATE_THRESHOLD;
+  const modeThreshold = getGateThreshold(auditMode, level);
+  const isPassing = score >= modeThreshold;
 
   return (
     <AccordionItem value={block}>
@@ -188,6 +192,7 @@ function ChecklistBlock({ block, items, onUpdateItem }: ChecklistBlockProps) {
 export function ChecklistDisplay() {
   const checklistByBlock = useChecklistByBlock();
   const updateChecklistItem = useAuditState((state) => state.updateChecklistItem);
+  const auditMode = useAuditState((s) => s.auditMode) ?? 'conflict';
 
   const blocks = Object.keys(checklistByBlock).sort();
 
@@ -223,6 +228,8 @@ export function ChecklistDisplay() {
                 block={block}
                 items={checklistByBlock[block]}
                 onUpdateItem={updateChecklistItem}
+                level={getLevelFromBlock(block) as 'L1' | 'L2' | 'L3' | 'L4'}
+                auditMode={auditMode}
               />
             ))}
           </Accordion>

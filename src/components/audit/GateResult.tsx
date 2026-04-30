@@ -31,7 +31,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import type { GateResult as GateResultType, FixItem } from '@/lib/audit/types';
-import { GATE_THRESHOLD } from '@/lib/audit/protocol-data';
+import { getGateThreshold } from '@/lib/audit/types';
 import { t } from '@/lib/i18n/ru';
 
 interface GateResultCardProps {
@@ -132,6 +132,8 @@ function getProceedTarget(level: 'L1' | 'L2' | 'L3' | 'L4'): string {
 
 export function GateResultCard({ level, result, onProceed }: GateResultCardProps) {
   const info = LEVEL_INFO[level];
+  const auditMode = useAuditState((s) => s.auditMode) ?? 'conflict';
+  const modeThreshold = getGateThreshold(auditMode, level);
 
   if (!result) {
     return (
@@ -189,7 +191,7 @@ export function GateResultCard({ level, result, onProceed }: GateResultCardProps
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>{t.gates.scoreLabel}</span>
-            <span>{score}% ({t.gates.threshold.replace('{value}', String(GATE_THRESHOLD))})</span>
+            <span>{score}% ({t.gates.threshold.replace('{value}', String(modeThreshold))})</span>
           </div>
           <Progress value={score} className={`h-3 ${passed ? '[&>div]:bg-green-500' : '[&>div]:bg-red-500'}`} />
         </div>
