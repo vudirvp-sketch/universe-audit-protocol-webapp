@@ -46,38 +46,21 @@ import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n/ru';
 
 export default function Home() {
-  const {
-    phase,
-    inputText,
-    mediaType,
-    auditMode,
-    authorAnswers,
-    isLoading,
-    error,
-    issues,
-    whatForChains,
-    generativeOutput,
-    setPhase,
-    setAuditMode,
-    setLoading,
-    setError,
-    setAuthorProfile,
-    setSkeleton,
-    setScreeningResult,
-    setGateResult,
-    setChecklist,
-    setGriefMatrix,
-    setReport,
-    setIssues,
-    setWhatForChains,
-    setGenerativeOutput,
-    setNextActions,
-    setFinalScore,
-    setBlockedAt,
-    setElapsedMs,
-    setStepTimings,
-    reset,
-  } = useAuditState();
+  // =========================================================================
+  // Zustand: select specific state slices to minimize re-renders
+  // (COMPLETION_PLAN §5.3: "select specific state slices instead of
+  //  destructuring the entire store")
+  // =========================================================================
+  const phase = useAuditState(s => s.phase);
+  const inputText = useAuditState(s => s.inputText);
+  const mediaType = useAuditState(s => s.mediaType);
+  const auditMode = useAuditState(s => s.auditMode);
+  const authorAnswers = useAuditState(s => s.authorAnswers);
+  const isLoading = useAuditState(s => s.isLoading);
+  const error = useAuditState(s => s.error);
+  const issues = useAuditState(s => s.issues);
+  const whatForChains = useAuditState(s => s.whatForChains);
+  const generativeOutput = useAuditState(s => s.generativeOutput);
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
@@ -100,14 +83,14 @@ export default function Home() {
     if (!inputText.trim()) return;
 
     if (!apiKey) {
-      setError(t.errors.noApiKey);
-      setPhase('failed');
+      useAuditState.getState().setError(t.errors.noApiKey);
+      useAuditState.getState().setPhase('failed');
       return;
     }
 
     if (!proxyUrl) {
-      setError(t.errors.proxy);
-      setPhase('failed');
+      useAuditState.getState().setError(t.errors.proxy);
+      useAuditState.getState().setPhase('failed');
       return;
     }
 
@@ -115,9 +98,10 @@ export default function Home() {
     const controller = new AbortController();
     setAbortController(controller);
 
-    setLoading(true);
-    setError(null);
-    setPhase('input_validation');
+    const store = useAuditState.getState();
+    store.setLoading(true);
+    store.setError(null);
+    store.setPhase('input_validation');
 
     // Capture controller in local variable to avoid stale closure in catch
     const currentController = controller;
@@ -140,93 +124,79 @@ export default function Home() {
           // Per-step progress callback — update Zustand store in real time
           // so the user sees intermediate results (skeleton, gates, etc.)
           // as each pipeline step completes, not only after the entire run.
-          setPhase(phase);
+          // Use getState() to avoid stale closures over the store
+          const s = useAuditState.getState();
+          s.setPhase(phase);
 
           // Preserve original inputText in Zustand for correct resume
           if (state.inputText) {
-            const currentInputText = useAuditState.getState().inputText;
+            const currentInputText = s.inputText;
             if (!currentInputText && state.inputText) {
-              useAuditState.getState().setInputText(state.inputText);
+              s.setInputText(state.inputText);
             }
           }
 
-          if (state.auditMode) setAuditMode(state.auditMode);
-          if (state.authorProfile) setAuthorProfile(state.authorProfile);
-          if (state.skeleton) setSkeleton(state.skeleton);
-          if (state.screeningResult) setScreeningResult(state.screeningResult);
+          if (state.auditMode) s.setAuditMode(state.auditMode);
+          if (state.authorProfile) s.setAuthorProfile(state.authorProfile);
+          if (state.skeleton) s.setSkeleton(state.skeleton);
+          if (state.screeningResult) s.setScreeningResult(state.screeningResult);
           if (state.gateResults) {
-            if (state.gateResults.L1) setGateResult('L1', state.gateResults.L1);
-            if (state.gateResults.L2) setGateResult('L2', state.gateResults.L2);
-            if (state.gateResults.L3) setGateResult('L3', state.gateResults.L3);
-            if (state.gateResults.L4) setGateResult('L4', state.gateResults.L4);
+            if (state.gateResults.L1) s.setGateResult('L1', state.gateResults.L1);
+            if (state.gateResults.L2) s.setGateResult('L2', state.gateResults.L2);
+            if (state.gateResults.L3) s.setGateResult('L3', state.gateResults.L3);
+            if (state.gateResults.L4) s.setGateResult('L4', state.gateResults.L4);
           }
-          if (state.griefMatrix) setGriefMatrix(state.griefMatrix);
-          if (state.issues && state.issues.length > 0) setIssues(state.issues);
-          if (state.whatForChains && state.whatForChains.length > 0) setWhatForChains(state.whatForChains);
-          if (state.generativeOutput) setGenerativeOutput(state.generativeOutput);
-          if (state.nextActions && state.nextActions.length > 0) setNextActions(state.nextActions);
-          if (state.finalScore) setFinalScore(state.finalScore);
-          if (state.checklist && state.checklist.length > 0) setChecklist(state.checklist);
+          if (state.griefMatrix) s.setGriefMatrix(state.griefMatrix);
+          if (state.issues && state.issues.length > 0) s.setIssues(state.issues);
+          if (state.whatForChains && state.whatForChains.length > 0) s.setWhatForChains(state.whatForChains);
+          if (state.generativeOutput) s.setGenerativeOutput(state.generativeOutput);
+          if (state.nextActions && state.nextActions.length > 0) s.setNextActions(state.nextActions);
+          if (state.finalScore) s.setFinalScore(state.finalScore);
+          if (state.checklist && state.checklist.length > 0) s.setChecklist(state.checklist);
           // Timing & blocked info
-          if (state.blockedAt) setBlockedAt(state.blockedAt);
-          if (state.elapsedMs) setElapsedMs(state.elapsedMs);
-          if (state.stepTimings && Object.keys(state.stepTimings).length > 0) setStepTimings(state.stepTimings);
+          if (state.blockedAt) s.setBlockedAt(state.blockedAt);
+          if (state.elapsedMs) s.setElapsedMs(state.elapsedMs);
+          if (state.stepTimings && Object.keys(state.stepTimings).length > 0) s.setStepTimings(state.stepTimings);
         },
         controller.signal,
       );
 
-      // Update state with pipeline results using properly typed setters
-      if (result.authorProfile) {
-        setAuthorProfile(result.authorProfile);
-      }
-      if (result.skeleton) {
-        // Pipeline returns canonical Skeleton from types.ts — no cast needed
-        setSkeleton(result.skeleton);
-      }
-      if (result.screeningResult) {
-        setScreeningResult(result.screeningResult);
-      }
+      // Update state with pipeline results
+      const s = useAuditState.getState();
+      if (result.authorProfile) s.setAuthorProfile(result.authorProfile);
+      if (result.skeleton) s.setSkeleton(result.skeleton);
+      if (result.screeningResult) s.setScreeningResult(result.screeningResult);
       if (result.gateResults) {
-        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1);
-        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2);
-        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3);
-        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4);
+        if (result.gateResults.L1) s.setGateResult('L1', result.gateResults.L1);
+        if (result.gateResults.L2) s.setGateResult('L2', result.gateResults.L2);
+        if (result.gateResults.L3) s.setGateResult('L3', result.gateResults.L3);
+        if (result.gateResults.L4) s.setGateResult('L4', result.gateResults.L4);
       }
-      if (result.issues && result.issues.length > 0) {
-        setIssues(result.issues);
-      }
-      if (result.whatForChains && result.whatForChains.length > 0) {
-        setWhatForChains(result.whatForChains);
-      }
-      if (result.generativeOutput) {
-        setGenerativeOutput(result.generativeOutput);
-      }
-      if (result.nextActions && result.nextActions.length > 0) {
-        setNextActions(result.nextActions);
-      }
-      if (result.finalScore) {
-        setFinalScore(result.finalScore);
-      }
+      if (result.issues && result.issues.length > 0) s.setIssues(result.issues);
+      if (result.whatForChains && result.whatForChains.length > 0) s.setWhatForChains(result.whatForChains);
+      if (result.generativeOutput) s.setGenerativeOutput(result.generativeOutput);
+      if (result.nextActions && result.nextActions.length > 0) s.setNextActions(result.nextActions);
+      if (result.finalScore) s.setFinalScore(result.finalScore);
 
       // Set phase based on result
       if (result.error) {
-        setPhase(result.phase === 'blocked' ? 'blocked' : 'failed');
-        setError(result.error);
+        s.setPhase(result.phase === 'blocked' ? 'blocked' : 'failed');
+        s.setError(result.error);
       } else {
-        setPhase('complete');
+        s.setPhase('complete');
       }
 
     } catch (err) {
       // Check if cancelled — use local variable to avoid stale closure
       if (currentController.signal.aborted) {
-        setPhase('cancelled');
-        setError(null);
+        useAuditState.getState().setPhase('cancelled');
+        useAuditState.getState().setError(null);
       } else {
-        setError(err instanceof Error ? err.message : t.errors.unknown);
-        setPhase('failed');
+        useAuditState.getState().setError(err instanceof Error ? err.message : t.errors.unknown);
+        useAuditState.getState().setPhase('failed');
       }
     } finally {
-      setLoading(false);
+      useAuditState.getState().setLoading(false);
       setAbortController(null);
     }
   };
@@ -242,27 +212,28 @@ export default function Home() {
   // Resume audit from a blocked step
   const resumeAudit = async (fromStep: AuditPhase) => {
     if (!apiKey) {
-      setError(t.errors.noApiKey);
+      useAuditState.getState().setError(t.errors.noApiKey);
       return;
     }
     if (!proxyUrl) {
-      setError(t.errors.proxy);
+      useAuditState.getState().setError(t.errors.proxy);
       return;
     }
 
     const controller = new AbortController();
     setAbortController(controller);
 
-    setLoading(true);
-    setError(null);
-    setBlockedAt(null);
-    setPhase(fromStep);
+    const store = useAuditState.getState();
+    store.setLoading(true);
+    store.setError(null);
+    store.setBlockedAt(null);
+    store.setPhase(fromStep);
 
     try {
       // Build current state from Zustand store for resume
       // Include original inputText so resumeAuditFromStep can reconstruct
       // the correct PipelineRunState without falling back to skeleton recovery
-      const fullState = useAuditState.getState();
+      const fullState = store;
       const currentState: PipelineState = {
         inputText: fullState.inputText,
         auditMode,
@@ -290,67 +261,69 @@ export default function Home() {
         fromStep,
         { provider, apiKey, model, proxyUrl },
         (phase: AuditPhase, state: PipelineState) => {
-          setPhase(phase);
-          if (state.auditMode) setAuditMode(state.auditMode);
-          if (state.authorProfile) setAuthorProfile(state.authorProfile);
-          if (state.skeleton) setSkeleton(state.skeleton);
-          if (state.screeningResult) setScreeningResult(state.screeningResult);
+          const s = useAuditState.getState();
+          s.setPhase(phase);
+          if (state.auditMode) s.setAuditMode(state.auditMode);
+          if (state.authorProfile) s.setAuthorProfile(state.authorProfile);
+          if (state.skeleton) s.setSkeleton(state.skeleton);
+          if (state.screeningResult) s.setScreeningResult(state.screeningResult);
           if (state.gateResults) {
-            if (state.gateResults.L1) setGateResult('L1', state.gateResults.L1);
-            if (state.gateResults.L2) setGateResult('L2', state.gateResults.L2);
-            if (state.gateResults.L3) setGateResult('L3', state.gateResults.L3);
-            if (state.gateResults.L4) setGateResult('L4', state.gateResults.L4);
+            if (state.gateResults.L1) s.setGateResult('L1', state.gateResults.L1);
+            if (state.gateResults.L2) s.setGateResult('L2', state.gateResults.L2);
+            if (state.gateResults.L3) s.setGateResult('L3', state.gateResults.L3);
+            if (state.gateResults.L4) s.setGateResult('L4', state.gateResults.L4);
           }
-          if (state.griefMatrix) setGriefMatrix(state.griefMatrix);
-          if (state.issues && state.issues.length > 0) setIssues(state.issues);
-          if (state.whatForChains && state.whatForChains.length > 0) setWhatForChains(state.whatForChains);
-          if (state.generativeOutput) setGenerativeOutput(state.generativeOutput);
-          if (state.nextActions && state.nextActions.length > 0) setNextActions(state.nextActions);
-          if (state.finalScore) setFinalScore(state.finalScore);
-          if (state.checklist && state.checklist.length > 0) setChecklist(state.checklist);
-          if (state.blockedAt) setBlockedAt(state.blockedAt);
-          if (state.elapsedMs) setElapsedMs(state.elapsedMs);
-          if (state.stepTimings && Object.keys(state.stepTimings).length > 0) setStepTimings(state.stepTimings);
+          if (state.griefMatrix) s.setGriefMatrix(state.griefMatrix);
+          if (state.issues && state.issues.length > 0) s.setIssues(state.issues);
+          if (state.whatForChains && state.whatForChains.length > 0) s.setWhatForChains(state.whatForChains);
+          if (state.generativeOutput) s.setGenerativeOutput(state.generativeOutput);
+          if (state.nextActions && state.nextActions.length > 0) s.setNextActions(state.nextActions);
+          if (state.finalScore) s.setFinalScore(state.finalScore);
+          if (state.checklist && state.checklist.length > 0) s.setChecklist(state.checklist);
+          if (state.blockedAt) s.setBlockedAt(state.blockedAt);
+          if (state.elapsedMs) s.setElapsedMs(state.elapsedMs);
+          if (state.stepTimings && Object.keys(state.stepTimings).length > 0) s.setStepTimings(state.stepTimings);
         },
         controller.signal,
         rpmLimit,
       );
 
       // Update with final results
-      if (result.authorProfile) setAuthorProfile(result.authorProfile);
-      if (result.skeleton) setSkeleton(result.skeleton);
-      if (result.screeningResult) setScreeningResult(result.screeningResult);
+      const s = useAuditState.getState();
+      if (result.authorProfile) s.setAuthorProfile(result.authorProfile);
+      if (result.skeleton) s.setSkeleton(result.skeleton);
+      if (result.screeningResult) s.setScreeningResult(result.screeningResult);
       if (result.gateResults) {
-        if (result.gateResults.L1) setGateResult('L1', result.gateResults.L1);
-        if (result.gateResults.L2) setGateResult('L2', result.gateResults.L2);
-        if (result.gateResults.L3) setGateResult('L3', result.gateResults.L3);
-        if (result.gateResults.L4) setGateResult('L4', result.gateResults.L4);
+        if (result.gateResults.L1) s.setGateResult('L1', result.gateResults.L1);
+        if (result.gateResults.L2) s.setGateResult('L2', result.gateResults.L2);
+        if (result.gateResults.L3) s.setGateResult('L3', result.gateResults.L3);
+        if (result.gateResults.L4) s.setGateResult('L4', result.gateResults.L4);
       }
-      if (result.issues && result.issues.length > 0) setIssues(result.issues);
-      if (result.whatForChains && result.whatForChains.length > 0) setWhatForChains(result.whatForChains);
-      if (result.generativeOutput) setGenerativeOutput(result.generativeOutput);
-      if (result.nextActions && result.nextActions.length > 0) setNextActions(result.nextActions);
-      if (result.finalScore) setFinalScore(result.finalScore);
-      if (result.blockedAt) setBlockedAt(result.blockedAt);
-      if (result.elapsedMs) setElapsedMs(result.elapsedMs);
-      if (result.stepTimings && Object.keys(result.stepTimings).length > 0) setStepTimings(result.stepTimings);
+      if (result.issues && result.issues.length > 0) s.setIssues(result.issues);
+      if (result.whatForChains && result.whatForChains.length > 0) s.setWhatForChains(result.whatForChains);
+      if (result.generativeOutput) s.setGenerativeOutput(result.generativeOutput);
+      if (result.nextActions && result.nextActions.length > 0) s.setNextActions(result.nextActions);
+      if (result.finalScore) s.setFinalScore(result.finalScore);
+      if (result.blockedAt) s.setBlockedAt(result.blockedAt);
+      if (result.elapsedMs) s.setElapsedMs(result.elapsedMs);
+      if (result.stepTimings && Object.keys(result.stepTimings).length > 0) s.setStepTimings(result.stepTimings);
 
       if (result.error) {
-        setPhase(result.phase === 'blocked' ? 'blocked' : 'failed');
-        setError(result.error);
+        s.setPhase(result.phase === 'blocked' ? 'blocked' : 'failed');
+        s.setError(result.error);
       } else {
-        setPhase('complete');
+        s.setPhase('complete');
       }
     } catch (err) {
       if (controller.signal.aborted) {
-        setPhase('cancelled');
-        setError(null);
+        useAuditState.getState().setPhase('cancelled');
+        useAuditState.getState().setError(null);
       } else {
-        setError(err instanceof Error ? err.message : t.errors.unknown);
-        setPhase('failed');
+        useAuditState.getState().setError(err instanceof Error ? err.message : t.errors.unknown);
+        useAuditState.getState().setPhase('failed');
       }
     } finally {
-      setLoading(false);
+      useAuditState.getState().setLoading(false);
       setAbortController(null);
     }
   };
@@ -387,7 +360,7 @@ export default function Home() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => reset()}
+              onClick={() => useAuditState.getState().reset()}
               disabled={isLoading}
             >
               <RotateCcw className="h-5 w-5" />
@@ -468,7 +441,7 @@ export default function Home() {
                     {t.app.cancelAudit}
                   </Button>
                 )}
-                <Button variant="outline" className="flex-1" onClick={() => reset()} disabled={isLoading}>
+                <Button variant="outline" className="flex-1" onClick={() => useAuditState.getState().reset()} disabled={isLoading}>
                   <RotateCcw className="h-4 w-4 mr-2" />
                   {t.app.newAudit}
                 </Button>
@@ -561,7 +534,7 @@ export default function Home() {
                           {t.app.cancelAudit}
                         </Button>
                       )}
-                      <Button variant="outline" className="w-full" onClick={() => reset()} disabled={isLoading}>
+                      <Button variant="outline" className="w-full" onClick={() => useAuditState.getState().reset()} disabled={isLoading}>
                         <RotateCcw className="h-4 w-4 mr-2" />
                         {t.app.newAudit}
                       </Button>
