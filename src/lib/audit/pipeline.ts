@@ -28,23 +28,51 @@ import type {
   GenerativeOutput,
   NextAction,
 } from './types';
-import { MASTER_CHECKLIST, filterChecklistByMedia } from './protocol-data';
+import { MASTER_CHECKLIST } from './protocol-data';
 import { filterByMediaType, evaluateGate } from './scoring-algorithm';
 
-// Force step registration — import the step modules so their side-effect
-// registrations execute before getStep() is called.
-import './steps/step-validate';
-import './steps/step-mode-detection';
-import './steps/step-author-profile';
-import './steps/step-skeleton';
-import './steps/step-screening';
-import './steps/step-gate-L1';
-import './steps/step-gate-L2';
-import './steps/step-gate-L3';
-import './steps/step-gate-L4';
-import './steps/step-issues-chains';
-import './steps/step-generative';
-import './steps/step-final';
+// Step registration is handled by step-registry.ts auto-registration on import.
+// No need for side-effect imports here — stepRegistry.registerAllSteps() is
+// called at the end of step-registry.ts, which is imported below.
+
+// ============================================================================
+// SHARED UTILITIES
+// ============================================================================
+
+/**
+ * Create a rate limiter that enforces a maximum number of requests per minute.
+ * Returns an `enforce()` async function that should be called before each LLM request.
+ * Shared between runAuditPipeline and resumeAuditFromStep to avoid duplication.
+ */
+function createRateLimiter(rpmLimit: number) {
+  const requestTimestamps: number[] = [];
+  const minIntervalMs = Math.ceil(60000 / rpmLimit);
+
+  async function enforce(): Promise<void> {
+    const now = Date.now();
+    // Prune timestamps older than 60 seconds
+    while (requestTimestamps.length > 0 && now - requestTimestamps[0] > 60000) {
+      requestTimestamps.shift();
+    }
+    // If we've hit the RPM limit, wait until the oldest request expires
+    if (requestTimestamps.length >= rpmLimit) {
+      const waitMs = 60000 - (now - requestTimestamps[0]) + 100; // +100ms buffer
+      if (waitMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, waitMs));
+      }
+    } else if (requestTimestamps.length > 0) {
+      // Ensure minimum interval between requests
+      const lastRequest = requestTimestamps[requestTimestamps.length - 1];
+      const elapsed = now - lastRequest;
+      if (elapsed < minIntervalMs) {
+        await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
+      }
+    }
+    requestTimestamps.push(Date.now());
+  }
+
+  return { enforce };
+}
 
 // ============================================================================
 // PUBLIC API
@@ -188,37 +216,8 @@ export async function runAuditPipeline(
   let runState: PipelineRunState = createInitialRunState(input);
   const stepOrder = getStepOrder();
 
-  // Rate limiting: track request timestamps to enforce rpmLimit
-  const requestTimestamps: number[] = [];
-  const rpmLimit = input.rpmLimit || 10; // Default 10 RPM
-  const minIntervalMs = Math.ceil(60000 / rpmLimit); // Minimum ms between requests
-
-  /**
-   * Enforce rate limit by sleeping if the last request was too recent.
-   * Removes timestamps older than 60 seconds, then checks if we need to wait.
-   */
-  async function enforceRateLimit(): Promise<void> {
-    const now = Date.now();
-    // Prune timestamps older than 60 seconds
-    while (requestTimestamps.length > 0 && now - requestTimestamps[0] > 60000) {
-      requestTimestamps.shift();
-    }
-    // If we've hit the RPM limit, wait until the oldest request expires
-    if (requestTimestamps.length >= rpmLimit) {
-      const waitMs = 60000 - (now - requestTimestamps[0]) + 100; // +100ms buffer
-      if (waitMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-      }
-    } else if (requestTimestamps.length > 0) {
-      // Ensure minimum interval between requests
-      const lastRequest = requestTimestamps[requestTimestamps.length - 1];
-      const elapsed = now - lastRequest;
-      if (elapsed < minIntervalMs) {
-        await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
-      }
-    }
-    requestTimestamps.push(Date.now());
-  }
+  // Rate limiting: use the shared rate limiter factory
+  const { enforce: enforceRateLimit } = createRateLimiter(input.rpmLimit || 10);
 
   // Notify: starting
   onProgress?.('input_validation', mapToPipelineState(runState));
@@ -269,11 +268,11 @@ export async function runAuditPipeline(
     } catch (error) {
       // AuditStepError or unexpected error — classify and mark as failed
       const classified = classifyLLMError(error);
-      const message = error instanceof Error ? error.message : classified.userMessage;
+      // Always use Russian userMessage per Language Contract
       runState = {
         ...runState,
         phase: 'failed',
-        error: classified.type !== 'provider' ? classified.userMessage : message,
+        error: classified.userMessage,
         elapsedMs: Date.now() - overallStart,
         stepTimings: { ...runState.stepTimings, [phase]: Date.now() - stepStart },
       };
@@ -336,7 +335,9 @@ export async function resumeAuditFromStep(
   // Reconstruct PipelineRunState from the saved PipelineState
   let runState: PipelineRunState = {
     phase: savedState.phase,
-    inputText: '', // Will be set from the saved narrative — not stored in PipelineState
+    inputText: savedState.report?.skeleton?.elements
+      ? savedState.report.skeleton.elements.map(e => e.extracted ?? e.value ?? '').filter(Boolean).join('\n')
+      : '', // Best-effort recovery from skeleton; original narrative not stored in PipelineState
     mediaType: (savedState.gateResults.L1?.metadata?.mediaType as MediaType | undefined) ?? 'novel',
     auditMode: savedState.auditMode,
     authorProfile: savedState.authorProfile,
@@ -361,30 +362,8 @@ export async function resumeAuditFromStep(
     return { ...savedState, error: `Невозможно возобновить: шаг "${fromStep}" не найден в конвейере.` };
   }
 
-  // Rate limiting: track request timestamps to enforce rpmLimit (same as runAuditPipeline)
-  const requestTimestamps: number[] = [];
-  const rpmLimit = savedState.auditMode ? 10 : 10; // Use a reasonable default; caller should pass rpmLimit
-  const minIntervalMs = Math.ceil(60000 / rpmLimit);
-
-  async function enforceRateLimitResume(): Promise<void> {
-    const now = Date.now();
-    while (requestTimestamps.length > 0 && now - requestTimestamps[0] > 60000) {
-      requestTimestamps.shift();
-    }
-    if (requestTimestamps.length >= rpmLimit) {
-      const waitMs = 60000 - (now - requestTimestamps[0]) + 100;
-      if (waitMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-      }
-    } else if (requestTimestamps.length > 0) {
-      const lastRequest = requestTimestamps[requestTimestamps.length - 1];
-      const elapsed = now - lastRequest;
-      if (elapsed < minIntervalMs) {
-        await new Promise((resolve) => setTimeout(resolve, minIntervalMs - elapsed));
-      }
-    }
-    requestTimestamps.push(Date.now());
-  }
+  // Rate limiting: use the shared rate limiter factory
+  const { enforce: enforceRateLimitResume } = createRateLimiter(10);
 
   // Execute steps from the resume point onward
   for (let i = resumeIndex; i < stepOrder.length; i++) {

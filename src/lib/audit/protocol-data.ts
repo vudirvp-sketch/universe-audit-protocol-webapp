@@ -320,17 +320,9 @@ export const VITALITY_THRESHOLD = 13; // 13/17 = living world
 export const CULT_THRESHOLD = 8; // 8/11 = cult potential
 export const MARY_SUE_THRESHOLD = 3; // ≤3/8 = acceptable
 
-// Helper function to get level from block
-export function getLevelFromBlock(block: string): 'L1' | 'L2' | 'L3' | 'L4' | 'L1/L2' | 'L1/L3' | 'L2/L3' | 'L2/L4' {
-  const item = MASTER_CHECKLIST.find(i => i.block === block);
-  const level = item?.level;
-  if (level && level !== 'L0') {
-    return level as 'L1' | 'L2' | 'L3' | 'L4' | 'L1/L2' | 'L1/L3' | 'L2/L3' | 'L2/L4';
-  }
-  return 'L1';
-}
-
 // Helper to check if tag is applicable to media type
+// NOTE: Prefer checkMediaApplicability() from scoring-algorithm.ts — this is
+// kept only for backward compatibility with any external consumers.
 export function isTagApplicable(tag: MediaTag | `${MediaTag}|${MediaTag}`, mediaType: MediaType): boolean {
   if (tag === 'CORE') return true;
   
@@ -348,12 +340,4 @@ function isTagInMediaType(tags: MediaTag[], mediaType: MediaType): boolean {
   if (tags.includes('AUDIO') && ['film', 'anime', 'series'].includes(mediaType)) return true;
   if (tags.includes('INTERACTIVE') && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
   return false;
-}
-
-// Filter checklist by media type
-export function filterChecklistByMedia(checklist: ChecklistItem[], mediaType: MediaType): ChecklistItem[] {
-  return checklist.map(item => ({
-    ...item,
-    applicable: isTagApplicable(item.tag, mediaType)
-  }));
 }

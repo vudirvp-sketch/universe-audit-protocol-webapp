@@ -21,12 +21,31 @@ import {
   Circle,
   ChevronRight,
 } from 'lucide-react';
-import type { ChecklistItem, ChecklistItemStatus } from '@/lib/audit/types';
+import type { ChecklistItem, ChecklistItemStatus, AuditLevel } from '@/lib/audit/types';
 import { getGateThreshold } from '@/lib/audit/types';
-import { getLevelFromBlock } from '@/lib/audit/protocol-data';
+import { MASTER_CHECKLIST } from '@/lib/audit/protocol-data';
 import { t } from '@/lib/i18n/ru';
 
 const BLOCK_NAMES: Record<string, string> = t.checklist.blockNames;
+
+/**
+ * Get the primary gate level for a checklist block letter.
+ * Looks up the first matching item in MASTER_CHECKLIST and returns
+ * its level, defaulting to L1 if not found.
+ */
+function getBlockLevel(block: string): 'L1' | 'L2' | 'L3' | 'L4' {
+  const item = MASTER_CHECKLIST.find(i => i.block === block);
+  const level = item?.level;
+  // Extract the primary L-level from combined levels like 'L1/L2'
+  if (level) {
+    const match = level.match(/^L(\d)/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n >= 1 && n <= 4) return `L${n}` as 'L1' | 'L2' | 'L3' | 'L4';
+    }
+  }
+  return 'L1';
+}
 
 const STATUS_ICONS: Record<ChecklistItemStatus, React.ReactNode> = {
   PASS: <CheckCircle2 className="h-4 w-4 text-green-500" />,
@@ -228,7 +247,7 @@ export function ChecklistDisplay() {
                 block={block}
                 items={checklistByBlock[block]}
                 onUpdateItem={updateChecklistItem}
-                level={getLevelFromBlock(block) as 'L1' | 'L2' | 'L3' | 'L4'}
+                level={getBlockLevel(block)}
                 auditMode={auditMode}
               />
             ))}

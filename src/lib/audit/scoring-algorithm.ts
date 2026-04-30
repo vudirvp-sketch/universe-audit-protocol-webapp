@@ -10,7 +10,7 @@ import type {
   GriefArchitectureMatrix,
   GriefMatrixCell
 } from './types';
-import { MASTER_CHECKLIST, AUTHOR_QUESTIONS, LOGIC_HOLE_TYPES } from './protocol-data';
+import { MASTER_CHECKLIST, AUTHOR_QUESTIONS } from './protocol-data';
 import { getGateThreshold } from './types';
 
 /**
@@ -379,16 +379,16 @@ export function generatePriorityActions(
 ): [string, string, string] {
   const actions: string[] = [];
   
-  // L1 actions first
-  if (gateResults.L1 && !gateResults.L1.passed && gateResults.L1.fixList) {
+  // L1 actions first — null-check fixList before slicing
+  if (gateResults.L1 && !gateResults.L1.passed && gateResults.L1.fixList && gateResults.L1.fixList.length > 0) {
     const topFixes = gateResults.L1.fixList.slice(0, 2);
     topFixes.forEach(fix => {
       actions.push(`[L1] ${fix.description.slice(0, 60)}...`);
     });
   }
-  
-  // L2 actions
-  if (gateResults.L2 && !gateResults.L2.passed && actions.length < 3 && gateResults.L2.fixList) {
+
+  // L2 actions — null-check fixList
+  if (gateResults.L2 && !gateResults.L2.passed && actions.length < 3 && gateResults.L2.fixList && gateResults.L2.fixList.length > 0) {
     const topFix = gateResults.L2.fixList[0];
     if (topFix) {
       actions.push(`[L2] ${topFix.description.slice(0, 60)}...`);

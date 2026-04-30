@@ -1,5 +1,6 @@
 // Settings hook for managing LLM provider, API key, and proxy URL in localStorage
 // All config is client-side — no environment variables or server-side references
+import React from 'react';
 import { create } from 'zustand';
 import type { LLMProvider } from '@/lib/llm-client';
 
@@ -142,9 +143,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
     if (typeof window === 'undefined') return;
     try {
       localStorage.removeItem(SETTINGS_STORAGE_KEY);
-      set({ ...DEFAULT_SETTINGS });
+      set({ ...DEFAULT_SETTINGS, isLoaded: true });
     } catch {
-      console.error('Failed to clear settings from localStorage');
+      // Silently fail — localStorage may be unavailable
     }
   },
 }));
@@ -161,7 +162,7 @@ function saveToStorage(settings: AppSettings) {
       rpmLimit: settings.rpmLimit,
     }));
   } catch {
-    console.error('Failed to save settings to localStorage');
+    // Silently fail — localStorage may be unavailable
   }
 }
 
@@ -173,10 +174,12 @@ export const useAppSettings = () => {
     updateSettings, clearSettings,
   } = useSettings();
 
-  // Load on first use
-  if (!isLoaded && typeof window !== 'undefined') {
-    loadSettings();
-  }
+  // Save on first use — via useEffect, not during render
+  React.useEffect(() => {
+    if (!isLoaded && typeof window !== 'undefined') {
+      loadSettings();
+    }
+  }, [isLoaded, loadSettings]);
 
   return {
     provider,

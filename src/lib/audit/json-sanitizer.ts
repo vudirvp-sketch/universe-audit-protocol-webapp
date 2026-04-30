@@ -28,7 +28,9 @@ export function extractJSON(raw: string): string | null {
   let text = raw;
 
   // Step 1: Strip markdown code fences — ```json ... ``` or ``` ... ```
-  const fencePattern = /```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```/g;
+  // Note: no 'g' flag — we only need the first match, and .exec() with 'g'
+  // mutates lastIndex which causes subtle bugs on repeated calls.
+  const fencePattern = /```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```/;
   const fenceMatch = fencePattern.exec(text);
   if (fenceMatch) {
     text = fenceMatch[1];

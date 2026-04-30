@@ -15,7 +15,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import {
   ResizableHandle,
   ResizablePanel,
@@ -23,7 +22,6 @@ import {
 } from '@/components/ui/resizable';
 import {
   BookOpen,
-  Github,
   Moon,
   Sun,
   Sparkles,
@@ -118,6 +116,9 @@ export default function Home() {
     setError(null);
     setPhase('input_validation');
 
+    // Capture controller in local variable to avoid stale closure in catch
+    const currentController = controller;
+
     try {
       const result = await runAuditPipeline(
         {
@@ -205,12 +206,12 @@ export default function Home() {
       }
 
     } catch (err) {
-      // Check if cancelled
-      if (abortController?.signal.aborted) {
+      // Check if cancelled — use local variable to avoid stale closure
+      if (currentController.signal.aborted) {
         setPhase('cancelled');
         setError(null);
       } else {
-        console.error('Audit error:', err);
+        console.error('Ошибка аудита:', err);
         setError(err instanceof Error ? err.message : t.errors.unknown);
         setPhase('failed');
       }

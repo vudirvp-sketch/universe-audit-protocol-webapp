@@ -264,7 +264,7 @@ export interface Skeleton {
   status: 'COMPLETE' | 'INCOMPLETE';
   elements: SkeletonElement[];
   fixes: string[];
-  overallStatus?: 'complete' | 'incomplete' | 'partial';
+  overallStatus?: 'COMPLETE' | 'INCOMPLETE' | 'PARTIAL';
   weaknesses?: WeaknessResult[];
   blockers?: string[];
   canProceedToL1?: boolean;

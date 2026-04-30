@@ -74,8 +74,8 @@ class StepRegistry {
   registerStep<T>(step: AuditStep<T>): void {
     if (!PIPELINE_STEP_ORDER.includes(step.id)) {
       throw new Error(
-        `Cannot register step for phase "${step.id}": not a valid executable pipeline phase. ` +
-        `Executable phases are: ${PIPELINE_STEP_ORDER.join(', ')}`
+        `Невозможно зарегистрировать шаг для фазы "${step.id}": не является допустимой исполняемой фазой конвейера. ` +
+        `Исполняемые фазы: ${PIPELINE_STEP_ORDER.join(', ')}`
       );
     }
     this.steps.set(step.id, step as AuditStep<unknown>);
@@ -92,8 +92,8 @@ class StepRegistry {
     const step = this.steps.get(phase);
     if (!step) {
       throw new Error(
-        `No step registered for phase "${phase}". ` +
-        `Registered phases: ${Array.from(this.steps.keys()).join(', ') || '(none)'}`
+        `Не зарегистрирован шаг для фазы "${phase}". ` +
+        `Зарегистрированные фазы: ${Array.from(this.steps.keys()).join(', ') || '(нет)'}`
       );
     }
     return step;

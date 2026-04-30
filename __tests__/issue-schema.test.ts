@@ -5,7 +5,8 @@
  */
 
 import { validateIssue, createIssue } from '../src/lib/audit/issue-schema';
-import type { Issue, Axes } from '../src/lib/audit/issue-schema';
+import type { Axes } from '../src/lib/audit/issue-schema';
+import type { Issue } from '../src/lib/audit/types';
 
 describe('Issue Schema Validation', () => {
   const validAxes: Axes = { criticality: 7, risk: 5, time_cost: 4 };
