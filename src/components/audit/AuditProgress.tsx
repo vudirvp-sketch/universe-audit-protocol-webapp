@@ -44,12 +44,42 @@ const PHASES: PhaseInfo[] = [
 
 export function AuditProgress() {
   const phase = useAuditState((state) => state.phase);
-  const gateStatus = useAuditState(selectGateStatus);
-  const overallProgress = useAuditState(selectOverallProgress);
   const isLoading = useAuditState((state) => state.isLoading);
   const error = useAuditState((state) => state.error);
   const elapsedMs = useAuditState((state) => state.elapsedMs);
   const stepTimings = useAuditState((state) => state.stepTimings);
+
+  // FIX: Use individual field selectors instead of object-returning selectors
+  // to prevent re-render storms. selectGateStatus and selectOverallProgress
+  // return NEW objects on every call, causing Zustand to always detect "changes"
+  // and trigger unnecessary re-renders.
+  const L1 = useAuditState((s) => s.gateResults.L1);
+  const L2 = useAuditState((s) => s.gateResults.L2);
+  const L3 = useAuditState((s) => s.gateResults.L3);
+  const L4 = useAuditState((s) => s.gateResults.L4);
+
+  const gateStatus = React.useMemo(() => ({
+    L1: L1 ? { score: L1.score, passed: L1.passed, evaluated: true } : { score: 0, passed: false, evaluated: false },
+    L2: L2 ? { score: L2.score, passed: L2.passed, evaluated: true } : { score: 0, passed: false, evaluated: false },
+    L3: L3 ? { score: L3.score, passed: L3.passed, evaluated: true } : { score: 0, passed: false, evaluated: false },
+    L4: L4 ? { score: L4.score, passed: L4.passed, evaluated: true } : { score: 0, passed: false, evaluated: false },
+  }), [L1, L2, L3, L4]);
+
+  const overallProgress = React.useMemo(() => {
+    const phases: AuditPhase[] = [
+      'idle', 'input_validation', 'mode_detection', 'author_profile',
+      'skeleton_extraction', 'screening', 'L1_evaluation', 'L2_evaluation',
+      'L3_evaluation', 'L4_evaluation', 'issue_generation', 'generative_modules',
+      'final_output', 'complete', 'failed',
+    ];
+    const terminalStates = ['idle', 'failed', 'blocked', 'cancelled'];
+    const total = phases.filter(p => !terminalStates.includes(p)).length;
+    const currentIndex = phases.indexOf(phase);
+    const effectiveIndex = terminalStates.includes(phase)
+      ? currentIndex > 0 ? currentIndex - 1 : 0
+      : currentIndex;
+    return { current: effectiveIndex, total, percentage: Math.round((effectiveIndex / total) * 100) };
+  }, [phase]);
 
   // Live timer for current step
   const [liveElapsed, setLiveElapsed] = React.useState(0);

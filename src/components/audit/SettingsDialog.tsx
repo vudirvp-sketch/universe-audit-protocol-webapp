@@ -47,7 +47,20 @@ interface SettingsDialogProps {
 }
 
 export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
-  const { provider, apiKey, model, proxyUrl, rpmLimit, isLoaded, setProvider, setApiKey, setModel, setProxyUrl, setRpmLimit, loadSettings, clearSettings } = useSettings();
+  const provider = useSettings((s) => s.provider);
+  const apiKey = useSettings((s) => s.apiKey);
+  const model = useSettings((s) => s.model);
+  const proxyUrl = useSettings((s) => s.proxyUrl);
+  const rpmLimit = useSettings((s) => s.rpmLimit);
+  const isLoaded = useSettings((s) => s.isLoaded);
+  const setProvider = useSettings((s) => s.setProvider);
+  const setApiKey = useSettings((s) => s.setApiKey);
+  const setModel = useSettings((s) => s.setModel);
+  const setProxyUrl = useSettings((s) => s.setProxyUrl);
+  const setRpmLimit = useSettings((s) => s.setRpmLimit);
+  const loadSettings = useSettings((s) => s.loadSettings);
+  const clearSettings = useSettings((s) => s.clearSettings);
+
   const isMobile = useIsMobile();
   const [open, setOpen] = React.useState(false);
   const [inputKey, setInputKey] = React.useState('');
@@ -79,7 +92,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setInputRpmLimit(String(rpmLimit));
       setSaved(false);
     }
-  }, [open, apiKey, model, proxyUrl]);
+  }, [open, apiKey, model, proxyUrl, rpmLimit]);
 
   // Update model input when provider changes
   React.useEffect(() => {
@@ -146,10 +159,17 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const handleTestConnection = async () => {
     const trimmedKey = inputKey.trim();
     const trimmedProxy = inputProxyUrl.trim();
-    const trimmedModel = inputModel.trim() || currentProvider?.defaultModel || '';
+    const trimmedModel = inputModel.trim() || LLM_PROVIDERS[provider]?.defaultModel || '';
     if (!trimmedKey || !trimmedProxy) return;
 
     setTestConnection({ loading: true, success: false, error: null });
+
+    // FIX: Use a 15-second timeout and NO retries for test connection.
+    // The regular chatCompletion retries 429 up to 3 times with 10s+ backoff,
+    // which makes the test button appear stuck ("вечная загрузка").
+    // For a quick connectivity test, fail fast with a clear message.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
     try {
       const client = createLLMClient({
@@ -163,10 +183,20 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           { role: 'user', content: 'Ответь одним словом: работает' },
         ],
         max_tokens: 10,
+        maxRateLimitRetries: 0, // No retries for test — fail fast
       });
+      clearTimeout(timeoutId);
       setTestConnection({ loading: false, success: true, error: null });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      clearTimeout(timeoutId);
+      let msg = err instanceof Error ? err.message : String(err);
+      if (controller.signal.aborted) {
+        msg = 'Таймаут — сервер не ответил за 15 секунд. Проверьте URL прокси и доступность API.';
+      }
+      // Make 429 error more user-friendly
+      if (msg.includes('429') || msg.includes('лимит запросов')) {
+        msg = 'Лимит запросов (429). Подождите минуту и попробуйте снова, или выберите провайдера с более высоким лимитом (Google Gemini, Groq).';
+      }
       setTestConnection({ loading: false, success: false, error: msg });
     }
   };
@@ -330,13 +360,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             )}
           </div>
 
-          {/* Test Connection Button */}
+          {/* Test Connection Button — fails fast (15s timeout, no retries) */}
           <div className="space-y-2">
             <Button
               variant="outline"
               className="w-full"
               onClick={handleTestConnection}
-              disabled={!inputKey.trim() || !inputProxyUrl.trim() || testConnection.loading}
+              disabled={!inputKey.trim() || testConnection.loading}
             >
               {testConnection.loading ? (
                 <>
@@ -356,6 +386,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 t.settings.testConnection
               )}
             </Button>
+            {testConnection.loading && (
+              <p className="text-xs text-muted-foreground text-center">
+                Проверяем подключение (таймаут 15 сек)...
+              </p>
+            )}
             {testConnection.error && (
               <p className="text-xs text-red-500">{testConnection.error}</p>
             )}
