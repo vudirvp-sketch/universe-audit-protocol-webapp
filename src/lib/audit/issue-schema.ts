@@ -63,50 +63,50 @@ export interface IssueValidationResult {
 function getRecommendationFromAxes(axes: Axes): { recommended: PatchType; reasoning: string } {
   const { criticality, risk, time_cost } = axes;
   
-  // High criticality + low risk = radical fix
+  // Высокая критичность + низкий риск = радикальное исправление
   if (criticality >= 8 && risk <= 4) {
     return {
       recommended: 'radical',
-      reasoning: 'High criticality with low risk warrants a comprehensive fix'
+      reasoning: 'Высокая критичность при низком риске требует комплексного исправления'
     };
   }
   
-  // High criticality + high risk = compromise
+  // Высокая критичность + высокий риск = компромисс
   if (criticality >= 7 && risk >= 6) {
     return {
       recommended: 'compromise',
-      reasoning: 'High criticality but significant risk requires balanced approach'
+      reasoning: 'Высокая критичность, но значительный риск требует сбалансированного подхода'
     };
   }
   
-  // Low criticality = conservative
+  // Низкая критичность = консервативное исправление
   if (criticality <= 3) {
     return {
       recommended: 'conservative',
-      reasoning: 'Low criticality issue - minimal intervention sufficient'
+      reasoning: 'Низкая критичность проблемы — минимального вмешательства достаточно'
     };
   }
   
-  // High time_cost + moderate criticality = compromise
+  // Высокая трудоёмкость + средняя критичность = компромисс
   if (time_cost >= 7 && criticality >= 4 && criticality <= 7) {
     return {
       recommended: 'compromise',
-      reasoning: 'Moderate criticality with high effort - balanced fix optimal'
+      reasoning: 'Средняя критичность при высокой трудоёмкости — оптимален сбалансированный подход'
     };
   }
   
-  // High risk = conservative default
+  // Высокий риск = консервативный подход по умолчанию
   if (risk >= 7) {
     return {
       recommended: 'conservative',
-      reasoning: 'High risk environment - conservative approach safest'
+      reasoning: 'Высокорисковая среда — безопаснее консервативный подход'
     };
   }
   
-  // Default to compromise for moderate values
+  // По умолчанию компромисс для средних значений
   return {
     recommended: 'compromise',
-    reasoning: 'Moderate values across axes - balanced approach recommended'
+    reasoning: 'Средние значения по осям — рекомендован сбалансированный подход'
   };
 }
 
@@ -246,72 +246,72 @@ export function generatePatchTemplates(
   const templates: Record<string, typeof generatePatchTemplates extends (...args: any[]) => infer R ? R : never> = {
     thematic_law_weak: {
       conservative: {
-        description: `Add a concrete manifestation of the thematic law in ${context}`,
-        impact: 'Strengthens thematic presence with minimal disruption',
-        sideEffects: ['May require minor scene adjustments']
+        description: `Добавить конкретное проявление тематического закона в ${context}`,
+        impact: 'Усиливает тематическое присутствие с минимальными изменениями',
+        sideEffects: ['Могут потребоваться незначительные корректировки сцен']
       },
       compromise: {
-        description: `Integrate thematic law into existing plot beats in ${context}`,
-        impact: 'Creates organic thematic integration',
-        sideEffects: ['Some dialogue revisions needed', 'Minor pacing adjustments']
+        description: `Интегрировать тематический закон в существующие сюжетные точки в ${context}`,
+        impact: 'Создаёт органичную тематическую интеграцию',
+        sideEffects: ['Необходима переработка части диалогов', 'Незначительная корректировка темпа']
       },
       radical: {
-        description: `Restructure ${context} to make thematic law central to world mechanics`,
-        impact: 'Thematic law becomes fundamental to narrative logic',
-        sideEffects: ['Major worldbuilding revisions', 'Character motivation updates', 'Plot restructuring']
+        description: `Реструктурировать ${context}, сделав тематический закон центральной механикой мира`,
+        impact: 'Тематический закон становится фундаментом нарративной логики',
+        sideEffects: ['Существенная переработка мироустройства', 'Обновление мотивации персонажей', 'Реструктуризация сюжета']
       }
     },
     character_inconsistency: {
       conservative: {
-        description: `Add bridging scene explaining character behavior in ${context}`,
-        impact: 'Explains inconsistency without changing plot',
-        sideEffects: ['Minor pacing impact']
+        description: `Добавить переходную сцену, объясняющую поведение персонажа в ${context}`,
+        impact: 'Объясняет несогласованность без изменения сюжета',
+        sideEffects: ['Незначительное влияние на темп']
       },
       compromise: {
-        description: `Revise character motivation in ${context} to align with established traits`,
-        impact: 'Creates consistent character voice',
-        sideEffects: ['Dialogue revisions', 'Motivation clarification needed']
+        description: `Пересмотреть мотивацию персонажа в ${context} для соответствия установленным чертам`,
+        impact: 'Создаёт последовательный голос персонажа',
+        sideEffects: ['Переработка диалогов', 'Необходимо уточнение мотивации']
       },
       radical: {
-        description: `Restructure character arc in ${context} to resolve inconsistency at root`,
-        impact: 'Eliminates inconsistency fundamentally',
-        sideEffects: ['Major arc restructuring', 'Potential plot changes', 'Other character impacts']
+        description: `Реструктурировать арку персонажа в ${context} для устранения несогласованности у корня`,
+        impact: 'Устраняет несогласованность фундаментально',
+        sideEffects: ['Существенная перестройка арки', 'Возможные изменения сюжета', 'Влияние на других персонажей']
       }
     },
     world_logic_gap: {
       conservative: {
-        description: `Add exposition explaining the gap in ${context}`,
-        impact: 'Addresses gap without changing mechanics',
-        sideEffects: ['May feel expository']
+        description: `Добавить экспозицию, объясняющую логический пробел в ${context}`,
+        impact: 'Устраняет пробел без изменения механик',
+        sideEffects: ['Может ощущаться как искусственная экспозиция']
       },
       compromise: {
-        description: `Introduce soft rule that bridges the gap in ${context}`,
-        impact: 'Creates logical connection',
-        sideEffects: ['New rule needs consistency checks', 'May affect related systems']
+        description: `Ввести мягкое правило, заполняющее пробел в ${context}`,
+        impact: 'Создаёт логическую связь',
+        sideEffects: ['Новое правило требует проверок согласованности', 'Может затронуть смежные системы']
       },
       radical: {
-        description: `Redesign world system to eliminate gap in ${context}`,
-        impact: 'Eliminates gap at source',
-        sideEffects: ['Major worldbuilding changes', 'May require plot revisions', 'Consistency cascade effects']
+        description: `Перепроектировать систему мира для устранения пробела в ${context}`,
+        impact: 'Устраняет пробел у источника',
+        sideEffects: ['Существенные изменения мироустройства', 'Может потребовать переработки сюжета', 'Каскадные эффекты согласованности']
       }
     }
   };
 
   return templates[issueType] || {
     conservative: {
-      description: `Minor fix for issue in ${context}`,
-      impact: 'Addresses issue with minimal changes',
-      sideEffects: ['Unknown']
+      description: `Незначительное исправление проблемы в ${context}`,
+      impact: 'Устраняет проблему с минимальными изменениями',
+      sideEffects: ['Неизвестно']
     },
     compromise: {
-      description: `Balanced fix for issue in ${context}`,
-      impact: 'Addresses issue comprehensively',
-      sideEffects: ['Moderate revision required']
+      description: `Сбалансированное исправление проблемы в ${context}`,
+      impact: 'Комплексно устраняет проблему',
+      sideEffects: ['Требуется умеренная переработка']
     },
     radical: {
-      description: `Comprehensive fix for issue in ${context}`,
-      impact: 'Eliminates issue at root cause',
-      sideEffects: ['Major revision required', 'Potential cascading changes']
+      description: `Комплексное исправление проблемы в ${context}`,
+      impact: 'Устраняет проблему у корневой причины',
+      sideEffects: ['Требуется существенная переработка', 'Возможны каскадные изменения']
     }
   };
 }

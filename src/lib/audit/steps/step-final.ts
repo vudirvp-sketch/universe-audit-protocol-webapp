@@ -52,13 +52,13 @@ function computeFinalOutput(state: PipelineRunState): FinalOutput {
   const total = by_level.L1 + by_level.L2 + by_level.L3 + by_level.L4;
   const percentage = Math.round(total / 4);
 
-  // Classification based on percentage
+  // Classification based on percentage (unified with scoring-algorithm.ts thresholds)
   let classification: FinalOutput['classification'];
-  if (percentage >= 85) {
+  if (percentage >= 90) {
     classification = 'cult_masterpiece';
-  } else if (percentage >= 65) {
+  } else if (percentage >= 75) {
     classification = 'powerful';
-  } else if (percentage >= 40) {
+  } else if (percentage >= 55) {
     classification = 'living_weak_soul';
   } else {
     classification = 'decoration';

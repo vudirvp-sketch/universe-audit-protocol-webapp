@@ -528,6 +528,12 @@ export const t = {
     gateResults: '5. Результаты гейтов',
     scores: '6. Оценки по измерениям',
     criticalHoles: '7. Критические проблемы',
+    characters: '8. Персонажи и хамартия',
+    griefArchitecture: '9. Архитектура горя',
+    finale: '10. Финал и дилемма',
+    fixes: '11. Исправления',
+    cultPotential: '12. Культовый потенциал',
+    contrastive: '13. Контрастивный анализ',
     finalScore: '14. Итоговый балл',
     priorityActions: '15. Приоритетные действия',
     // Audit mode descriptions

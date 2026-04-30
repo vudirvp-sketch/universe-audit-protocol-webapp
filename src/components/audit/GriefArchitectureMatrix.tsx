@@ -22,7 +22,7 @@ import { t } from '@/lib/i18n/ru';
 const GRIEF_LEVELS: GriefLevel[] = ['character', 'location', 'mechanic', 'act'];
 const GRIEF_STAGE_KEYS: GriefStage[] = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'];
 
-const LEVEL_LABELS: Partial<Record<GriefLevel, string>> = {
+const LEVEL_LABELS: Partial<Record<GriefLevel | 'world' | 'society' | 'scene', string>> = {
   character: t.grief.levelLabels.character,
   location: t.grief.levelLabels.location,
   mechanic: t.grief.levelLabels.mechanic,

@@ -211,8 +211,19 @@ export const stepGateL4: AuditStep<GateL4Output> = {
       status: output.score >= threshold ? 'passed' : 'failed',
       score: output.score, passed: output.score >= threshold,
       conditions, halt: output.score < threshold,
-      fixes: [],
+      fixes: output.score < threshold 
+        ? output.evaluations.filter(e => e.status === 'FAIL').map((e, i) => `[L4] ${e.functionalRole || e.evidence || e.id}`)
+        : [],
       metadata: { breakdown, level: 'L4' }, level: 'L4',
+      fixList: output.score < threshold
+        ? output.evaluations.filter(e => e.status === 'FAIL').map((e, i) => ({
+            id: `FIX-L4-${i}`,
+            description: e.evidence || e.functionalRole || e.id,
+            severity: i < 2 ? 'critical' as const : 'major' as const,
+            type: 'ideology' as const,
+            recommendedApproach: (i < 1 ? 'radical' as const : 'compromise' as const),
+          }))
+        : [],
     };
 
     return {

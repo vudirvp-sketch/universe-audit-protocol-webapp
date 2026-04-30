@@ -10,7 +10,8 @@ import type {
   GriefArchitectureMatrix,
   GriefMatrixCell
 } from './types';
-import { MASTER_CHECKLIST, GATE_THRESHOLD, AUTHOR_QUESTIONS, LOGIC_HOLE_TYPES } from './protocol-data';
+import { MASTER_CHECKLIST, AUTHOR_QUESTIONS, LOGIC_HOLE_TYPES } from './protocol-data';
+import { getGateThreshold } from './types';
 
 /**
  * Calculate score for a level
@@ -21,24 +22,7 @@ export function calculateLevelScore(
   level: 'L1' | 'L2' | 'L3' | 'L4',
   mediaType: MediaType
 ): { score: number; passed: number; failed: number; insufficient: number; total: number } {
-  // Filter items for this level and media type
-  const levelItems = checklist.filter(item => {
-    // Check if item belongs to this level
-    const belongsToLevel = item.level === level || 
-                          item.level === `${level}/L${parseInt(level.slice(1)) + 1}` ||
-                          item.level === `L${parseInt(level.slice(1)) - 1}/${level}` ||
-                          item.level.includes('/');
-    
-    // For now, use a simpler approach - items belong to L1/L2 for both L1 and L2 gates
-    const isLevelItem = item.level.includes(level);
-    
-    // Check media applicability
-    const isApplicable = item.applicable;
-    
-    return isLevelItem && isApplicable;
-  });
-
-  // More precise level filtering
+  // Precise level filtering
   const preciseLevelItems = checklist.filter(item => {
     if (!item.applicable) return false;
     
@@ -77,11 +61,14 @@ export function calculateLevelScore(
 export function evaluateGate(
   checklist: ChecklistItem[],
   level: 'L1' | 'L2' | 'L3' | 'L4',
-  mediaType: MediaType
+  mediaType: MediaType,
+  auditMode: 'conflict' | 'kishō' | 'hybrid' = 'conflict'
 ): GateResult {
   const { score, passed, failed, insufficient, total } = calculateLevelScore(checklist, level, mediaType);
   
-  const passedGate = score >= GATE_THRESHOLD;
+  // Use mode-specific threshold per Section 0.7
+  const threshold = getGateThreshold(auditMode, level);
+  const passedGate = score >= threshold;
   
   // Generate fix list if failed
   const fixList: FixItem[] = [];
@@ -124,7 +111,9 @@ export function evaluateGate(
     fixes: fixList.map(f => f.description),
     metadata: {
       level,
-      breakdown: {}
+      breakdown: {},
+      threshold,
+      auditMode,
     },
     // Legacy properties for UI compatibility
     level,
@@ -188,11 +177,17 @@ export function checkMediaApplicability(
     return tags.some(t => checkMediaApplicability(t, mediaType));
   }
   
-  // GAME tag - only for games
-  if (tag === 'GAME' && mediaType === 'game') return true;
+  // GAME tag - only for games and ttrpg
+  if (tag === 'GAME' && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
   
   // VISUAL tag - for film, anime, series
   if (tag === 'VISUAL' && ['film', 'anime', 'series'].includes(mediaType)) return true;
+  
+  // AUDIO tag - for film, anime, series (soundtrack/voice matters)
+  if (tag === 'AUDIO' && ['film', 'anime', 'series'].includes(mediaType)) return true;
+  
+  // INTERACTIVE tag - for games and ttrpg
+  if (tag === 'INTERACTIVE' && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
   
   return false;
 }
@@ -286,11 +281,16 @@ export function determineAuditMode(
   victoryTrajectory: boolean,
   externalConflict: boolean
 ): 'conflict' | 'kishō' | 'hybrid' {
-  const yesCount = [hasAntagonist, victoryTrajectory, externalConflict].filter(Boolean).length;
+  const answers = [hasAntagonist, victoryTrajectory, externalConflict];
+  const yesCount = answers.filter(Boolean).length;
+  const noCount = answers.filter(a => !a).length;
   
-  if (yesCount >= 2) return 'conflict';
-  if (yesCount <= 1) return 'kishō';
-  return 'hybrid';
+  // All 3 yes → conflict; all 3 no → kishō; mixed → hybrid
+  if (yesCount === 3) return 'conflict';
+  if (noCount === 3) return 'kishō';
+  if (yesCount >= 2) return 'conflict';  // 2 yes + 1 no
+  if (noCount >= 2) return 'kishō';      // 2 no + 1 yes
+  return 'hybrid';                         // This shouldn't happen with 3 booleans, but safety
 }
 
 /**

@@ -24,7 +24,18 @@
 // TIER 0 — Foundation (types and data)
 export * from './types';
 export * from './protocol-data';
-export * from './issue-schema';
+// issue-schema re-exports some types already in types.ts (Axes, Issue, Severity, PatchType)
+// Selectively re-export only the unique exports from issue-schema
+export {
+  createIssue,
+  validateIssue,
+  generatePatchTemplates,
+  calculateIssueScore,
+  sortIssuesByPriority,
+  filterIssuesBySeverity,
+  SEVERITY_LEVELS,
+  PATCH_TYPES,
+} from './issue-schema';
 export * from './scoring-algorithm';
 export * from './prompts';
 

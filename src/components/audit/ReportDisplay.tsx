@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useAuditState } from '@/hooks/useAuditState';
+import type { AuditReport } from '@/lib/audit/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -107,7 +108,7 @@ function HumanReadableReport({
   classification,
   percentage,
 }: {
-  report: NonNullable<ReturnType<typeof useAuditState>['report']>;
+  report: AuditReport;
   classification: string;
   percentage: number;
 }) {
@@ -341,7 +342,7 @@ function HumanReadableReport({
 function JsonReport({
   report,
 }: {
-  report: NonNullable<ReturnType<typeof useAuditState>['report']>;
+  report: AuditReport;
 }) {
   const [copied, setCopied] = React.useState(false);
 

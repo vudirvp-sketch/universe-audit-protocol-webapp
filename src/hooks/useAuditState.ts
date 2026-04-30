@@ -152,12 +152,19 @@ export const selectOverallProgress = (state: AuditState) => {
   ];
   
   const currentIndex = phases.indexOf(state.phase);
-  const total = phases.length - 2; // Exclude idle and failed from progress
+  // Exclude terminal states (idle, failed, blocked, cancelled) from progress
+  const terminalStates = ['idle', 'failed', 'blocked', 'cancelled'];
+  const total = phases.filter(p => !terminalStates.includes(p)).length;
+  
+  // If in terminal state, find the effective progress position
+  const effectiveIndex = terminalStates.includes(state.phase) 
+    ? currentIndex > 0 ? currentIndex - 1 : 0 
+    : currentIndex;
   
   return {
-    current: currentIndex,
+    current: effectiveIndex,
     total,
-    percentage: Math.round((currentIndex / total) * 100),
+    percentage: Math.round((effectiveIndex / total) * 100),
   };
 };
 

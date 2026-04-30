@@ -81,7 +81,13 @@ export const stepGateL3: AuditStep<GateL3Output> = {
     try {
       const parsed = JSON.parse(jsonStr);
       const validStages: GriefStage[] = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'];
-      const validLevels: GriefLevel[] = ['character', 'location', 'mechanic', 'act', 'world', 'society', 'scene'];
+      // Use only canonical GriefLevel values; map extended levels to canonical
+      const validLevels: GriefLevel[] = ['character', 'location', 'mechanic', 'act'];
+      const extendedToCanonical: Record<string, GriefLevel> = {
+        world: 'mechanic',
+        society: 'location',
+        scene: 'act',
+      };
       const validConfidences = ['high', 'medium', 'low', 'absent'];
 
       const dominantStage = validStages.includes(parsed.griefMatrix?.dominantStage)
@@ -90,7 +96,9 @@ export const stepGateL3: AuditStep<GateL3Output> = {
       const cells: GateL3Output['griefMatrix']['cells'] = Array.isArray(parsed.griefMatrix?.cells)
         ? parsed.griefMatrix.cells.map((c: Record<string, unknown>) => ({
             stage: (validStages as readonly string[]).includes(c.stage as string) ? (c.stage as GriefStage) : ('depression' as GriefStage),
-            level: (validLevels as readonly string[]).includes(c.level as string) ? (c.level as GriefLevel) : ('character' as GriefLevel),
+            level: (validLevels as readonly string[]).includes(c.level as string)
+              ? (c.level as GriefLevel)
+              : (extendedToCanonical[c.level as string] ?? ('character' as GriefLevel)),
             character: c.character ? String(c.character) : undefined,
             evidence: c.evidence ? String(c.evidence) : undefined,
             confidence: validConfidences.includes(c.confidence as string) ? (c.confidence as 'high' | 'medium' | 'low' | 'absent') : 'absent',

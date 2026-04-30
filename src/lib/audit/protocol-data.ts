@@ -14,7 +14,7 @@ export const MASTER_CHECKLIST: ChecklistItem[] = [
   // Block A: Structure (7) - L1
   { id: 'A1', block: 'A', text: 'Тематический закон сформулирован как физическое правило, влияет на физику/экономику', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
   { id: 'A2', block: 'A', text: 'Корневая травма определена и объясняет все идеологии', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
-  { id: 'A3', block: 'A', text: 'Гамартия — финал вытекает из природы протагониста', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
+  { id: 'A3', block: 'A', text: 'Хамартия — финал вытекает из природы протагониста', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
   { id: 'A4', block: 'A', text: '3 столпа — замкнутый цикл', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
   { id: 'A5', block: 'A', text: 'Авторский запрет зафиксирован', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
   { id: 'A6', block: 'A', text: 'Целевой опыт — конфликт эмоций, не одна эмоция', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
@@ -40,7 +40,7 @@ export const MASTER_CHECKLIST: ChecklistItem[] = [
   { id: 'C7', block: 'C', text: 'Необъяснённые детали для атмосферы', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true },
 
   // Block D: Characters (7) - L1/L2
-  { id: 'D1', block: 'D', text: 'Каждый ключевой персонаж: системный изъян + гамартия', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true },
+  { id: 'D1', block: 'D', text: 'Каждый ключевой персонаж: системный изъян + хамартия', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true },
   { id: 'D2', block: 'D', text: 'Протагонист: ≤3 провалов теста Мэри Сью', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true },
   { id: 'D3', block: 'D', text: 'Цена величия бьёт по идентичности', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true },
   { id: 'D4', block: 'D', text: 'Антагонист: внутренняя логика без злодейской мотивации', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true },
@@ -95,7 +95,7 @@ export const MASTER_CHECKLIST: ChecklistItem[] = [
 // Glossary with key terms
 export const GLOSSARY: GlossaryTerm[] = [
   {
-    termRu: 'Гамартия',
+    termRu: 'Хамартия',
     termEn: 'Hamartia',
     definition: 'Роковой изъян, являющийся одновременно силой персонажа и причиной его падения',
     operationalCheck: 'Позволяет ли изъян достичь успеха И приводит ли к финалу?'
@@ -315,7 +315,7 @@ export const AUDIT_MODE_DESCRIPTIONS = {
 };
 
 // Thresholds
-export const GATE_THRESHOLD = 60; // 60% required to pass each gate
+export const GATE_THRESHOLD = 60; // Legacy — use getGateThreshold() from types.ts for mode-specific thresholds
 export const VITALITY_THRESHOLD = 13; // 13/17 = living world
 export const CULT_THRESHOLD = 8; // 8/11 = cult potential
 export const MARY_SUE_THRESHOLD = 3; // ≤3/8 = acceptable
@@ -343,8 +343,10 @@ export function isTagApplicable(tag: MediaTag | `${MediaTag}|${MediaTag}`, media
 }
 
 function isTagInMediaType(tags: MediaTag[], mediaType: MediaType): boolean {
-  if (tags.includes('GAME') && mediaType === 'game') return true;
+  if (tags.includes('GAME') && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
   if (tags.includes('VISUAL') && ['film', 'anime', 'series'].includes(mediaType)) return true;
+  if (tags.includes('AUDIO') && ['film', 'anime', 'series'].includes(mediaType)) return true;
+  if (tags.includes('INTERACTIVE') && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
   return false;
 }
 

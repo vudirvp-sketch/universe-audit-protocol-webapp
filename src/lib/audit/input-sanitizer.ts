@@ -55,6 +55,19 @@ const SYSTEM_PROMPT_PATTERN = /^(system|system_prompt|instructions?)\s*:/gim;
 const IGNORE_INSTRUCTION_PATTERN =
   /ignore\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|directives?|guidelines?)/gi;
 
+// Matches Russian-language injection patterns:
+// "игнорируй предыдущие инструкции", "забудь всё что было", etc.
+const IGNORE_INSTRUCTION_PATTERN_RU =
+  /(игнорир\w*|забудь|забудьте|отменит|отмените|отклон\w*|проигнорир\w*)\s+(все|всё|все|предыдущ\w*|ранее|выше|прежн\w*)\s*(инструкци\w*|указани\w*|правил\w*|установк\w*|наставлени\w*|указ\w*)?/gi;
+
+// Matches Russian "system:" / "системная инструкция:" type headers
+const SYSTEM_PROMPT_PATTERN_RU =
+  /^(системн\w*\s*(инструкци\w*|указани\w*|правил\w*|запрос)|система\s*:)/gim;
+
+// Matches "НЕ ДЕЛАЙ" / "НЕ ВЫПОЛНЯЙ" type Russian negation commands
+const NEGATION_COMMAND_PATTERN_RU =
+  /не\s+(выполня\w*|делай|делайте|читай|читайте|следуй|следуйте|используй|используйте)\s*(предыдущ\w*|вышестоящ\w*)?\s*(инструкци\w*|указани\w*|правил\w*)?/gi;
+
 // Matches closing </user_input> injection — an attacker might try to close
 // the tag early and append their own instructions after it.
 const CLOSING_TAG_INJECTION_PATTERN = /<\/user_input>/gi;
@@ -76,11 +89,20 @@ const CLOSING_TAG_INJECTION_PATTERN = /<\/user_input>/gi;
 export function sanitizeNarrative(input: string): string {
   let sanitized = input;
 
-  // Remove system-prompt-like instruction headers
+  // Remove English system-prompt-like instruction headers
   sanitized = sanitized.replace(SYSTEM_PROMPT_PATTERN, '');
 
-  // Remove "ignore previous instructions" patterns
+  // Remove Russian system-prompt-like instruction headers
+  sanitized = sanitized.replace(SYSTEM_PROMPT_PATTERN_RU, '');
+
+  // Remove English "ignore previous instructions" patterns
   sanitized = sanitized.replace(IGNORE_INSTRUCTION_PATTERN, '');
+
+  // Remove Russian "ignore previous instructions" patterns
+  sanitized = sanitized.replace(IGNORE_INSTRUCTION_PATTERN_RU, '');
+
+  // Remove Russian negation command patterns ("не выполняй", "не делай")
+  sanitized = sanitized.replace(NEGATION_COMMAND_PATTERN_RU, '');
 
   // Remove closing </user_input> tag injection attempts
   sanitized = sanitized.replace(CLOSING_TAG_INJECTION_PATTERN, '');
