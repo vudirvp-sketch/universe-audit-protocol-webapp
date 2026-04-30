@@ -74,29 +74,29 @@ const REQUIRED_LEVELS_FOR_DOMINANT: GriefLevel[] = ['world', 'society', 'charact
 
 const GRIEF_KEYWORDS: Record<GriefStage, string[]> = {
   denial: [
-    'refuse', 'deny', 'reject', 'ignore', 'pretend', 'dismiss',
-    'cannot believe', 'won\'t accept', 'impossible', 'mistake',
-    'refusal', 'blindness', 'avoidance', 'normalcy', 'illusion'
+    'отрицани', 'отказыва', 'не вер', 'не может быть', 'отверга',
+    'игнорир', 'притворя', 'отвод', 'невозможно', 'ошибка',
+    'слепота', 'избегани', 'иллюзи', 'нормальн', 'не принима'
   ],
   anger: [
-    'rage', 'fury', 'angry', 'hate', 'blame', 'resent',
-    'bitter', 'hostile', 'furious', 'outrage', 'wrath',
-    'violence', 'destruction', 'lashing out', 'revenge'
+    'гнев', 'ярость', 'злость', 'ненавис', 'обвиня', 'обида',
+    'горечь', 'враждеб', 'ярост', 'возмущени', 'гнева',
+    'насили', 'разрушени', 'мщени', 'месть'
   ],
   bargaining: [
-    'deal', 'bargain', 'negotiate', 'compromise', 'trade',
-    'if only', 'what if', 'exchange', 'promise', 'plea',
-    'desperation', 'attempting to control', 'conditions'
+    'сделк', 'торг', 'договор', 'компромисс', 'обмен',
+    'если бы', 'а что если', 'услови', 'обещани', 'мольба',
+    'отчаяни', 'попытка контрол', 'договориться'
   ],
   depression: [
-    'sad', 'grief', 'sorrow', 'despair', 'hopeless', 'empty',
-    'numb', 'withdraw', 'isolat', 'dark', 'lost',
-    'meaningless', 'pointless', 'suffering', 'pain', 'mourning'
+    'грусть', 'скорбь', 'печаль', 'отчаяни', 'безнадёж', 'пустот',
+    'оцепенени', 'уход', 'одиночество', 'тьма', 'потерян',
+    'бессмыслен', 'страдани', 'боль', 'траур', 'тоска'
   ],
   acceptance: [
-    'accept', 'peace', 'understand', 'release', 'let go',
-    'reconcile', 'embrace', 'heal', 'growth', 'move forward',
-    'resolution', 'wisdom', 'transformation', 'new normal'
+    'приняти', 'покой', 'понима', 'освобожде', 'отпуска',
+    'примирени', 'объяти', 'исцелени', 'рост', 'движение дальше',
+    'разрешени', 'мудрость', 'преображени', 'новая реальность'
   ]
 };
 
@@ -106,20 +106,20 @@ const GRIEF_KEYWORDS: Record<GriefStage, string[]> = {
 
 const LEVEL_KEYWORDS: Record<GriefLevel, string[]> = {
   world: [
-    'world', 'universe', 'realm', 'kingdom', 'nation', 'society',
-    'civilization', 'cosmos', 'reality', 'natural law', 'physics'
+    'мир', 'вселенн', 'царство', 'королевство', 'наци', 'государство',
+    'цивилизац', 'космос', 'реальность', 'закон природы', 'мироздани'
   ],
   society: [
-    'society', 'culture', 'community', 'people', 'population',
-    'social', 'political', 'economic', 'institution', 'group'
+    'обществ', 'культур', 'сообществ', 'народ', 'населени',
+    'социальн', 'политическ', 'экономическ', 'институт', 'группа'
   ],
   character: [
-    'character', 'protagonist', 'hero', 'person', 'individual',
-    'mind', 'heart', 'soul', 'psyche', 'internal'
+    'персонаж', 'герой', 'протагонист', 'человек', 'личность',
+    'разум', 'сердце', 'душа', 'психик', 'внутренн'
   ],
   scene: [
-    'scene', 'moment', 'action', 'dialogue', 'interaction',
-    'specific', 'concrete', 'visible', 'manifestation', 'expression'
+    'сцена', 'момент', 'действие', 'диалог', 'взаимодействие',
+    'конкретн', 'видим', 'проявлени', 'выражени', 'эпизод'
   ]
 };
 
@@ -167,7 +167,7 @@ export function validateGriefArchitecture(
       });
       errors.push({
         code: 'structural_hole',
-        message: `Stage '${stage}' only present on ${levels.length} level(s). Minimum: ${MIN_LEVELS_PER_STAGE}`,
+        message: `Стадия «${stage}» представлена только на ${levels.length} уровне(ях). Минимум: ${MIN_LEVELS_PER_STAGE}`,
         stage,
         level: levels[0]
       });
@@ -196,7 +196,7 @@ export function validateGriefArchitecture(
       dominantIncomplete = true;
       errors.push({
         code: 'dominant_incomplete',
-        message: `Dominant stage '${dominantStage}' missing levels: ${missingLevels.join(', ')}`,
+        message: `Доминантная стадия «${dominantStage}» не имеет проявлений на уровнях: ${missingLevels.join(', ')}`,
         stage: dominantStage
       });
     }
@@ -207,7 +207,7 @@ export function validateGriefArchitecture(
     if (stageDistribution[stage].length === 0) {
       warnings.push({
         code: 'missing_stage',
-        message: `Stage '${stage}' is not represented in the grief architecture`,
+        message: `Стадия «${stage}» не представлена в архитектуре горя`,
         stage
       });
     }
@@ -264,7 +264,7 @@ export function analyzeGriefInText(text: string): GriefPresence[] {
         stage,
         level,
         present: hasStage && hasLevel,
-        description: hasStage && hasLevel ? `Detected ${stage} at ${level} level` : undefined,
+        description: hasStage && hasLevel ? `Обнаружена стадия «${stage}» на уровне «${level}»` : undefined,
         evidence: hasStage ? matchedKeyword : undefined
       });
     }
@@ -302,7 +302,7 @@ export function executeL3GateWithGriefCheck(
     // Generate specific fixes
     for (const hole of validationResult.structuralHoles) {
       fixes.push(
-        `[CRITICAL] Add manifestations of '${hole.stage}' at: ${hole.missingLevels.join(', ')} levels`
+        `[КРИТИЧЕСКОЕ] Добавьте проявления стадии «${hole.stage}» на уровнях: ${hole.missingLevels.join(', ')}`
       );
     }
 
@@ -310,14 +310,14 @@ export function executeL3GateWithGriefCheck(
       const dominantLevels = validationResult.stageDistribution[validationResult.dominantStage];
       const missing = REQUIRED_LEVELS_FOR_DOMINANT.filter(l => !dominantLevels.includes(l));
       fixes.push(
-        `[REQUIRED] Dominant stage '${validationResult.dominantStage}' must appear at all levels. Missing: ${missing.join(', ')}`
+        `[ОБЯЗАТЕЛЬНОЕ] Доминантная стадия «${validationResult.dominantStage}» должна проявляться на всех уровнях. Отсутствуют: ${missing.join(', ')}`
       );
     }
 
     return {
       passed: false,
       validationResult,
-      blockReason: 'Grief Architecture validation failed - see fixes below',
+      blockReason: 'Валидация архитектуры горя не пройдена — см. рекомендации ниже',
       fixes
     };
   }
@@ -347,7 +347,7 @@ export function createGriefPresence(
     level,
     present,
     description,
-    evidence: present ? `Manually marked as present` : undefined
+    evidence: present ? 'Помечено вручную как присутствующее' : undefined
   };
 }
 
@@ -376,21 +376,21 @@ export function getDominantStage(
 export function formatGriefValidationResult(result: GriefValidationResult): string {
   const lines: string[] = [];
   
-  lines.push('## Grief Architecture Validation');
+  lines.push('## Валидация архитектуры горя');
   lines.push('');
-  lines.push(`**Status:** ${result.valid ? 'PASSED' : 'FAILED'}`);
-  lines.push(`**Dominant Stage:** ${result.dominantStage || 'None identified'}`);
+  lines.push(`**Статус:** ${result.valid ? 'ПРОЙДЕНО' : 'НЕ ПРОЙДЕНО'}`);
+  lines.push(`**Доминантная стадия:** ${result.dominantStage || 'Не определена'}`);
   lines.push('');
 
-  lines.push('### Stage Distribution:');
+  lines.push('### Распределение по стадиям:');
   for (const stage of Object.keys(result.stageDistribution) as GriefStage[]) {
     const levels = result.stageDistribution[stage];
-    lines.push(`- ${stage}: ${levels.length > 0 ? levels.join(', ') : '(not present)'}`);
+    lines.push(`- ${stage}: ${levels.length > 0 ? levels.join(', ') : '(не представлена)'}`);
   }
   lines.push('');
 
   if (result.errors.length > 0) {
-    lines.push('### Errors:');
+    lines.push('### Ошибки:');
     for (const error of result.errors) {
       lines.push(`- ❌ [${error.code}] ${error.message}`);
     }
@@ -398,7 +398,7 @@ export function formatGriefValidationResult(result: GriefValidationResult): stri
   }
 
   if (result.warnings.length > 0) {
-    lines.push('### Warnings:');
+    lines.push('### Предупреждения:');
     for (const warning of result.warnings) {
       lines.push(`- ⚠️ [${warning.code}] ${warning.message}`);
     }
@@ -406,9 +406,9 @@ export function formatGriefValidationResult(result: GriefValidationResult): stri
   }
 
   if (result.structuralHoles.length > 0) {
-    lines.push('### Structural Holes:');
+    lines.push('### Структурные пробелы:');
     for (const hole of result.structuralHoles) {
-      lines.push(`- [${hole.severity.toUpperCase()}] ${hole.stage}: missing ${hole.missingLevels.join(', ')}`);
+      lines.push(`- [${hole.severity.toUpperCase()}] ${hole.stage}: отсутствуют уровни ${hole.missingLevels.join(', ')}`);
     }
   }
 

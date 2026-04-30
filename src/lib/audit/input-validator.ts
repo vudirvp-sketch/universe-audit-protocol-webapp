@@ -66,43 +66,43 @@ const INPUT_VALIDATION_RULES: ValidationRule[] = [
     type: 'string',
     minLength: 50,
     maxLength: 10000,
-    errorMessage: 'Concept must be between 50 and 10000 characters'
+    errorMessage: 'Концепт должен содержать от 50 до 10000 символов'
   },
   {
     field: 'mediaType',
     required: false,
     type: 'string',
-    errorMessage: 'Media type must be a string'
+    errorMessage: 'Тип медиа должен быть строкой'
   },
   {
     field: 'targetLength',
     required: false,
     type: 'string',
-    errorMessage: 'Target length must be a string'
+    errorMessage: 'Целевая длина должна быть строкой'
   },
   {
     field: 'tone',
     required: false,
     type: 'string',
-    errorMessage: 'Tone must be a string'
+    errorMessage: 'Тон должен быть строкой'
   },
   {
     field: 'worldbuilding',
     required: false,
     type: 'object',
-    errorMessage: 'Worldbuilding must be an object'
+    errorMessage: 'Миростроение должно быть объектом'
   },
   {
     field: 'characters',
     required: false,
     type: 'array',
-    errorMessage: 'Characters must be an array'
+    errorMessage: 'Персонажи должны быть массивом'
   },
   {
     field: 'themes',
     required: false,
     type: 'array',
-    errorMessage: 'Themes must be an array'
+    errorMessage: 'Темы должны быть массивом'
   }
 ];
 
@@ -130,14 +130,14 @@ export function validateInput(
       if (rule.required) {
         errors.push({
           field: rule.field,
-          message: result.message || rule.errorMessage || 'Validation failed',
+          message: result.message || rule.errorMessage || 'Ошибка валидации',
           code: `REQUIRED_${rule.field.toUpperCase()}`,
           severity: 'error'
         });
       } else if (value !== undefined) {
         warnings.push({
           field: rule.field,
-          message: result.message || rule.errorMessage || 'Validation warning',
+          message: result.message || rule.errorMessage || 'Предупреждение валидации',
           code: `OPTIONAL_${rule.field.toUpperCase()}`,
           severity: 'warning'
         });
@@ -153,7 +153,7 @@ export function validateInput(
     if (!knownFields.includes(key)) {
       warnings.push({
         field: key,
-        message: `Unknown field '${key}' will be ignored`,
+        message: `Неизвестное поле «${key}» будет проигнорировано`,
         code: 'UNKNOWN_FIELD',
         severity: 'warning'
       });
@@ -180,7 +180,7 @@ function validateField(
   if (rule.required && (value === undefined || value === null)) {
     return {
       valid: false,
-      message: `Field '${rule.field}' is required`
+      message: `Поле «${rule.field}» обязательно`
     };
   }
 
@@ -194,7 +194,7 @@ function validateField(
   if (!typeValid) {
     return {
       valid: false,
-      message: `Field '${rule.field}' must be of type ${rule.type}`
+      message: `Поле «${rule.field}» должно иметь тип ${rule.type}`
     };
   }
 
@@ -203,19 +203,19 @@ function validateField(
     if (rule.minLength !== undefined && value.length < rule.minLength) {
       return {
         valid: false,
-        message: `Field '${rule.field}' must be at least ${rule.minLength} characters`
+        message: `Поле «${rule.field}» должно содержать не менее ${rule.minLength} символов`
       };
     }
     if (rule.maxLength !== undefined && value.length > rule.maxLength) {
       return {
         valid: false,
-        message: `Field '${rule.field}' must be at most ${rule.maxLength} characters`
+        message: `Поле «${rule.field}» должно содержать не более ${rule.maxLength} символов`
       };
     }
     if (rule.pattern && !rule.pattern.test(value)) {
       return {
         valid: false,
-        message: `Field '${rule.field}' does not match required pattern`
+        message: `Поле «${rule.field}» не соответствует требуемому шаблону`
       };
     }
     return { valid: true, normalizedValue: value.trim() };
@@ -226,13 +226,13 @@ function validateField(
     if (rule.minValue !== undefined && value < rule.minValue) {
       return {
         valid: false,
-        message: `Field '${rule.field}' must be at least ${rule.minValue}`
+        message: `Поле «${rule.field}» должно быть не менее ${rule.minValue}`
       };
     }
     if (rule.maxValue !== undefined && value > rule.maxValue) {
       return {
         valid: false,
-        message: `Field '${rule.field}' must be at most ${rule.maxValue}`
+        message: `Поле «${rule.field}» должно быть не более ${rule.maxValue}`
       };
     }
     return { valid: true, normalizedValue: value };
@@ -257,7 +257,7 @@ function validateField(
   if (rule.customValidator && !rule.customValidator(value)) {
     return {
       valid: false,
-      message: `Field '${rule.field}' failed custom validation`
+      message: `Поле «${rule.field}» не прошло пользовательскую валидацию`
     };
   }
 
@@ -300,22 +300,22 @@ export function validateConcept(concept: string): ValidationResult {
   if (concept.length < 50) {
     errors.push({
       field: 'concept',
-      message: 'Concept is too short. Provide at least 50 characters for meaningful analysis.',
+      message: 'Концепт слишком короткий. Укажите хотя бы 50 символов для осмысленного анализа.',
       code: 'CONCEPT_TOO_SHORT',
       severity: 'error'
     });
   }
 
-  // Check for narrative elements
-  const hasCharacter = /\b(protagonist|hero|character|person|he|she|they|I)\b/i.test(concept);
-  const hasConflict = /\b(conflict|struggle|battle|fight|opposition|against)\b/i.test(concept);
-  const hasSetting = /\b(world|setting|place|land|kingdom|city|planet)\b/i.test(concept);
-  const hasPlot = /\b(plot|story|journey|quest|adventure|mission)\b/i.test(concept);
+  // Check for narrative elements (Russian and English keywords)
+  const hasCharacter = /\b(персонаж|герой|протагонист|человек|он|она|они|я)\b|\b(protagonist|hero|character|person|he|she|they|I)\b/i.test(concept);
+  const hasConflict = /\b(конфликт|борьба|битва|сражение|противостояние|против)\b|\b(conflict|struggle|battle|fight|opposition|against)\b/i.test(concept);
+  const hasSetting = /\b(мир|мироустройство|место|земля|королевство|город|планета|вселенн)\b|\b(world|setting|place|land|kingdom|city|planet)\b/i.test(concept);
+  const hasPlot = /\b(сюжет|история|путь|путешествие|приключение|миссия|поход)\b|\b(plot|story|journey|quest|adventure|mission)\b/i.test(concept);
 
   if (!hasCharacter) {
     warnings.push({
       field: 'concept',
-      message: 'No clear character reference detected. Consider adding protagonist information.',
+      message: 'Явная ссылка на персонажа не обнаружена. Рекомендуется добавить информацию о протагонисте.',
       code: 'NO_CHARACTER',
       severity: 'warning'
     });
@@ -324,7 +324,7 @@ export function validateConcept(concept: string): ValidationResult {
   if (!hasConflict) {
     warnings.push({
       field: 'concept',
-      message: 'No clear conflict detected. Consider adding the central struggle.',
+      message: 'Явный конфликт не обнаружен. Рекомендуется добавить центральное противостояние.',
       code: 'NO_CONFLICT',
       severity: 'warning'
     });
@@ -333,7 +333,7 @@ export function validateConcept(concept: string): ValidationResult {
   if (!hasSetting) {
     warnings.push({
       field: 'concept',
-      message: 'No clear setting detected. Consider adding world/setting information.',
+      message: 'Явная установка мира не обнаружена. Рекомендуется добавить информацию о мире/сеттинге.',
       code: 'NO_SETTING',
       severity: 'warning'
     });

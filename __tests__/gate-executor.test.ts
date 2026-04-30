@@ -69,7 +69,7 @@ describe('Gate Executor', () => {
 
       expect(result.status).toBe('failed');
       expect(result.halt).toBe(true);
-      expect(result.fixes).toContain('Invalid gate ID');
+      expect(result.fixes).toContain('Неверный идентификатор гейта');
     });
 
     test('Non-halting gate does not halt on failure', () => {

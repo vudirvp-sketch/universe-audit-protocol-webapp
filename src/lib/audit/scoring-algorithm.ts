@@ -142,13 +142,13 @@ export function evaluateGate(
 function inferLogicHoleType(text: string): FixItem['type'] {
   const lowerText = text.toLowerCase();
   
-  if (lowerText.includes('motivation') || lowerText.includes('antagonist')) return 'motivation';
-  if (lowerText.includes('competence') || lowerText.includes('smart')) return 'competence';
-  if (lowerText.includes('scale') || lowerText.includes('consequence')) return 'scale';
-  if (lowerText.includes('resource') || lowerText.includes('supply') || lowerText.includes('economic')) return 'resources';
-  if (lowerText.includes('memory') || lowerText.includes('forgot')) return 'memory';
-  if (lowerText.includes('ideology') || lowerText.includes('faction')) return 'ideology';
-  if (lowerText.includes('time') || lowerText.includes('chronology')) return 'time';
+  if (lowerText.includes('мотивац') || lowerText.includes('антагонист') || lowerText.includes('motivation') || lowerText.includes('antagonist')) return 'motivation';
+  if (lowerText.includes('компетенц') || lowerText.includes('умн') || lowerText.includes('competence') || lowerText.includes('smart')) return 'competence';
+  if (lowerText.includes('масштаб') || lowerText.includes('последстви') || lowerText.includes('scale') || lowerText.includes('consequence')) return 'scale';
+  if (lowerText.includes('ресурс') || lowerText.includes('снабжен') || lowerText.includes('эконом') || lowerText.includes('resource') || lowerText.includes('supply') || lowerText.includes('economic')) return 'resources';
+  if (lowerText.includes('памят') || lowerText.includes('забыл') || lowerText.includes('memory') || lowerText.includes('forgot')) return 'memory';
+  if (lowerText.includes('идеологи') || lowerText.includes('фракц') || lowerText.includes('ideology') || lowerText.includes('faction')) return 'ideology';
+  if (lowerText.includes('врем') || lowerText.includes('хронолог') || lowerText.includes('time') || lowerText.includes('chronology')) return 'time';
   
   return 'motivation'; // default
 }
@@ -257,16 +257,16 @@ export function classifyAuthorProfile(answers: AuthorProfileAnswers): AuthorProf
   const auditPriorities: string[] = [];
   
   if (type === 'gardener') {
-    mainRisks.push('Scale holes, resources, time');
-    mainRisks.push('Factions as decoration');
-    auditPriorities.push('Sections 3, 8 (L1)');
+    mainRisks.push('Дыры масштаба, ресурсов, времени');
+    mainRisks.push('Фракции как декорация');
+    auditPriorities.push('Разделы 3, 8 (L1)');
   } else if (type === 'architect') {
-    mainRisks.push('Competence holes');
-    mainRisks.push('Character stagnation');
-    auditPriorities.push('Sections 6, 8 (L1-L2)');
+    mainRisks.push('Дыры компетенции');
+    mainRisks.push('Стагнация персонажей');
+    auditPriorities.push('Разделы 6, 8 (L1-L2)');
   } else {
-    mainRisks.push('MDA+OT level desync');
-    auditPriorities.push('Section 1.6 (L1)');
+    mainRisks.push('Рассинхрон уровней MDA+OT');
+    auditPriorities.push('Раздел 1.6 (L1)');
   }
   
   return {
@@ -399,9 +399,9 @@ export function generatePriorityActions(
   while (actions.length < 3) {
     const remaining = 3 - actions.length;
     if (remaining === 1) {
-      actions.push('Complete full audit for detailed recommendations');
+      actions.push('Завершите полный аудит для детальных рекомендаций');
     } else {
-      actions.push(`Review audit checklist item ${actions.length + 1}`);
+      actions.push(`Проверьте элемент чеклиста аудита ${actions.length + 1}`);
     }
   }
   

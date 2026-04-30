@@ -50,17 +50,17 @@ const MAX_CHAIN_LENGTH = 7;
 const TERMINAL_CLASSIFIERS = {
   BREAK: {
     indicators: [
-      'no reason', 'nothing', 'just because', 'no purpose',
-      'arbitrary', 'random', 'meaningless', 'pointless',
-      'no impact', 'does not matter', 'inconsequential'
+      'без причины', 'ничего', 'просто так', 'без цели',
+      'случайно', 'произвольно', 'бессмыслен', 'бесцельно',
+      'никакого влияния', 'не имеет значения', 'неважно'
     ],
     action: 'bind_to_law_or_remove'
   },
   DILEMMA: {
     indicators: [
-      'choose between', 'either or', 'cannot have both',
-      'must sacrifice', 'impossible choice', 'trade-off',
-      'conflicting values', 'no right answer', 'moral conflict'
+      'выбирать между', 'либо либо', 'невозможно иметь оба',
+      'должен пожертвовать', 'невозможный выбор', 'компромисс',
+      'конфликт ценностей', 'нет правильного ответа', 'моральный конфликт'
     ],
     action: 'valid_terminal'
   }
@@ -88,7 +88,7 @@ export function runWhatForChain(
   for (let i = 0; i < Math.min(answers.length, MAX_CHAIN_LENGTH); i++) {
     const step: ChainStep = {
       stepNumber: i + 1,
-      question: i === 0 ? `Why "${initialClaim}"?` : `And what does that achieve?`,
+      question: i === 0 ? `Почему «${initialClaim}»?` : 'И что это даёт?',
       answer: answers[i],
       analysis: analyzeAnswer(answers[i])
     };
@@ -108,7 +108,7 @@ export function runWhatForChain(
     terminalStep: chain.length,
     valid: false,
     action: 'retry_analysis',
-    reasoning: 'Chain did not reach a valid BREAK or DILEMMA terminal within 7 steps'
+    reasoning: 'Цепочка не достигла валидного терминала BREAK или DILEMMA за 7 шагов'
   };
 }
 
@@ -155,7 +155,7 @@ function buildResult(
       terminalStep,
       valid: false, // BREAK is never "valid" as a goal
       action: 'bind_to_law_or_remove',
-      reasoning: `BREAK at step ${terminalStep} (≤4) indicates critical structural weakness. Element must be bound to world law or removed.`
+      reasoning: `BREAK на шаге ${terminalStep} (≤4) указывает на критическую структурную слабость. Элемент должен быть привязан к закону мира или удалён.`
     };
   }
 
@@ -167,7 +167,7 @@ function buildResult(
       terminalStep,
       valid: false,
       action: 'review_element_necessity',
-      reasoning: `BREAK at step ${terminalStep} (>4) suggests element may be unnecessary but less critical. Review for potential removal.`
+      reasoning: `BREAK на шаге ${terminalStep} (>4) — элемент может быть избыточным, но менее критичен. Рассмотрите возможность удаления.`
     };
   }
 
@@ -178,7 +178,7 @@ function buildResult(
       terminal,
       terminalStep,
       valid: true,
-      reasoning: `DILEMMA at step ${terminalStep} indicates valid narrative tension. The element creates meaningful choice.`
+      reasoning: `DILEMMA на шаге ${terminalStep} — валидное нарративное напряжение. Элемент создаёт осмысленный выбор.`
     };
   }
 
@@ -188,7 +188,7 @@ function buildResult(
     terminalStep,
     valid: false,
     action: 'retry_analysis',
-    reasoning: 'Terminal could not be classified'
+    reasoning: 'Терминал не удалось классифицировать'
   };
 }
 
@@ -205,38 +205,38 @@ function analyzeAnswer(answer: string): string {
 
   // Check answer quality
   if (length < 10) {
-    return 'Answer too brief - may indicate shallow reasoning';
+    return 'Ответ слишком краткий — возможно, поверхностное рассуждение';
   }
 
   if (length > 200) {
-    return 'Answer overly detailed - may be avoiding the core question';
+    return 'Ответ слишком подробный — возможно, уход от сути вопроса';
   }
 
   // Check for avoidance patterns
   const avoidancePatterns = [
-    'i don\'t know', 'not sure', 'maybe', 'perhaps',
-    'it depends', 'unclear', 'hard to say'
+    'не знаю', 'не уверен', 'может быть', 'возможно',
+    'зависит от', 'неясно', 'трудно сказать'
   ];
 
   for (const pattern of avoidancePatterns) {
     if (lowerAnswer.includes(pattern)) {
-      return 'Answer contains uncertainty - may need deeper analysis';
+      return 'Ответ содержит неуверенность — требуется более глубокий анализ';
     }
   }
 
   // Check for justification patterns
   const justificationPatterns = [
-    'because', 'so that', 'in order to', 'to achieve',
-    'allows', 'enables', 'creates', 'establishes'
+    'потому что', 'для того чтобы', 'чтобы', 'для достижения',
+    'позволяет', 'даёт возможность', 'создаёт', 'устанавливает'
   ];
 
   for (const pattern of justificationPatterns) {
     if (lowerAnswer.includes(pattern)) {
-      return 'Answer provides justification - chain can continue';
+      return 'Ответ содержит обоснование — цепочку можно продолжить';
     }
   }
 
-  return 'Answer analyzed - continuing chain';
+  return 'Ответ проанализирован — продолжаем цепочку';
 }
 
 // ============================================================================
@@ -249,12 +249,14 @@ function analyzeAnswer(answer: string): string {
 export function extractDilemma(dilemmaAnswer: string): DilemmaResult {
   const lowerAnswer = dilemmaAnswer.toLowerCase();
 
-  // Look for value patterns
+  // Look for value patterns (Russian and English)
   const valuePatterns = [
-    /choose between (\w+) and (\w+)/i,
-    /either (\w+) or (\w+)/i,
-    /(\w+) versus (\w+)/i,
-    /cannot have both (\w+) and (\w+)/i
+    /выбирать между\s+(.+?)\s+и\s+(.+)/i,
+    /либо\s+(.+?)\s+либо\s+(.+)/i,
+    /(.+?)\s+против\s+(.+)/i,
+    /невозможно иметь и\s+(.+?)\s+и\s+(.+)/i,
+    /choose between\s+(\w+)\s+and\s+(\w+)/i,
+    /either\s+(\w+)\s+or\s+(\w+)/i
   ];
 
   for (const pattern of valuePatterns) {
@@ -263,18 +265,18 @@ export function extractDilemma(dilemmaAnswer: string): DilemmaResult {
       return {
         value1: match[1],
         value2: match[2],
-        conflict: `Conflict between ${match[1]} and ${match[2]}`,
-        stakes: `Protagonist must sacrifice one for the other`
+        conflict: `Конфликт между ${match[1]} и ${match[2]}`,
+        stakes: 'Протагонист должен пожертвовать одним ради другого'
       };
     }
   }
 
   // Default extraction
   return {
-    value1: 'Value A (extract from context)',
-    value2: 'Value B (extract from context)',
-    conflict: 'Conflicting values require choice',
-    stakes: 'Choice has meaningful consequences'
+    value1: 'Ценность А (извлечь из контекста)',
+    value2: 'Ценность Б (извлечь из контекста)',
+    conflict: 'Конфликтующие ценности требуют выбора',
+    stakes: 'Выбор имеет значимые последствия'
   };
 }
 
@@ -289,22 +291,22 @@ export function analyzeBreak(breakAnswer: string, stepNumber: number): BreakResu
   const lowerAnswer = breakAnswer.toLowerCase();
 
   // Determine what element broke
-  let brokenElement = 'unknown';
+  let brokenElement = 'неизвестно';
   
-  if (lowerAnswer.includes('no reason')) {
-    brokenElement = 'purpose';
-  } else if (lowerAnswer.includes('nothing')) {
-    brokenElement = 'consequence';
-  } else if (lowerAnswer.includes('arbitrary') || lowerAnswer.includes('random')) {
-    brokenElement = 'causality';
-  } else if (lowerAnswer.includes('meaningless') || lowerAnswer.includes('pointless')) {
-    brokenElement = 'meaning';
+  if (lowerAnswer.includes('без причины') || lowerAnswer.includes('no reason')) {
+    brokenElement = 'цель';
+  } else if (lowerAnswer.includes('ничего') || lowerAnswer.includes('nothing')) {
+    brokenElement = 'последствие';
+  } else if (lowerAnswer.includes('произвольно') || lowerAnswer.includes('случайно') || lowerAnswer.includes('arbitrary')) {
+    brokenElement = 'причинность';
+  } else if (lowerAnswer.includes('бессмыслен') || lowerAnswer.includes('бесцельно') || lowerAnswer.includes('meaningless')) {
+    brokenElement = 'смысл';
   }
 
   // Determine impact based on step number
   const impact = stepNumber <= 4
-    ? 'Critical - early chain break indicates fundamental structural issue'
-    : 'Moderate - late chain break may indicate minor redundancy';
+    ? 'Критическое — ранний обрыв цепочки указывает на фундаментальную структурную проблему'
+    : 'Умеренное — поздний обрыв цепочки может указывать на незначительную избыточность';
 
   return {
     brokenElement,
@@ -330,26 +332,26 @@ export function validateChainResult(result: WhatForChainResult): {
 
   // Check chain length
   if (result.chain.length === 0) {
-    issues.push('Empty chain - no analysis performed');
-    recommendations.push('Provide at least one answer to begin analysis');
+    issues.push('Пустая цепочка — анализ не выполнен');
+    recommendations.push('Предоставьте хотя бы один ответ для начала анализа');
   }
 
   // Check for valid terminal
   if (result.terminal === 'UNCLASSIFIED') {
-    issues.push('Unclassified terminal - analysis incomplete');
-    recommendations.push('Continue chain or review final answer for BREAK/DILEMMA indicators');
+    issues.push('Неклассифицированный терминал — анализ незавершён');
+    recommendations.push('Продолжите цепочку или проверьте последний ответ на индикаторы BREAK/DILEMMA');
   }
 
   // Check for critical BREAK
   if (result.terminal === 'BREAK' && result.terminalStep <= 4) {
-    issues.push(`Critical BREAK at step ${result.terminalStep}`);
-    recommendations.push('Bind element to world law or remove from narrative');
+    issues.push(`Критический BREAK на шаге ${result.terminalStep}`);
+    recommendations.push('Привяжите элемент к закону мира или удалите из нарратива');
   }
 
   // Check for excessive chain length without terminal
   if (result.chain.length >= MAX_CHAIN_LENGTH && result.terminal === 'UNCLASSIFIED') {
-    issues.push('Chain reached max length without terminal');
-    recommendations.push('Review final answer - may need restructuring');
+    issues.push('Цепочка достигла максимальной длины без терминала');
+    recommendations.push('Пересмотрите последний ответ — возможно, требуется реструктуризация');
   }
 
   return {
@@ -369,27 +371,27 @@ export function validateChainResult(result: WhatForChainResult): {
 export function formatChainResult(result: WhatForChainResult): string {
   const lines: string[] = [];
   
-  lines.push('## What-For Chain Analysis');
+  lines.push('## Анализ цепочки «А чтобы что?»');
   lines.push('');
 
-  lines.push('### Chain Steps:');
+  lines.push('### Шаги цепочки:');
   for (const step of result.chain) {
-    lines.push(`**Step ${step.stepNumber}:**`);
-    lines.push(`- Q: ${step.question}`);
-    lines.push(`- A: ${step.answer}`);
-    lines.push(`- Analysis: ${step.analysis}`);
+    lines.push(`**Шаг ${step.stepNumber}:**`);
+    lines.push(`- В: ${step.question}`);
+    lines.push(`- О: ${step.answer}`);
+    lines.push(`- Анализ: ${step.analysis}`);
     lines.push('');
   }
 
-  lines.push('### Terminal Classification:');
-  lines.push(`- Type: **${result.terminal}**`);
-  lines.push(`- Step: ${result.terminalStep}`);
-  lines.push(`- Valid: ${result.valid ? 'YES' : 'NO'}`);
-  lines.push(`- Reasoning: ${result.reasoning}`);
+  lines.push('### Классификация терминала:');
+  lines.push(`- Тип: **${result.terminal}**`);
+  lines.push(`- Шаг: ${result.terminalStep}`);
+  lines.push(`- Валидный: ${result.valid ? 'ДА' : 'НЕТ'}`);
+  lines.push(`- Обоснование: ${result.reasoning}`);
 
   if (result.action) {
     lines.push('');
-    lines.push(`### Action Required: ${result.action}`);
+    lines.push(`### Требуемое действие: ${result.action}`);
   }
 
   return lines.join('\n');
@@ -405,13 +407,13 @@ export function quickChainCheck(claim: string): {
   // Simple heuristics for estimating chain depth
   const lowerClaim = claim.toLowerCase();
   
-  // Claims with "because" may need fewer steps
-  if (lowerClaim.includes('because')) {
+  // Claims with "потому что" may need fewer steps
+  if (lowerClaim.includes('потому что') || lowerClaim.includes('because')) {
     return { needsAnalysis: true, estimatedDepth: 2 };
   }
 
-  // Claims with "why" or "what for" need deeper analysis
-  if (lowerClaim.includes('why') || lowerClaim.includes('what for')) {
+  // Claims with "почему" or "зачем" need deeper analysis
+  if (lowerClaim.includes('почему') || lowerClaim.includes('зачем') || lowerClaim.includes('why') || lowerClaim.includes('what for')) {
     return { needsAnalysis: true, estimatedDepth: 4 };
   }
 

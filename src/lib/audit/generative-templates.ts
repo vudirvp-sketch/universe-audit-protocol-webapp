@@ -52,30 +52,30 @@ const DEPRIVATION_TO_GRIEF_MAP: Record<string, {
   stage: string;
   reasoning: string;
 }> = {
-  // Loss-based deprivations
-  'death': { stage: 'denial', reasoning: 'Death triggers initial denial as the first response to loss' },
-  'loss': { stage: 'denial', reasoning: 'Loss typically initiates denial as the protective mechanism' },
-  'separation': { stage: 'denial', reasoning: 'Separation from attachment creates denial response' },
+  // Deprivations based on loss
+  'смерть': { stage: 'denial', reasoning: 'Смерть вызывает первоначальное отрицание как первую реакцию на потерю' },
+  'потеря': { stage: 'denial', reasoning: 'Потеря обычно инициирует отрицание как защитный механизм' },
+  'разлука': { stage: 'denial', reasoning: 'Разлука с привязанностью создаёт реакцию отрицания' },
   
-  // Injustice-based deprivations
-  'injustice': { stage: 'anger', reasoning: 'Injustice naturally triggers anger at the unfairness' },
-  'betrayal': { stage: 'anger', reasoning: 'Betrayal provokes anger at the breach of trust' },
-  'oppression': { stage: 'anger', reasoning: 'Oppression fuels anger at powerlessness' },
+  // Deprivations based on injustice
+  'несправедливость': { stage: 'anger', reasoning: 'Несправедливость естественным образом вызывает гнев' },
+  'предательство': { stage: 'anger', reasoning: 'Предательство вызывает гнев из-за нарушения доверия' },
+  'угнетение': { stage: 'anger', reasoning: 'Угнетение разжигает гнев от бессилия' },
   
-  // Control-based deprivations
-  'control_loss': { stage: 'bargaining', reasoning: 'Loss of control leads to attempts to regain it through bargaining' },
-  'uncertainty': { stage: 'bargaining', reasoning: 'Uncertainty triggers bargaining for certainty' },
-  'powerlessness': { stage: 'bargaining', reasoning: 'Powerlessness leads to bargaining for agency' },
+  // Deprivations based on loss of control
+  'потеря контроля': { stage: 'bargaining', reasoning: 'Потеря контроля приводит к попыткам вернуть его через торг' },
+  'неопределённость': { stage: 'bargaining', reasoning: 'Неопределённость побуждает к торгу за определённость' },
+  'бессилие': { stage: 'bargaining', reasoning: 'Бессилие приводит к торгу за дееспособность' },
   
-  // Meaning-based deprivations
-  'meaninglessness': { stage: 'depression', reasoning: 'Loss of meaning creates depressive response' },
-  'hopelessness': { stage: 'depression', reasoning: 'Hopelessness naturally leads to depression' },
-  'isolation': { stage: 'depression', reasoning: 'Isolation triggers depressive withdrawal' },
+  // Deprivations based on meaning loss
+  'бессмысленность': { stage: 'depression', reasoning: 'Потеря смысла создаёт депрессивную реакцию' },
+  'безнадёжность': { stage: 'depression', reasoning: 'Безнадёжность естественным образом ведёт к депрессии' },
+  'одиночество': { stage: 'depression', reasoning: 'Одиночество вызывает депрессивный уход' },
   
-  // Transformation-based deprivations
-  'transformation': { stage: 'acceptance', reasoning: 'Transformation implies movement toward acceptance' },
-  'growth': { stage: 'acceptance', reasoning: 'Growth suggests acceptance of change' },
-  'reconciliation': { stage: 'acceptance', reasoning: 'Reconciliation indicates acceptance' }
+  // Deprivations based on transformation
+  'преображение': { stage: 'acceptance', reasoning: 'Преображение подразумевает движение к принятию' },
+  'рост': { stage: 'acceptance', reasoning: 'Рост предполагает принятие изменений' },
+  'примирение': { stage: 'acceptance', reasoning: 'Примирение указывает на принятие' }
 };
 
 // ============================================================================
@@ -87,55 +87,55 @@ const THEME_TO_DILEMMA_MAP: Record<string, {
   value2: string;
   conflict: string;
 }> = {
-  'freedom': {
-    value1: 'Individual Freedom',
-    value2: 'Collective Safety',
-    conflict: 'Freedom vs Security'
+  'свобода': {
+    value1: 'Личная свобода',
+    value2: 'Коллективная безопасность',
+    conflict: 'Свобода против Безопасности'
   },
-  'love': {
-    value1: 'Personal Love',
-    value2: 'Duty/Responsibility',
-    conflict: 'Heart vs Obligation'
+  'любовь': {
+    value1: 'Личная любовь',
+    value2: 'Долг / Ответственность',
+    conflict: 'Сердце против Долга'
   },
-  'truth': {
-    value1: 'Honest Truth',
-    value2: 'Protective Lies',
-    conflict: 'Truth vs Compassion'
+  'истина': {
+    value1: 'Честная правда',
+    value2: 'Защитная ложь',
+    conflict: 'Истина против Сострадания'
   },
-  'power': {
-    value1: 'Power for Good',
-    value2: 'Power\'s Corruption',
-    conflict: 'Power vs Integrity'
+  'власть': {
+    value1: 'Власть во благо',
+    value2: 'Развращающая власть',
+    conflict: 'Власть против Честности'
   },
-  'identity': {
-    value1: 'Authentic Self',
-    value2: 'Social Expectations',
-    conflict: 'Self vs Society'
+  'идентичность': {
+    value1: 'Истинное «Я»',
+    value2: 'Социальные ожидания',
+    conflict: 'Личность против Общества'
   },
-  'justice': {
-    value1: 'Strict Justice',
-    value2: 'Mercy/Forgiveness',
-    conflict: 'Justice vs Compassion'
+  'справедливость': {
+    value1: 'Строгая справедливость',
+    value2: 'Милосердие / Прощение',
+    conflict: 'Справедливость против Милосердия'
   },
-  'loyalty': {
-    value1: 'Personal Loyalty',
-    value2: 'Moral Principles',
-    conflict: 'Loyalty vs Ethics'
+  'верность': {
+    value1: 'Личная верность',
+    value2: 'Моральные принципы',
+    conflict: 'Верность против Этики'
   },
-  'sacrifice': {
-    value1: 'Self-Sacrifice',
-    value2: 'Self-Preservation',
-    conflict: 'Noble Sacrifice vs Survival'
+  'жертва': {
+    value1: 'Самопожертвование',
+    value2: 'Самосохранение',
+    conflict: 'Благородная жертва против Выживания'
   },
-  'change': {
-    value1: 'Embracing Change',
-    value2: 'Preserving Tradition',
-    conflict: 'Progress vs Stability'
+  'перемены': {
+    value1: 'Принятие перемен',
+    value2: 'Сохранение традиций',
+    conflict: 'Прогресс против Стабильности'
   },
-  'belonging': {
-    value1: 'True Belonging',
-    value2: 'Fitting In',
-    conflict: 'Authenticity vs Acceptance'
+  'принадлежность': {
+    value1: 'Истинная принадлежность',
+    value2: 'Конформизм',
+    conflict: 'Аутентичность против Принятия'
   }
 };
 
@@ -154,7 +154,7 @@ export function deriveGriefFromLaw(input: LawToGriefInput): GeneratedOutput {
       success: true,
       generatedFields: { dominantStage: input.dominantStage },
       confidence: 1.0,
-      reasoning: 'Dominant stage already provided - no derivation needed'
+      reasoning: 'Доминантная стадия уже предоставлена — вывод не нужен'
     };
   }
 
@@ -198,29 +198,29 @@ function deriveFromLawCharacteristics(lawText: string): {
   reasoning: string;
 } {
   // Check for loss indicators
-  if (lawText.includes('loss') || lawText.includes('gone') || lawText.includes('without')) {
+  if (lawText.includes('потеря') || lawText.includes('утрат') || lawText.includes('без') || lawText.includes('loss') || lawText.includes('gone')) {
     return {
       stage: 'denial',
       confidence: 0.7,
-      reasoning: 'Law characteristics suggest loss-based denial as dominant'
+      reasoning: 'Характеристики закона указывают на отрицание на основе потери как доминантную стадию'
     };
   }
 
   // Check for conflict indicators
-  if (lawText.includes('conflict') || lawText.includes('against') || lawText.includes('oppose')) {
+  if (lawText.includes('конфликт') || lawText.includes('против') || lawText.includes('борьба') || lawText.includes('conflict') || lawText.includes('against')) {
     return {
       stage: 'anger',
       confidence: 0.7,
-      reasoning: 'Law characteristics suggest conflict-based anger as dominant'
+      reasoning: 'Характеристики закона указывают на гнев на основе конфликта как доминантную стадию'
     };
   }
 
   // Check for bargaining indicators
-  if (lawText.includes('exchange') || lawText.includes('trade') || lawText.includes('cost')) {
+  if (lawText.includes('обмен') || lawText.includes('плата') || lawText.includes('цена') || lawText.includes('exchange') || lawText.includes('cost')) {
     return {
       stage: 'bargaining',
       confidence: 0.7,
-      reasoning: 'Law characteristics suggest cost-based bargaining as dominant'
+      reasoning: 'Характеристики закона указывают на торг на основе платы как доминантную стадию'
     };
   }
 
@@ -228,7 +228,7 @@ function deriveFromLawCharacteristics(lawText: string): {
   return {
     stage: 'depression',
     confidence: 0.6,
-    reasoning: 'Default: Heavy thematic weight suggests depression as dominant'
+    reasoning: 'По умолчанию: тяжесть тематического закона указывает на депрессию как доминантную стадию'
   };
 }
 
@@ -247,7 +247,7 @@ export function deriveDilemmaFromTheme(input: ThemeToDilemmaInput): GeneratedOut
       success: true,
       generatedFields: { finalDilemma: input.finalDilemma },
       confidence: 1.0,
-      reasoning: 'Final dilemma already provided - no derivation needed'
+      reasoning: 'Итоговая дилемма уже предоставлена — вывод не нужен'
     };
   }
 
@@ -264,7 +264,7 @@ export function deriveDilemmaFromTheme(input: ThemeToDilemmaInput): GeneratedOut
           conflictingValues: [mapping.value1, mapping.value2]
         },
         confidence: 0.8,
-        reasoning: `Theme "${themeKey}" naturally creates conflict between ${mapping.value1} and ${mapping.value2}`
+        reasoning: `Тема «${themeKey}» естественным образом создаёт конфликт между ${mapping.value1} и ${mapping.value2}`
       };
     }
   }
@@ -280,7 +280,7 @@ function createDilemma(
   const value1 = input.protagonistValue || mapping.value1;
   const value2 = input.antagonistValue || mapping.value2;
   
-  return `Must choose between ${value1} and ${value2} - ${mapping.conflict}`;
+  return `Необходимо выбрать между ${value1} и ${value2} — ${mapping.conflict}`;
 }
 
 function deriveDefaultDilemma(
@@ -289,23 +289,23 @@ function deriveDefaultDilemma(
 ): GeneratedOutput {
   // Create generic dilemma based on theme
   const genericDilemma = input.protagonistValue && input.antagonistValue
-    ? `Must choose between ${input.protagonistValue} and ${input.antagonistValue}`
-    : 'Must choose between two conflicting values derived from theme';
+    ? `Необходимо выбрать между ${input.protagonistValue} и ${input.antagonistValue}`
+    : 'Необходимо выбрать между двумя конфликтующими ценностями, производными от темы';
 
   return {
     success: true,
     generatedFields: {
       finalDilemma: genericDilemma,
       conflictingValues: [
-        input.protagonistValue || 'Protagonist Value',
-        input.antagonistValue || 'Antagonist Value'
+        input.protagonistValue || 'Ценность протагониста',
+        input.antagonistValue || 'Ценность антагониста'
       ]
     },
     confidence: 0.5,
-    reasoning: 'Generic dilemma created from available theme information',
+    reasoning: 'Общая дилемма создана из доступной информации о теме',
     alternatives: [
-      { finalDilemma: 'Personal desire conflicts with greater good' },
-      { finalDilemma: 'Individual needs clash with collective responsibility' }
+      { finalDilemma: 'Личное желание конфликтует с общим благом' },
+      { finalDilemma: 'Индивидуальные потребности сталкиваются с коллективной ответственностью' }
     ]
   };
 }
