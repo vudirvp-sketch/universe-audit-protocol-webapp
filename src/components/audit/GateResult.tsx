@@ -367,13 +367,12 @@ export function GateResults() {
             </AlertDialogTitle>
             <AlertDialogDescription>
               {failures.length > 0 && (
-                <span
-                  dangerouslySetInnerHTML={{
-                    __html: t.gates.gateFailureDesc
-                      .replace('{level}', failures[0].level)
-                      .replace('{score}', String(failures[0].result.score)),
-                  }}
-                />
+                <span>
+                  {t.gates.gateFailureDesc
+                    .replace('{level}', failures[0].level)
+                    .replace('{score}', String(failures[0].result.score))
+                    .replace(/<[^>]*>/g, '')}
+                </span>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -21,12 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, Server } from 'lucide-react';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, Server, XCircle } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import {
   LLM_PROVIDERS,
   AVAILABLE_PROVIDERS,
   type LLMProvider,
+  createLLMClient,
 } from '@/lib/llm-client';
 import { t } from '@/lib/i18n/ru';
 
@@ -42,6 +43,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [inputProxyUrl, setInputProxyUrl] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
+  const [testConnection, setTestConnection] = React.useState<{ loading: boolean; success: boolean; error: string | null }>({
+    loading: false,
+    success: false,
+    error: null,
+  });
 
   // Load settings on mount
   React.useEffect(() => {
@@ -113,6 +119,35 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     clearSettings();
     onSettingsChange?.({ provider: 'zai', apiKey: null, model: null });
     setSaved(false);
+    setTestConnection({ loading: false, success: false, error: null });
+  };
+
+  const handleTestConnection = async () => {
+    const trimmedKey = inputKey.trim();
+    const trimmedProxy = inputProxyUrl.trim();
+    const trimmedModel = inputModel.trim() || currentProvider?.defaultModel || '';
+    if (!trimmedKey || !trimmedProxy) return;
+
+    setTestConnection({ loading: true, success: false, error: null });
+
+    try {
+      const client = createLLMClient({
+        provider,
+        apiKey: trimmedKey,
+        model: trimmedModel,
+        proxyUrl: trimmedProxy,
+      });
+      await client.chatCompletion({
+        messages: [
+          { role: 'user', content: 'Ответь одним словом: работает' },
+        ],
+        max_tokens: 10,
+      });
+      setTestConnection({ loading: false, success: true, error: null });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setTestConnection({ loading: false, success: false, error: msg });
+    }
   };
 
   const hasKey = !!apiKey;
@@ -240,8 +275,40 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             </p>
           </div>
 
+          {/* Test Connection Button — plan Section 3.6 */}
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={handleTestConnection}
+              disabled={!inputKey.trim() || !inputProxyUrl.trim() || testConnection.loading}
+            >
+              {testConnection.loading ? (
+                <>
+                  <span className="animate-spin mr-2">\u23F3</span>
+                  {t.settings.testing}
+                </>
+              ) : testConnection.success ? (
+                <>
+                  <Check className="h-4 w-4 mr-2 text-green-500" />
+                  {t.settings.testSuccess}
+                </>
+              ) : testConnection.error ? (
+                <>
+                  <XCircle className="h-4 w-4 mr-2 text-red-500" />
+                  {t.settings.testFailed}
+                </>
+              ) : (
+                t.settings.testConnection
+              )}
+            </Button>
+            {testConnection.error && (
+              <p className="text-xs text-red-500">{testConnection.error}</p>
+            )}
+          </div>
+
           {/* Status indicator */}
-          {hasKey && (
+          {hasKey && !testConnection.loading && (
             <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
               <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
               <AlertDescription className="text-green-700 dark:text-green-300 text-sm">

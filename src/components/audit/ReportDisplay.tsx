@@ -17,6 +17,8 @@ import {
   CheckCircle2,
   XCircle,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import rehypeSanitize from 'rehype-sanitize';
 import { t } from '@/lib/i18n/ru';
 import { Label } from '@/components/ui/label';
 

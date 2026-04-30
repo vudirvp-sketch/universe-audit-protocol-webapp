@@ -1,5 +1,6 @@
 // Universe Audit Protocol v10.0 - State Management
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { 
   AuditState, 
   AuditPhase,
@@ -50,7 +51,11 @@ const initialState = {
   error: null as string | null,
 };
 
-export const useAuditState = create<AuditState>((set, get) => ({
+const AUDIT_STATE_STORAGE_KEY = 'universe-audit-state';
+
+export const useAuditState = create<AuditState>()(
+  persist(
+    (set, get) => ({
   ...initialState,
 
   // Setters
@@ -122,7 +127,33 @@ export const useAuditState = create<AuditState>((set, get) => ({
       checklist: filterByMediaType([...MASTER_CHECKLIST], initialState.mediaType),
     });
   },
-}));
+}),
+    {
+      name: AUDIT_STATE_STORAGE_KEY,
+      // Only persist these fields — exclude isLoading and setter functions
+      partialize: (state) => ({
+        phase: state.phase,
+        inputText: state.inputText,
+        mediaType: state.mediaType,
+        auditMode: state.auditMode,
+        authorAnswers: state.authorAnswers,
+        authorProfile: state.authorProfile,
+        skeleton: state.skeleton,
+        screeningResult: state.screeningResult,
+        gateResults: state.gateResults,
+        checklist: state.checklist,
+        griefMatrix: state.griefMatrix,
+        report: state.report,
+        issues: state.issues,
+        whatForChains: state.whatForChains,
+        generativeOutput: state.generativeOutput,
+        nextActions: state.nextActions,
+        finalScore: state.finalScore,
+        error: state.error,
+      }),
+    }
+  )
+);
 
 // Selectors for derived state
 export const selectCurrentPhase = (state: AuditState) => state.phase;

@@ -238,6 +238,10 @@ export const t = {
     proxyUrl: 'URL Прокси',
     proxyUrlHint:
       'URL вашего Cloudflare Worker CORS-прокси. Развёртывается из директории worker/',
+    testConnection: 'Проверить подключение',
+    testing: 'Проверяем...',
+    testSuccess: 'Подключение успешно!',
+    testFailed: 'Ошибка подключения',
     apiKeyConfigured: 'API ключ {provider} настроен',
     howToGetKey: 'Как получить API ключ:',
     keySecurityNote:

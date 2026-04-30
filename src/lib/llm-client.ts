@@ -431,7 +431,6 @@ export function createLLMClient(config: LLMClientConfig) {
       return normalized;
 
     } catch (error) {
-      console.error(`${providerConfig.name} chat completion error:`, error);
       throw error;
     }
   }
