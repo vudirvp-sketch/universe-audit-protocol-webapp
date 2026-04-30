@@ -102,9 +102,9 @@ const CONFLICT_CONFIG: ModeExecutionConfig = {
   requireTenRepaintingTest: false,
   outputFormat: 'standard',
   specialInstructions: [
-    'All contradictions must be catalogued with source citations',
-    'Canonical weight determines resolution priority',
-    'Preserve intentional paradoxes when marked by author'
+    'Все противоречия должны быть каталогизированы с указанием источников',
+    'Канонический вес определяет приоритет разрешения',
+    'Сохранять намеренные парадоксы, отмеченные автором'
   ],
   gateOverrides: {}
 };
@@ -122,10 +122,10 @@ const KISHŌ_CONFIG: ModeExecutionConfig = {
   requireTenRepaintingTest: true,
   outputFormat: 'forked',
   specialInstructions: [
-    'MUST run Ten-repainting test before proceeding',
-    'Halt on unresolved inconsistency until author clarification',
-    'Output forked paths for ambiguous elements',
-    'Never assume author intent without explicit confirmation'
+    'ОБЯЗАТЕЛЬНО выполнить тест десяти переформулировок перед продолжением',
+    'Остановить при неразрешённой противоречивости до уточнения автором',
+    'Выводить разветвлённые пути для неоднозначных элементов',
+    'Никогда не предполагать намерения автора без явного подтверждения'
   ],
   gateOverrides: {
     'gate_2': true, // Additional validation at GATE-2
@@ -146,10 +146,10 @@ const HYBRID_CONFIG: ModeExecutionConfig = {
   requireTenRepaintingTest: true,
   outputFormat: 'reconciled',
   specialInstructions: [
-    'Apply CONFLICT logic to clear contradictions',
-    'Apply KISHŌ logic to ambiguous elements',
-    'Synthesis must preserve both resolution paths',
-    'Document mode switching at each section'
+    'Применять логику КОНФЛИКТА к явным противоречиям',
+    'Применять логику КИРЁ к неоднозначным элементам',
+    'Синтез должен сохранять оба пути разрешения',
+    'Документировать переключение режима в каждом разделе'
   ],
   gateOverrides: {
     'gate_3': true // Additional synthesis check
@@ -194,25 +194,25 @@ export function validateAuditMode(
   switch (mode) {
     case 'kishō':
       if (!input.hasAuthorAccess) {
-        warnings.push('KISHŌ mode optimal with author access for clarification');
+        warnings.push('Режим КИРЁ оптимален при наличии доступа к автору для уточнения');
       }
       if (!input.canRunRepaintingTest) {
-        requirements.push('KISHŌ mode requires Ten-repainting test capability');
+        requirements.push('Режим КИРЁ требует возможности выполнения теста десяти переформулировок');
       }
       break;
 
     case 'hybrid':
       if (!input.canRunRepaintingTest) {
-        requirements.push('HYBRID mode requires Ten-repainting test capability');
+        requirements.push('Режим ГИБРИД требует возможности выполнения теста десяти переформулировок');
       }
       if (!input.hasCanonicalSources) {
-        warnings.push('HYBRID mode may have limited conflict resolution without canonical sources');
+        warnings.push('Режим ГИБРИД может иметь ограниченное разрешение конфликтов без канонических источников');
       }
       break;
 
     case 'conflict':
       if (!input.hasCanonicalSources) {
-        warnings.push('CONFLICT mode may have reduced effectiveness without canonical sources');
+        warnings.push('Режим КОНФЛИКТ может иметь сниженную эффективность без канонических источников');
       }
       break;
   }
@@ -253,10 +253,12 @@ export function executeTenRepaintingTest(
   
   for (const repainting of repaintings) {
     // Simple heuristic: check for negation contradictions
-    const hasNegation = repainting.toLowerCase().includes('not ') ||
-                        repainting.toLowerCase().includes('never ');
-    const originalHasNegation = originalClaim.toLowerCase().includes('not ') ||
-                                 originalClaim.toLowerCase().includes('never ');
+    const hasNegation = repainting.toLowerCase().includes('не ') ||
+                        repainting.toLowerCase().includes('никогда') ||
+                        repainting.toLowerCase().includes('ни за что');
+    const originalHasNegation = originalClaim.toLowerCase().includes('не ') ||
+                                 originalClaim.toLowerCase().includes('никогда') ||
+                                 originalClaim.toLowerCase().includes('ни за что');
     
     if (hasNegation === originalHasNegation) {
       consistentCount++;
@@ -295,7 +297,7 @@ export function shouldTransitionMode(
     return {
       shouldTransition: true,
       newMode: 'hybrid',
-      reason: 'Found canonical contradiction in KISHŌ mode - switching to HYBRID'
+      reason: 'Обнаружено каноническое противоречие в режиме КИРЁ — переключение на ГИБРИД'
     };
   }
 
@@ -303,13 +305,13 @@ export function shouldTransitionMode(
     return {
       shouldTransition: true,
       newMode: 'hybrid',
-      reason: 'Found author uncertainty in CONFLICT mode - switching to HYBRID'
+      reason: 'Обнаружена авторская неопределённость в режиме КОНФЛИКТ — переключение на ГИБРИД'
     };
   }
 
   return {
     shouldTransition: false,
-    reason: 'No mode transition needed'
+    reason: 'Переход между режимами не требуется'
   };
 }
 

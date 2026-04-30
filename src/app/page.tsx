@@ -138,7 +138,9 @@ export default function Home() {
         setAuthorProfile(result.authorProfile);
       }
       if (result.skeleton) {
-        setSkeleton(result.skeleton);
+        // Orchestrator may return SkeletonExtractionResult from skeleton-extraction module
+        // or canonical Skeleton from types.ts. Both share compatible shape for UI display.
+        setSkeleton(result.skeleton as unknown as Skeleton);
       }
       if (result.screeningResult) {
         setScreeningResult(result.screeningResult);

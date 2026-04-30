@@ -10,6 +10,12 @@
 // TYPE DEFINITIONS
 // ============================================================================
 
+// Re-export canonical GateResult from types.ts — do NOT redefine here.
+// The canonical type has richer fields (metadata.breakdown, level, fixList, etc.)
+// that the UI and orchestrator depend on.
+export type { GateResult } from './types';
+import type { GateResult } from './types';
+
 export type GateStatus = 'pending' | 'running' | 'passed' | 'failed' | 'blocked' | 'skipped';
 
 export type GateLevel = 'L0' | 'L1' | 'L2' | 'L3';
@@ -21,21 +27,6 @@ export interface GateCondition {
   check: (input: unknown) => boolean;
   haltOnFailure: boolean;
   level: GateLevel;
-}
-
-export interface GateResult {
-  gateId: string;
-  gateName: string;
-  status: GateStatus;
-  score: number; // 0-100
-  conditions: {
-    id: string;
-    passed: boolean;
-    message: string;
-  }[];
-  halt: boolean; // true = STOP execution
-  fixes: string[];
-  metadata: Record<string, unknown>;
 }
 
 export interface GateSequence {
@@ -60,52 +51,52 @@ export interface BlockedStatus {
 const GATE_DEFINITIONS = {
   GATE_0: {
     id: 'GATE-0',
-    name: 'Input Validation',
+    name: 'Валидация ввода',
     level: 'L0' as GateLevel,
-    description: 'Validates basic input structure and required fields',
+    description: 'Проверяет базовую структуру ввода и обязательные поля',
     haltOnFailure: true
   },
   GATE_1: {
     id: 'GATE-1',
-    name: 'Skeleton Extraction',
+    name: 'Извлечение скелета',
     level: 'L0' as GateLevel,
-    description: 'Extracts and validates core narrative skeleton',
+    description: 'Извлекает и валидирует скелет нарратива',
     haltOnFailure: true
   },
   GATE_2: {
     id: 'GATE-2',
-    name: 'Thematic Law',
+    name: 'Тематический закон',
     level: 'L1' as GateLevel,
-    description: 'Validates thematic law affects world physics/economy',
+    description: 'Проверяет, что тематический закон влияет на физику/экономику мира',
     haltOnFailure: false
   },
   GATE_3: {
     id: 'GATE-3',
-    name: 'Root Trauma',
+    name: 'Корневая травма',
     level: 'L1' as GateLevel,
-    description: 'Validates root trauma as ideological foundation',
+    description: 'Проверяет корневую травму как идеологическую основу',
     haltOnFailure: false
   },
   GATE_4: {
     id: 'GATE-4',
-    name: 'Hamartia',
+    name: 'Хамартия',
     level: 'L1' as GateLevel,
-    description: 'Validates hamartia connects to ending',
+    description: 'Проверяет связь хамартии с финалом',
     haltOnFailure: false
   },
   GATE_5: {
     id: 'GATE-5',
-    name: 'Character Arcs',
+    name: 'Развитие персонажей',
     level: 'L2' as GateLevel,
-    description: 'Validates character development consistency',
+    description: 'Проверяет согласованность развития персонажей',
     haltOnFailure: false
   },
   GATE_6: {
     id: 'GATE-6',
-    name: 'Grief Architecture',
+    name: 'Архитектура горя',
     level: 'L3' as GateLevel,
-    description: 'Validates grief stage distribution',
-    haltOnFailure: true // HARD CHECK for L3
+    description: 'Проверяет распределение стадий горя',
+    haltOnFailure: true // HARD CHECK для L3
   }
 };
 
@@ -140,7 +131,7 @@ export function validatePrerequisites(
       return {
         canProceed: false,
         blockedBy: prevGateDef.id,
-        reason: `Gate ${prevGateDef.id} has not been executed`
+        reason: `Гейт ${prevGateDef.id} не был выполнен`
       };
     }
 
@@ -148,7 +139,7 @@ export function validatePrerequisites(
       return {
         canProceed: false,
         blockedBy: prevGateDef.id,
-        reason: `Gate ${prevGateDef.id} failed with halt condition`
+        reason: `Гейт ${prevGateDef.id} провален с условием остановки`
       };
     }
   }
@@ -172,13 +163,13 @@ export function executeGate(
   if (!gateDef) {
     return {
       gateId,
-      gateName: 'Unknown Gate',
+      gateName: 'Неизвестный гейт',
       status: 'failed',
       score: 0,
       conditions: [],
       halt: true,
-      fixes: ['Invalid gate ID'],
-      metadata: {}
+      fixes: ['Неверный идентификатор гейта'],
+      metadata: { level: 'L0' }
     };
   }
 
@@ -235,20 +226,20 @@ function generateFixes(
     }
   }
 
-  // Add gate-specific guidance
+  // Add gate-specific guidance — in Russian per Language Contract
   switch (gateDef.id) {
     case 'GATE-0':
-      fixes.push('Ensure all required input fields are provided and valid');
+      fixes.push('Убедитесь, что все обязательные поля ввода заполнены и корректны');
       break;
     case 'GATE-1':
-      fixes.push('Review skeleton extraction - core narrative elements must be identifiable');
+      fixes.push('Проверьте извлечение скелета — ключевые элементы нарратива должны быть определимы');
       break;
     case 'GATE-2':
-      fixes.push('thematic_law must affect world physics/economy, not only plot');
+      fixes.push('Тематический закон должен влиять на физику/экономику мира, а не только на сюжет');
       break;
     case 'GATE-6':
-      fixes.push('Grief Architecture validation failed - each stage must be on ≥2 levels');
-      fixes.push('Dominant stage must be present on all 4 levels');
+      fixes.push('Ошибка валидации архитектуры горя — каждая стадия должна быть на ≥2 уровнях');
+      fixes.push('Доминантная стадия должна присутствовать на всех 4 уровнях');
       break;
   }
 
@@ -314,7 +305,7 @@ export class GateExecutionController {
     // Check for halt condition
     if (result.halt) {
       this.halted = true;
-      this.haltReason = `Gate ${gateDef.id} failed with halt condition`;
+      this.haltReason = `Гейт ${gateDef.id} провален с условием остановки`;
     }
 
     return result;
@@ -424,7 +415,7 @@ export function createGateFailedOutput(
   }
 
   if (gateResult.halt) {
-    lines.push('**EXECUTION HALTED** - Fix issues above before proceeding');
+    lines.push('**ВЫПОЛНЕНИЕ ОСТАНОВЛЕНО** — Устраните проблемы выше перед продолжением');
   }
 
   return lines.join('\n');

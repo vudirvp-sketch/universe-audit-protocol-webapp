@@ -28,6 +28,7 @@ import type {
   GenerativeOutput,
   NextAction,
 } from './types';
+import type { SkeletonExtractionResult } from './skeleton-extraction';
 
 // ============================================================================
 // PUBLIC API
@@ -51,7 +52,7 @@ export interface PipelineProgress {
 export interface PipelineState {
   auditMode: AuditMode | null;
   authorProfile: AuthorProfile | null;
-  skeleton: Skeleton | null;
+  skeleton: Skeleton | SkeletonExtractionResult | null;
   screeningResult: ScreeningResult | null;
   gateResults: {
     L1: GateResult | null;

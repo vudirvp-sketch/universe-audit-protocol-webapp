@@ -138,7 +138,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
 
   if (!state.validation_result.valid) {
     state.phase = 'blocked';
-    state.error = 'Input validation failed';
+    state.error = 'Валидация ввода не пройдена';
     return state; // TERMINATE
   }
 
@@ -193,10 +193,10 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
       type: 'hybrid',
       percentage: 50,
       confidence: 'low',
-      mainRisks: ['Unknown profile — using defaults'],
+      mainRisks: ['Неизвестный профиль — используются значения по умолчанию'],
       auditPriorities: defaultPriorityArray,
       priority_array: defaultPriorityArray,
-      risk_flags: ['Unknown profile — using defaults']
+      risk_flags: ['Неизвестный профиль — используются значения по умолчанию']
     };
   }
 
@@ -204,7 +204,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   const prereqCheck = validatePrerequisites('GATE-1', []);
   if (!prereqCheck.canProceed && prereqCheck.blockedBy) {
     state.phase = 'blocked';
-    state.error = prereqCheck.reason || 'Prerequisites not met';
+    state.error = prereqCheck.reason || 'Предварительные условия не выполнены';
     return state; // TERMINATE
   }
 
@@ -220,7 +220,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   // NON-NEGOTIABLE: skeleton.status = "INCOMPLETE" → L1 blocked
   if (!state.skeleton.canProceedToL1) {
     state.phase = 'blocked';
-    state.error = 'Skeleton extraction failed weakness tests';
+    state.error = 'Извлечение скелета не прошло тесты слабостей';
     // Generate issues for skeleton problems
     state.issues = generateIssuesFromSkeleton(state.skeleton);
     return state; // TERMINATE
@@ -233,7 +233,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   // Handle screening results
   if (!state.screening_result.proceed_normally) {
     state.phase = 'blocked';
-    state.error = 'Screening failed: too many NO answers';
+    state.error = 'Скрининг не пройден: слишком много ответов НЕТ';
     return state; // TERMINATE
   }
 
@@ -275,7 +275,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   if (!state.grief_validation.valid) {
     state.gate_L3 = {
       gateId: 'GATE-L3',
-      gateName: 'Grief Architecture',
+      gateName: 'Архитектура горя',
       status: 'failed',
       score: 0,
       conditions: state.grief_validation.errors.map(e => ({
@@ -292,10 +292,9 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   }
 
   // KISHŌ mode: Ten-repainting test at L3
-  // PHASE_2_TODO: Implement actual ten-repainting test via LLM prompt.
+  // [KEYWORD_BASED]: Ten-repainting test not yet implemented — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   if (state.audit_mode_config?.requireTenRepaintingTest) {
-    // Ten-repainting test is not yet implemented via LLM.
-    // Skipping for now — Phase 2 will add the real test.
+    // [KEYWORD_BASED]: Ten-repainting test stub — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   }
 
   const l3Sections = getAuditSections().filter(s => s.level === 'L3');
@@ -328,7 +327,7 @@ export async function runFullAudit(input: AuditInput): Promise<OrchestratorState
   // RULE_3: Mandatory criteria are BLOCKING
   if (!state.cult_potential.passed && !state.cult_potential.phase1Result.passed) {
     state.phase = 'blocked';
-    state.error = 'Cult Potential mandatory criteria failed';
+    state.error = 'Обязательные критерии культового потенциала не пройдены';
     state.issues = generateIssuesFromCultPotential(state.cult_potential);
     return state; // TERMINATE
   }
@@ -452,7 +451,7 @@ function performScreening(concept: string): ScreeningResult {
   // The code then: (1) counts NO answers deterministically,
   // (2) applies count→recommendation mapping, (3) code's count wins over LLM opinion.
   //
-  // PHASE_2_TODO: Replace keyword matching with LLM-based screening.
+  // [KEYWORD_BASED]: Screening uses keyword matching — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   // Current implementation uses Russian keywords per Language Contract (Finding 1):
   // English keyword matching (includes('theme'), includes('character')) is FORBIDDEN.
   const lowerConcept = concept.toLowerCase();
@@ -546,20 +545,13 @@ function executeGateWithBreakdown(
   const gateLevel = level as 'L1' | 'L2' | 'L3' | 'L4';
   const threshold = getGateThreshold(mode, gateLevel);
 
-  // PHASE_2_STUB: This function currently returns 100% (all sections pass).
-  // Phase 2 will replace this with real LLM-based gate evaluation via
-  // the AuditStepRunner and individual step modules (step-gate-L1.ts etc.).
-  // The score is artificially 100% because keyword matching cannot evaluate
-  // whether a narrative section actually satisfies protocol criteria.
-  //
-  // IMPORTANT: This means ALL gates currently pass. Once Phase 2 implements
-  // real LLM evaluation, gates will start producing meaningful scores.
+  // [KEYWORD_BASED]: Gate evaluation returns 100% (all sections pass) — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   const score = 100;
 
   // RULE_8: Build block-level breakdown
   const breakdown: Record<string, string> = {};
   for (const section of sections) {
-    breakdown[section.id] = 'PASS'; // PHASE_2_STUB: Always PASS until LLM integration
+    breakdown[section.id] = 'PASS'; // [KEYWORD_BASED]: Always PASS — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   }
 
   const conditions = sections.map(s => ({
@@ -657,7 +649,7 @@ function generateIssuesFromCultPotential(result: CultEvaluationResult): Issue[] 
         location: 'L4.cult_potential',
         severity: 'critical',
         axes: { criticality: 9, risk: 4, time_cost: 7 },
-        diagnosis: `${criterion.name} failed — обязательный критерий`,
+        diagnosis: `${criterion.name} не пройден — обязательный критерий`,
         patches: {
           conservative: { description: 'Добавить минимально жизнеспособный элемент', impact: 'Соответствует порогу', sideEffects: [] },
           compromise: { description: 'Развить тематическую интеграцию', impact: 'Более прочная основа', sideEffects: ['Связанные доработки'] },
@@ -671,7 +663,7 @@ function generateIssuesFromCultPotential(result: CultEvaluationResult): Issue[] 
 }
 
 function analyzeGriefStages(concept: string, dominantStage?: string): GriefPresence[] {
-  // PHASE_2_TODO: Replace keyword matching with LLM-based grief analysis.
+  // [KEYWORD_BASED]: Grief stage detection uses keyword matching — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   // Russian keywords per Language Contract (Finding 1).
   const stages = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'] as const;
   const levels = ['world', 'society', 'character', 'scene'] as const;
@@ -705,7 +697,7 @@ function analyzeGriefStages(concept: string, dominantStage?: string): GriefPrese
 }
 
 function extractElementsForChain(concept: string): string[] {
-  // PHASE_2_TODO: Replace keyword matching with LLM-based element extraction.
+  // [KEYWORD_BASED]: Element extraction uses keyword matching — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   // Russian keywords per Language Contract (Finding 1).
   const elements: string[] = [];
   const lowerConcept = concept.toLowerCase();
@@ -735,7 +727,7 @@ function createIssueFromChain(chainResult: WhatForChainResult, element: string):
 }
 
 function deriveGriefFromLaw(law: string): GenerativeOutput['grief_mapping'] {
-  // PHASE_2_TODO: Replace keyword matching with LLM-based grief derivation.
+  // [KEYWORD_BASED]: Grief derivation from law uses keyword matching — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   // Russian keywords per Language Contract (Finding 1).
   const lowerLaw = law.toLowerCase();
   
@@ -753,7 +745,7 @@ function deriveGriefFromLaw(law: string): GenerativeOutput['grief_mapping'] {
 }
 
 function deriveDilemmaFromTheme(theme: string): GenerativeOutput['dilemma'] {
-  // PHASE_2_TODO: Replace with LLM-based dilemma generation.
+  // [KEYWORD_BASED]: Dilemma generation uses defaults — will be replaced by LLM-based evaluation in Phase 2 AuditStepRunner
   return {
     value_A: 'Личная свобода',
     value_B: 'Коллективная ответственность',

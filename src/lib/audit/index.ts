@@ -20,7 +20,8 @@ export * from './skeleton-extraction';
 export * from './what-for-chain';
 
 // TIER 2 — Protocol Fidelity
-export * from './new-element-validation';
+// NOTE: new-element-validation.ts deleted — types FiveChecksResult and FiveTouchesResult
+// are in types.ts; the module was unused by pipeline and had conflicting type definitions.
 export * from './media-transformation';
 export * from './generative-templates';
 

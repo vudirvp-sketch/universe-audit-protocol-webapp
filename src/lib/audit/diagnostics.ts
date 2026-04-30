@@ -107,7 +107,7 @@ export function createGateBreakdown(
 
   if (anyCriticalFailed) {
     status = 'blocked';
-    haltReason = 'Critical block failure - halt required';
+    haltReason = 'Критический сбой блока — требуется остановка';
   } else if (!allPassed) {
     status = 'failed';
   } else {
@@ -131,11 +131,11 @@ export function formatGateBreakdown(breakdown: GateBreakdown): string {
   const lines: string[] = [];
   
   lines.push(`## ${breakdown.gateName} (${breakdown.gateId})`);
-  lines.push(`**Status:** ${breakdown.status.toUpperCase()}`);
-  lines.push(`**Total Score:** ${breakdown.totalScore.toFixed(1)}%`);
+  lines.push(`**Статус:** ${breakdown.status.toUpperCase()}`);
+  lines.push(`**Общий балл:** ${breakdown.totalScore.toFixed(1)}%`);
   lines.push('');
 
-  lines.push('### Block Breakdown:');
+  lines.push('### Детализация по блокам:');
   for (const block of breakdown.blocks) {
     const icon = block.passed ? '✓' : '✗';
     lines.push(`- ${icon} **${block.blockName}**: ${block.score.toFixed(1)}%`);
@@ -144,7 +144,7 @@ export function formatGateBreakdown(breakdown: GateBreakdown): string {
 
   if (breakdown.haltReason) {
     lines.push('');
-    lines.push(`⚠️ **HALT:** ${breakdown.haltReason}`);
+    lines.push(`⚠️ **ОСТАНОВКА:** ${breakdown.haltReason}`);
   }
 
   return lines.join('\n');
@@ -180,19 +180,19 @@ export function validateComparativeEntry(entry: ComparativeEntry): {
   const issues: string[] = [];
 
   if (!entry.strength || entry.strength.trim() === '') {
-    issues.push('Missing strength - must have exactly one strength per reference');
+    issues.push('Отсутствует достоинство — для каждого произведения должно быть указано ровно одно достоинство');
   }
 
   if (!entry.weakness || entry.weakness.trim() === '') {
-    issues.push('Missing weakness - must have exactly one weakness per reference');
+    issues.push('Отсутствует недостаток — для каждого произведения должен быть указан ровно один недостаток');
   }
 
   if (entry.strength && entry.strength.length > 500) {
-    issues.push('Strength too long - keep it concise');
+    issues.push('Достоинство слишком длинное — будьте кратки');
   }
 
   if (entry.weakness && entry.weakness.length > 500) {
-    issues.push('Weakness too long - keep it concise');
+    issues.push('Недостаток слишком длинный — будьте кратки');
   }
 
   return {
@@ -237,39 +237,39 @@ export function getReferencesForTheme(theme: string): ReferenceWork[] {
 const SELF_AUDIT_QUESTIONS: SelfAuditQuestion[] = [
   {
     id: 'sa_1',
-    question: 'Am I being unduly influenced by a single strong element?',
+    question: 'Не нахожусь ли я под чрезмерным влиянием одного яркого элемента?',
     category: 'bias',
-    guidance: 'Check if overall assessment is skewed by one exceptional aspect'
+    guidance: 'Проверьте, не искажена ли общая оценка одним выдающимся аспектом'
   },
   {
     id: 'sa_2',
-    question: 'Have I applied the same standards consistently across all sections?',
+    question: 'Применяю ли я одни и те же стандарты последовательно ко всем разделам?',
     category: 'consistency',
-    guidance: 'Verify consistent application of evaluation criteria'
+    guidance: 'Удостоверьтесь в последовательном применении критериев оценки'
   },
   {
     id: 'sa_3',
-    question: 'Is there a deeper issue I might be missing behind surface problems?',
+    question: 'Есть ли более глубокая проблема, которую я могу упускать за поверхностными симптомами?',
     category: 'depth',
-    guidance: 'Look for root causes rather than symptoms'
+    guidance: 'Ищите корневые причины, а не симптомы'
   },
   {
     id: 'sa_4',
-    question: 'Have I made any assumptions that should be verified?',
+    question: 'Есть ли у меня допущения, которые следует проверить?',
     category: 'assumption',
-    guidance: 'Identify and challenge implicit assumptions in the analysis'
+    guidance: 'Выявите и подвергните сомнению неявные допущения в анализе'
   },
   {
     id: 'sa_5',
-    question: 'Would a different interpreter reach the same conclusions?',
+    question: 'Пришёл бы другой интерпретатор к тем же выводам?',
     category: 'consistency',
-    guidance: 'Check for subjective bias in interpretations'
+    guidance: 'Проверьте наличие субъективной предвзятости в интерпретациях'
   },
   {
     id: 'sa_6',
-    question: 'Am I giving adequate weight to genre and medium expectations?',
+    question: 'Уделяю ли я достаточное внимание ожиданиям жанра и средства?',
     category: 'bias',
-    guidance: 'Ensure context-appropriate evaluation'
+    guidance: 'Обеспечьте оценку, соответствующую контексту'
   }
 ];
 
@@ -286,8 +286,8 @@ export function initializeSelfAudit(interactive: boolean = false): {
   instruction: string;
 } {
   const instruction = interactive
-    ? 'Self-audit initiated. Please respond to each question before proceeding.'
-    : 'Self-audit questions generated. Review and address any issues.';
+    ? 'Самоаудит инициирован. Пожалуйста, ответьте на каждый вопрос перед продолжением.'
+    : 'Вопросы самоаудита сгенерированы. Просмотрите и устраните выявленные проблемы.';
 
   return {
     interactive,
@@ -309,11 +309,11 @@ export function processSelfAuditResponse(
     const response = responses[question.id];
     
     if (!response || response.trim() === '') {
-      issues.push(`Missing response for: ${question.question}`);
-    } else if (response.toLowerCase().includes('yes') && 
+      issues.push(`Отсутствует ответ на: ${question.question}`);
+    } else if ((response.toLowerCase().includes('да') || response.toLowerCase().includes('yes')) && 
                question.category === 'bias') {
       // Flag potential bias acknowledgments
-      issues.push(`Review needed: ${question.question} - acknowledged potential issue`);
+      issues.push(`Требуется проверка: ${question.question} — признана потенциальная проблема`);
     }
   }
 
@@ -336,52 +336,52 @@ const LIMITATION_TRIGGERS: Record<LimitationType, {
   approach: string;
 }> = {
   unreliable_narrator_handling: {
-    triggers: ['unreliable', 'deceptive narrator', 'lies', 'deceives reader', 'false memory'],
-    description: 'Protocol may not correctly identify unreliable narration',
-    impact: 'Analysis may take narrative claims at face value when they should be questioned',
-    approach: 'Flag potential unreliability and recommend manual review of narrator credibility'
+    triggers: ['ненадёжный', 'обманывающий рассказчик', 'лживый', 'обманывает читателя', 'ложное воспоминание', 'unreliable', 'deceptive narrator'],
+    description: 'Протокол может не корректно распознать ненадёжное повествование',
+    impact: 'Анализ может принимать утверждения повествования за чистую монету, хотя их следует подвергать сомнению',
+    approach: 'Отметить потенциальную ненадёжность и рекомендовать ручную проверку достоверности рассказчика'
   },
   humor_as_defense_mechanism: {
-    triggers: ['comedy', 'humor', 'joke', 'satire', 'parody', 'absurd'],
-    description: 'Humor can mask underlying issues that protocol may not detect',
-    impact: 'Serious structural issues may be hidden beneath comedic presentation',
-    approach: 'Apply deeper structural analysis regardless of comedic surface'
+    triggers: ['комедия', 'юмор', 'шутка', 'сатира', 'пародия', 'абсурд', 'comedy', 'humor', 'satire'],
+    description: 'Юмор может скрывать лежащие в основе проблемы, которые протокол не обнаружит',
+    impact: 'Серьёзные структурные проблемы могут быть скрыты под комедийной формой подачи',
+    approach: 'Применять более глубокий структурный анализ независимо от комедийной поверхности'
   },
   failure_as_canon_endings: {
-    triggers: ['bad ending', 'failure', 'tragic ending', 'downer ending', 'protagonist fails'],
-    description: 'Protocol may flag legitimate failure endings as structural problems',
-    impact: 'Intentional tragic endings may be misidentified as failed narratives',
-    approach: 'Distinguish between failed narrative and intentional failure ending'
+    triggers: ['плохая концовка', 'провал', 'трагический финал', 'грустный финал', 'протагонист терпит неудачу', 'bad ending', 'tragic ending', 'downer ending'],
+    description: 'Протокол может отметить правомерные финалы с неудачей как структурные проблемы',
+    impact: 'Намеренные трагические концовки могут быть ошибочно определены как несостоятельные повествования',
+    approach: 'Различать несостоятельное повествование и намеренный финал с неудачей'
   },
   non_linear_timeline: {
-    triggers: ['non-linear', 'flashback', 'flashforward', 'time jump', 'out of order', 'anachronic'],
-    description: 'Non-linear structure requires special handling',
-    impact: 'Causal chain analysis may be disrupted by timeline manipulation',
-    approach: 'Reconstruct linear timeline for analysis, then map back to structure'
+    triggers: ['нелинейный', 'флешбэк', 'флешфорвард', 'скачок во времени', 'не по порядку', 'анахронический', 'non-linear', 'flashback', 'time jump'],
+    description: 'Нелинейная структура требует особой обработки',
+    impact: 'Анализ причинно-следственной цепочки может быть нарушен манипуляциями с хронологией',
+    approach: 'Восстановить линейную хронологию для анализа, затем отобразить обратно на структуру'
   },
   multiple_perspective_narratives: {
-    triggers: ['multiple pov', 'different perspectives', 'several narrators', 'multiple viewpoints'],
-    description: 'Multiple POVs create complexity in consistency analysis',
-    impact: 'Inconsistencies between perspectives may be flagged incorrectly',
-    approach: 'Track each perspective separately before synthesizing'
+    triggers: ['несколько точек зрения', 'разные перспективы', 'несколько рассказчиков', 'множество ракурсов', 'multiple pov', 'different perspectives'],
+    description: 'Множественные точки зрения создают сложность в анализе согласованности',
+    impact: 'Несоответствия между перспективами могут быть отмечены ошибочно',
+    approach: 'Отслеживать каждую перспективу отдельно перед синтезом'
   },
   meta_fictional_elements: {
-    triggers: ['meta', 'breaking fourth wall', 'self-aware', 'metafiction', 'references itself'],
-    description: 'Meta-fictional elements challenge standard analysis',
-    impact: 'Intentional breaks may be flagged as inconsistencies',
-    approach: 'Identify meta-elements and apply modified analysis framework'
+    triggers: ['мета', 'разрушение четвёртой стены', 'самоосознание', 'метафункция', 'отсылка на самого себя', 'meta', 'breaking fourth wall', 'self-aware', 'metafiction'],
+    description: 'Метафикциональные элементы бросают вызов стандартному анализу',
+    impact: 'Намеренные разрывы могут быть отмечены как несогласованности',
+    approach: 'Выявить метаэлементы и применить модифицированную рамку анализа'
   },
   experimental_structure: {
-    triggers: ['experimental', 'avant-garde', 'unconventional', 'non-traditional', 'abstract'],
-    description: 'Experimental works may not fit standard structural expectations',
-    impact: 'Valid experimental choices may be flagged as problems',
-    approach: 'Apply genre-appropriate experimental analysis framework'
+    triggers: ['экспериментальный', 'авангард', 'нетрадиционный', 'нестандартный', 'абстрактный', 'experimental', 'avant-garde', 'unconventional'],
+    description: 'Экспериментальные произведения могут не соответствовать стандартным структурным ожиданиям',
+    impact: 'Правомерные экспериментальные решения могут быть отмечены как проблемы',
+    approach: 'Применить жанрово-соответствующую рамку экспериментального анализа'
   },
   audience_participation: {
-    triggers: ['interactive', 'audience choice', 'voting', 'collaborative', 'participatory'],
-    description: 'Audience participation creates variable narrative outcomes',
-    impact: 'Analysis may not cover all possible narrative paths',
-    approach: 'Analyze core structure plus variation mechanics'
+    triggers: ['интерактивный', 'выбор зрителей', 'голосование', 'коллаборативный', 'участие аудитории', 'interactive', 'audience choice', 'voting', 'participatory'],
+    description: 'Участие аудитории создаёт вариативные повествовательные исходы',
+    impact: 'Анализ может не охватить все возможные повествовательные пути',
+    approach: 'Анализировать базовую структуру плюс механизмы вариативности'
   }
 };
 
@@ -451,31 +451,31 @@ export function formatDiagnosticsReport(data: {
 }): string {
   const lines: string[] = [];
 
-  lines.push('# Audit Diagnostics Report');
+  lines.push('# Отчёт по диагностике аудита');
   lines.push('');
 
   // Gate Breakdowns
-  lines.push('## Gate Breakdowns');
+  lines.push('## Разбивка по шлюзам');
   for (const breakdown of data.gateBreakdowns) {
     lines.push(formatGateBreakdown(breakdown));
     lines.push('');
   }
 
   // Comparative Analysis
-  lines.push('## Comparative Analysis');
+  lines.push('## Сравнительный анализ');
   for (const entry of data.comparativeEntries) {
     lines.push(`### ${entry.referenceName}`);
-    lines.push(`- **Strength:** ${entry.strength}`);
-    lines.push(`- **Weakness:** ${entry.weakness}`);
+    lines.push(`- **Достоинство:** ${entry.strength}`);
+    lines.push(`- **Недостаток:** ${entry.weakness}`);
     lines.push('');
   }
 
   // Self-Audit
   if (data.selfAuditResult) {
-    lines.push('## Self-Audit Results');
-    lines.push(`**Status:** ${data.selfAuditResult.passed ? 'PASSED' : 'ISSUES FOUND'}`);
+    lines.push('## Результаты самоаудита');
+    lines.push(`**Статус:** ${data.selfAuditResult.passed ? 'ПРОЙДЕНО' : 'ОБНАРУЖЕНЫ ПРОБЛЕМЫ'}`);
     if (data.selfAuditResult.issues.length > 0) {
-      lines.push('### Issues:');
+      lines.push('### Проблемы:');
       for (const issue of data.selfAuditResult.issues) {
         lines.push(`- ${issue}`);
       }
@@ -484,13 +484,13 @@ export function formatDiagnosticsReport(data: {
   }
 
   // Limitations
-  lines.push('## Protocol Limitations');
+  lines.push('## Ограничения протокола');
   for (const limitation of data.limitations) {
     if (limitation.detected) {
       lines.push(`### ${limitation.type}`);
-      lines.push(`- **Description:** ${limitation.description}`);
-      lines.push(`- **Impact:** ${limitation.impactAssessment}`);
-      lines.push(`- **Recommended Approach:** ${limitation.recommendedApproach}`);
+      lines.push(`- **Описание:** ${limitation.description}`);
+      lines.push(`- **Влияние:** ${limitation.impactAssessment}`);
+      lines.push(`- **Рекомендуемый подход:** ${limitation.recommendedApproach}`);
       lines.push('');
     }
   }
@@ -577,21 +577,21 @@ export function generateDiagnostics(state: unknown): DiagnosticResult {
   let protocolHealth: DiagnosticResult['protocolHealth'];
   if (criticalIssues > 0 || gatesPassed < 2) {
     protocolHealth = 'critical';
-    recommendations.push('Address critical issues before proceeding');
+    recommendations.push('Устраните критические проблемы перед продолжением');
   } else if (gatesPassed < 4 || issuesFound > 5) {
     protocolHealth = 'degraded';
-    recommendations.push('Review flagged issues for quality improvements');
+    recommendations.push('Просмотрите отмеченные проблемы для повышения качества');
   } else {
     protocolHealth = 'healthy';
-    recommendations.push('Audit complete - narrative shows strong structure');
+    recommendations.push('Аудит завершён — произведение демонстрирует сильную структуру');
   }
   
   // Add generic recommendations
   if (issuesFound > 0) {
-    recommendations.push(`Review ${issuesFound} identified issues`);
+    recommendations.push(`Просмотрите ${issuesFound} выявленных проблем`);
   }
   if (criticalIssues > 0) {
-    recommendations.push(`Prioritize ${criticalIssues} critical issues`);
+    recommendations.push(`Приоритет: ${criticalIssues} критических проблем`);
   }
   
   return {
