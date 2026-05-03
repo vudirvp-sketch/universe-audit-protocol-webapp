@@ -431,6 +431,7 @@ export interface AuditState {
   generativeOutput: GenerativeOutput | null;
   nextActions: NextAction[];
   finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null;
+  narrativeDigest: string | null;
   isLoading: boolean;
   error: string | null;
   // Timing & resume fields
@@ -459,6 +460,7 @@ export interface AuditState {
   setGenerativeOutput: (output: GenerativeOutput | null) => void;
   setNextActions: (actions: NextAction[]) => void;
   setFinalScore: (score: { total: string; percentage: number; by_level: Record<string, number> } | null) => void;
+  setNarrativeDigest: (digest: string | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setBlockedAt: (blockedAt: string | null) => void;

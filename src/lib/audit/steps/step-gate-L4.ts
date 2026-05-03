@@ -57,10 +57,13 @@ export const stepGateL4: AuditStep<GateL4Output> = {
 
   buildPrompt: (state: PipelineRunState): ChatMessage[] => {
     const l3Score = state.gateResults.L3?.score ?? 0;
+    const narrativeText = state.narrativeDigest || state.inputText;
+    const useDigest = !!state.narrativeDigest;
     const userPrompt = getL4EvaluationPrompt(
-      state.inputText,
+      narrativeText,
       state.skeleton!,
       l3Score,
+      useDigest,
     );
     return [
       {
@@ -236,7 +239,7 @@ export const stepGateL4: AuditStep<GateL4Output> = {
     };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
   maxTokens: 16384,
 };

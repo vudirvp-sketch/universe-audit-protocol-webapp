@@ -23,7 +23,7 @@ export const stepGenerative: AuditStep<GenerativeOutput> = {
   id: 'generative_modules',
 
   buildPrompt: (state: PipelineRunState): ChatMessage[] => {
-    const safeNarrative = wrapUserInput(sanitizeNarrative(state.inputText));
+    const safeNarrative = wrapUserInput(sanitizeNarrative(state.narrativeDigest || state.inputText));
     const skeletonContext = state.skeleton ? JSON.stringify(state.skeleton, null, 2) : '';
     const dominantStage = state.griefMatrix?.dominantStage;
 
@@ -142,7 +142,7 @@ ${dominantStage ? `Доминантная стадия горя уже опре�
     };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
   maxTokens: 8192,
 };

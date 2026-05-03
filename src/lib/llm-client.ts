@@ -59,7 +59,7 @@ export interface ChatCompletionOptions {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
-  /** Maximum number of 429 rate-limit retries before giving up. Default: 3 */
+  /** @deprecated No longer used — client-side retry removed to avoid cascade with proxy retries. */
   maxRateLimitRetries?: number;
   /** AbortSignal to cancel the request (e.g. for timeout). Passed to fetch(). */
   signal?: AbortSignal;
@@ -86,6 +86,124 @@ export interface ChatCompletionResponse {
     total_tokens: number;
   };
 }
+
+// ============================================================================
+// MODEL CAPABILITIES
+// ============================================================================
+
+export interface ModelCapabilities {
+  /** Max total tokens (prompt + response) */
+  contextWindow: number;
+  /** Max tokens the model can generate in a single response */
+  maxOutputTokens: number;
+  /** Whether response_format: json_object works */
+  supportsJSONMode: boolean;
+  /** Whether system role messages are supported */
+  supportsSystemMessages: boolean;
+}
+
+/** Conservative defaults for unknown models */
+const DEFAULT_CAPABILITIES: ModelCapabilities = {
+  contextWindow: 32000,
+  maxOutputTokens: 4096,
+  supportsJSONMode: false,
+  supportsSystemMessages: true,
+};
+
+/**
+ * Known model capabilities indexed by "provider/model" key.
+ * The key format is `${provider}/${model}` to avoid ambiguity across providers.
+ */
+const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
+  // Google Gemini
+  'google/gemini-2.0-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.5-flash':       { contextWindow: 1_000_000, maxOutputTokens: 65536, supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-1.5-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+
+  // OpenAI
+  'openai/gpt-4o-mini':            { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4.1-mini':           { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
+
+  // Anthropic Claude — use prefill trick for JSON (no native json_object mode)
+  'anthropic/claude-sonnet-4-20250514': { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-3-5-sonnet':        { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-3-haiku':           { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+
+  // Groq
+  'groq/llama-3.3-70b-versatile':  { contextWindow: 128_000,   maxOutputTokens: 32768, supportsJSONMode: false, supportsSystemMessages: true },
+
+  // DeepSeek
+  'deepseek/deepseek-chat':        { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+
+  // Mistral
+  'mistral/mistral-large-latest':   { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+};
+
+/**
+ * Get the capabilities for a given provider + model combination.
+ * For unknown models, returns conservative defaults.
+ */
+export function getModelCapabilities(provider: LLMProvider, model: string): ModelCapabilities {
+  // Try exact match first
+  const key = `${provider}/${model}`;
+  if (KNOWN_MODEL_CAPABILITIES[key]) {
+    return KNOWN_MODEL_CAPABILITIES[key];
+  }
+
+  // For Anthropic, all claude-* models share the same capability profile
+  if (provider === 'anthropic' && model.startsWith('claude')) {
+    return {
+      contextWindow: 200_000,
+      maxOutputTokens: 8192,
+      supportsJSONMode: false,
+      supportsSystemMessages: true,
+    };
+  }
+
+  // No match — return conservative defaults
+  return { ...DEFAULT_CAPABILITIES };
+}
+
+/**
+ * Clamp a requested maxOutputTokens value to the model's actual maximum.
+ * Returns the effective value that should be sent to the API.
+ */
+export function resolveMaxOutputTokens(
+  provider: LLMProvider,
+  model: string,
+  requestedTokens: number | undefined
+): number {
+  const caps = getModelCapabilities(provider, model);
+  if (requestedTokens === undefined || requestedTokens <= 0) {
+    return caps.maxOutputTokens;
+  }
+  return Math.min(requestedTokens, caps.maxOutputTokens);
+}
+
+// ============================================================================
+// PREFERRED MODELS per provider
+// ============================================================================
+
+/**
+ * Recommended models per provider — known-good names with reliable availability.
+ * Useful for UI "recommended" badges or default selections.
+ */
+export const PREFERRED_MODELS: Record<LLMProvider, string[]> = {
+  zai:         ['default'],
+  openai:      ['gpt-4.1-mini', 'gpt-4o-mini'],
+  anthropic:   ['claude-sonnet-4-20250514', 'claude-3-5-sonnet', 'claude-3-haiku'],
+  google:      ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+  mistral:     ['mistral-large-latest'],
+  deepseek:    ['deepseek-chat'],
+  qwen:        ['qwen-turbo'],
+  kimi:        ['moonshot-v1-8k'],
+  groq:        ['llama-3.3-70b-versatile'],
+  openrouter:  ['anthropic/claude-sonnet-4'],
+  huggingface: ['meta-llama/Llama-3.2-3B-Instruct'],
+  together:    ['meta-llama/Llama-3.2-3B-Instruct-Turbo'],
+  xai:         ['grok-3-mini-fast'],
+  custom:      [],
+};
 
 // ============================================================================
 // PROVIDER URL MAPPING
@@ -243,6 +361,9 @@ function buildProviderRequestBody(
   options: ChatCompletionOptions,
   effectiveModel: string
 ): string {
+  // Resolve maxOutputTokens clamped to model capabilities
+  const effectiveMaxTokens = resolveMaxOutputTokens(provider, effectiveModel, options.max_tokens);
+
   switch (provider) {
     case 'anthropic': {
       // Anthropic Messages API format
@@ -253,9 +374,13 @@ function buildProviderRequestBody(
           role: m.role === 'assistant' ? 'assistant' : 'user',
           content: m.content,
         }));
+
+      // Anthropic doesn't support response_format: json_object.
+      // When JSON output is needed, the caller should use a prefill trick
+      // (append an assistant message with "{") at a higher layer.
       return JSON.stringify({
         model: effectiveModel,
-        max_tokens: options.max_tokens || 8192,
+        max_tokens: effectiveMaxTokens,
         messages: nonSystemMessages,
         system: systemMessage?.content,
       });
@@ -264,6 +389,18 @@ function buildProviderRequestBody(
     case 'google': {
       // Google Gemini API format
       const systemContent = options.messages.find(m => m.role === 'system')?.content;
+      const caps = getModelCapabilities(provider, effectiveModel);
+
+      const generationConfig: Record<string, unknown> = {
+        temperature: options.temperature ?? 0.7,
+        maxOutputTokens: effectiveMaxTokens,
+      };
+
+      // Only set responseMimeType to application/json if the model supports JSON mode
+      if (caps.supportsJSONMode) {
+        generationConfig.responseMimeType = 'application/json';
+      }
+
       return JSON.stringify({
         contents: options.messages
           .filter(m => m.role !== 'system')
@@ -274,11 +411,7 @@ function buildProviderRequestBody(
         ...(systemContent
           ? { systemInstruction: { parts: [{ text: systemContent }] } }
           : {}),
-        generationConfig: {
-          temperature: options.temperature ?? 0.7,
-          maxOutputTokens: options.max_tokens || 8192,
-          responseMimeType: 'application/json',
-        },
+        generationConfig,
       });
     }
 
@@ -288,7 +421,7 @@ function buildProviderRequestBody(
         inputs: options.messages.map(m => `${m.role}: ${m.content}`).join('\n'),
         parameters: {
           temperature: options.temperature ?? 0.7,
-          max_new_tokens: options.max_tokens || 2048,
+          max_new_tokens: effectiveMaxTokens,
           return_full_text: false,
         },
       });
@@ -296,14 +429,21 @@ function buildProviderRequestBody(
 
     default: {
       // OpenAI-compatible format (openai, deepseek, groq, openrouter, mistral, zai, etc.)
-      return JSON.stringify({
+      const caps = getModelCapabilities(provider, effectiveModel);
+      const body: Record<string, unknown> = {
         model: effectiveModel,
         messages: options.messages,
         temperature: options.temperature ?? 0.7,
-        max_tokens: options.max_tokens,
+        max_tokens: effectiveMaxTokens,
         stream: false,
-        response_format: { type: 'json_object' },
-      });
+      };
+
+      // Only add response_format: json_object if the model supports it
+      if (caps.supportsJSONMode) {
+        body.response_format = { type: 'json_object' };
+      }
+
+      return JSON.stringify(body);
     }
   }
 }
@@ -390,17 +530,26 @@ function normalizeProviderResponse(
 /**
  * Creates an LLM API client that routes requests through the CORS proxy.
  * All requests go through the proxy — no direct browser-to-provider calls.
+ *
+ * IMPORTANT: This client does NOT retry on 429/503/502 errors.
+ * The Cloudflare Worker proxy already handles transport-level retries (up to 2).
+ * Adding client-side retries on top would cause an exponential cascade:
+ *   client_retry × proxy_retry = 3 × 2 = 6 total attempts per logical call,
+ *   and with audit-step.ts doing its own logical retries, this could reach
+ *   3 × 2 × 3 = 18 API calls for a single failed step.
+ * Instead, we throw immediately on transport errors and let the higher layer
+ * (audit-step.ts) decide whether to retry for logical reasons (invalid JSON, etc.).
  */
 export function createLLMClient(config: LLMClientConfig) {
   const providerConfig = LLM_PROVIDERS[config.provider];
   const model = config.model || providerConfig.defaultModel;
 
   /**
-   * Make a chat completion request via the CORS proxy
+   * Make a chat completion request via the CORS proxy.
+   * No client-side retry loop — the proxy handles transport-level retries.
    */
   async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse> {
     const effectiveModel = options.model || model;
-    const max429Retries = options.maxRateLimitRetries ?? 3;
 
     // Determine target URL
     let targetUrl: string;
@@ -440,110 +589,54 @@ export function createLLMClient(config: LLMClientConfig) {
       fetchHeaders['X-No-Retry'] = 'true';
     }
 
-    // 429 Rate Limit + 5xx transient error auto-retry with exponential backoff
-    // The Worker proxy already retries 429s and 503s server-side,
-    // so client retries here are a second line of defense.
-    let lastError: Error | null = null;
-    for (let retryAttempt = 0; retryAttempt <= max429Retries; retryAttempt++) {
-      const response = await fetch(proxyUrl, {
-        method: 'POST',
-        headers: fetchHeaders,
-        body: JSON.stringify(proxyRequest),
-        signal: options.signal, // AbortSignal — enables real timeout cancellation
-      });
+    // ── Single request attempt ──────────────────────────────────────────
+    // The proxy already retries 429/503 server-side. We do NOT retry here
+    // to avoid the exponential cascade (client_retry × proxy_retry).
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: fetchHeaders,
+      body: JSON.stringify(proxyRequest),
+      signal: options.signal, // AbortSignal — enables real timeout cancellation
+    });
 
-      // Handle 429 Rate Limit with auto-retry and countdown
-      if (response.status === 429) {
-        // Check if the proxy already retried (X-Proxy-Retried header)
-        const proxyRetries = response.headers.get('X-Proxy-Retried');
-        const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
-
-        const retryAfterHeader = response.headers.get('retry-after');
-        let waitSeconds: number;
-
-        if (retryAfterHeader) {
-          // retry-after can be seconds or an HTTP date
-          const parsed = parseInt(retryAfterHeader, 10);
-          if (!isNaN(parsed) && parsed > 0) {
-            waitSeconds = parsed;
-          } else {
-            const retryDate = new Date(retryAfterHeader).getTime();
-            waitSeconds = Math.max(1, Math.ceil((retryDate - Date.now()) / 1000));
-          }
-        } else {
-          // Exponential backoff: 10s, 30s, 60s — longer waits than before
-          // because the proxy already did short retries
-          waitSeconds = 10 * Math.pow(3, retryAttempt);
-        }
-
-        // Cap at 90 seconds to avoid excessively long waits
-        waitSeconds = Math.min(waitSeconds, 90);
-
-        if (retryAttempt < max429Retries) {
-          console.warn(
-            `[429 Rate Limit] Retry ${retryAttempt + 1}/${max429Retries}${proxyRetryInfo} — waiting ${waitSeconds}s before retry...`
-          );
-          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-          continue;
-        }
-
-        // Final 429 after all retries — throw with clear Russian message
-        lastError = new Error(
-          `Превышен лимит запросов к провайдеру «${providerConfig.name}»${proxyRetryInfo}. ` +
-          `Все попытки повтора исчерпаны (${max429Retries}). ` +
-          `Рекомендации:
-` +
-          `1. Подождите 1-2 минуты и попробуйте снова
-` +
-          `2. Уменьшите RPM-лимит в Настройках (например, до 3)
-` +
-          `3. Смените провайдера на того, у кого выше лимиты (Google Gemini, Groq)
-` +
-          `4. Используйте платный API-ключ для более высоких лимитов`
-        );
-        throw lastError;
-      }
-
-      // Handle 503/502 transient server errors with auto-retry
-      // These are typically temporary — model overloaded, upstream timeout, etc.
-      if (response.status === 503 || response.status === 502) {
-        const proxyRetries = response.headers.get('X-Proxy-Retried');
-        const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
-
-        // Exponential backoff: 15s, 30s, 60s — 503 usually needs longer waits
-        const waitSeconds = Math.min(15 * Math.pow(2, retryAttempt), 90);
-
-        if (retryAttempt < max429Retries) {
-          const statusLabel = response.status === 503 ? 'Сервер перегружен (503)' : 'Шлюз недоступен (502)';
-          console.warn(
-            `[${statusLabel}] Retry ${retryAttempt + 1}/${max429Retries}${proxyRetryInfo} — waiting ${waitSeconds}s before retry...`
-          );
-          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-          continue;
-        }
-
-        // Final 503/502 after all retries
-        const errorBody = await response.text().catch(() => '');
-        lastError = new Error(
-          `Провайдер «${providerConfig.name}» временно недоступен (${response.status})${proxyRetryInfo}. ` +
-          `Модель перегружена — попробуйте позже или смените модель/провайдера. ` +
-          (errorBody ? `Детали: ${errorBody}` : '')
-        );
-        throw lastError;
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${errorText}`);
-      }
-
-      // Successful response — parse and normalize
-      const responseData = await response.json();
-      return normalizeProviderResponse(config.provider, responseData);
+    // ── 429 Rate Limit ──────────────────────────────────────────────────
+    // Proxy already retried — throw immediately with actionable advice.
+    if (response.status === 429) {
+      const proxyRetries = response.headers.get('X-Proxy-Retried');
+      const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
+      throw new Error(
+        `Превышен лимит запросов к провайдеру «${providerConfig.name}»${proxyRetryInfo}. ` +
+        `Прокси уже делал повторы. Рекомендации:\n` +
+        `1. Подождите 1-2 минуты и попробуйте снова\n` +
+        `2. Уменьшите RPM-лимит в Настройках (например, до 3)\n` +
+        `3. Смените провайдера на того, у кого выше лимиты (Google Gemini, Groq)\n` +
+        `4. Используйте платный API-ключ для более высоких лимитов`
+      );
     }
 
-    // Should not reach here, but just in case
-    throw lastError || new Error('Неожиданная ошибка при обработке запроса к LLM.');
+    // ── 503 / 502 Server Errors ─────────────────────────────────────────
+    // Proxy already retried — throw immediately.
+    if (response.status === 503 || response.status === 502) {
+      const proxyRetries = response.headers.get('X-Proxy-Retried');
+      const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
+      const errorBody = await response.text().catch(() => '');
+      const statusLabel = response.status === 503 ? 'Сервер перегружен (503)' : 'Шлюз недоступен (502)';
+      throw new Error(
+        `Провайдер «${providerConfig.name}» временно недоступен — ${statusLabel}${proxyRetryInfo}. ` +
+        `Прокси уже делал повторы. Попробуйте позже или смените модель/провайдера.` +
+        (errorBody ? ` Детали: ${errorBody}` : '')
+      );
+    }
+
+    // ── Other non-OK responses ──────────────────────────────────────────
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${errorText}`);
+    }
+
+    // ── Success — parse and normalize ───────────────────────────────────
+    const responseData = await response.json();
+    return normalizeProviderResponse(config.provider, responseData);
   }
 
   return {

@@ -50,7 +50,7 @@ export const stepIssuesChains: AuditStep<IssuesChainsOutput> = {
   id: 'issue_generation',
 
   buildPrompt: (state: PipelineRunState): ChatMessage[] => {
-    const safeNarrative = wrapUserInput(sanitizeNarrative(state.inputText));
+    const safeNarrative = wrapUserInput(sanitizeNarrative(state.narrativeDigest || state.inputText));
     const skeletonContext = state.skeleton ? JSON.stringify(state.skeleton, null, 2) : 'Скелет не извлечён';
     const gateContext = JSON.stringify({
       L1: state.gateResults.L1?.score,
@@ -226,7 +226,7 @@ ${gateContext}
     };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
   maxTokens: 16384,
 };

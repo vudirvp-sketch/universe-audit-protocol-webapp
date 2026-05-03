@@ -13,6 +13,7 @@ import { wrapUserInput, sanitizeNarrative } from './input-sanitizer';
 /**
  * Universal JSON format enforcement — appended to every LLM prompt.
  * Works across all providers and models to maximize structured output reliability.
+ * v2: expanded with 10 rules covering markdown, evidence length, and truncation safety.
  */
 const JSON_FORMAT_ENFORCEMENT =
   '\n\nКРИТИЧЕСКИЕ ПРАВИЛА ФОРМАТА: ' +
@@ -22,7 +23,21 @@ const JSON_FORMAT_ENFORCEMENT =
   '4. Используй null (не None) для отсутствующих значений. ' +
   '5. Используй true/false (не True/False) для булевых значений. ' +
   '6. Без trailing commas перед } или ]. ' +
-  '7. Все ключи объектов в двойных кавычках.';
+  '7. Все ключи объектов в двойных кавычках. ' +
+  '8. НЕ пиши пояснений за пределами JSON — весь анализ ВНУТРИ значений JSON. ' +
+  '9. Поле evidence — краткая цитата (максимум 30 слов), не полный абзац. ' +
+  '10. Если ответ не помещается — сокращай evidence, а не обрезай JSON.';
+
+/**
+ * Compressed instruction for retry scenarios where the previous LLM response
+ * was too long, truncated, or produced invalid JSON. Instructs the model
+ * to produce the minimal viable JSON structure.
+ */
+export const COMPRESSED_JSON_INSTRUCTION =
+  'СРОЧНО: Твой предыдущий ответ был слишком длинным или невалидным. ' +
+  'Ответь МИНИМАЛЬНЫМ JSON: evidence — максимум 10 слов, functionalRole — 5 слов, ' +
+  'fixList — максимум 2 элемента. Сокращай описания до минимума. ' +
+  'Структура JSON обязательна, но значения должны быть максимально краткими.';
 
 // ============================================================================
 // SYSTEM PROMPTS (Russian)
@@ -237,16 +252,21 @@ ${safeNarrative}
 
 /**
  * Prompt for L1 (Mechanism) evaluation — Russian per Language Contract
+ * @param useDigest — when true, adds a note that the narrative is provided
+ *   in compressed digest form (fragments marked with [...])
  */
 export function getL1EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
   mediaType: MediaType,
   checklist: string,
+  useDigest?: boolean,
 ): string {
   const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
-  return `Оцени уровень L1 (Механизм) для данного ${mediaType}:
-
+  const digestNote = useDigest
+    ? '\n\nВНИМАНИЕ: Нарратив предоставлен в сжатой форме (отмечено [...]). Оценивай на основе доступных фрагментов и скелета. Для недоступных фрагментов используй INSUFFICIENT_DATA.\n'
+    : '';
+  return `Оцени уровень L1 (Механизм) для данного ${mediaType}:${digestNote}
 СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
@@ -258,8 +278,8 @@ ${checklist}
 
 Для каждого применимого пункта чеклиста оцени:
 - Status: PASS / FAIL / INSUFFICIENT_DATA
-- Evidence: Прямая цитата из нарратива (если доступна)
-- Functional Role: Как это функционально служит критерию
+- Evidence: Краткая цитата из нарратива (максимум 30 слов, если доступна)
+- Functional Role: Как это функционально служит критерию (1-2 предложения)
 
 КРИТИЧЕСКИЕ ПРАВИЛА:
 1. НЕ включай пункты INSUFFICIENT_DATA в расчёт пройдено/провалено
@@ -278,8 +298,8 @@ ${checklist}
     {
       "id": "item_id",
       "status": "PASS" | "FAIL" | "INSUFFICIENT_DATA",
-      "evidence": "прямая цитата или null",
-      "functionalRole": "объяснение на русском или null"
+      "evidence": "краткая цитата до 30 слов или null",
+      "functionalRole": "объяснение на русском (1-2 предложения) или null"
     }
   ],
   "score": число,
@@ -297,19 +317,26 @@ ${checklist}
 }
 
 // ============================================================================
+// STEP 6: GATE L2 EVALUATION PROMPT
+// ============================================================================
 
 /**
  * Prompt for L2 (Body) evaluation — Russian per Language Contract
+ * @param useDigest — when true, adds a note that the narrative is provided
+ *   in compressed digest form (fragments marked with [...])
  */
 export function getL2EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
   l1Score: number,
   checklist: string,
+  useDigest?: boolean,
 ): string {
   const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
-  return `Оцени уровень L2 (Тело) — только если L1 пройден (балл: ${l1Score}%):
-
+  const digestNote = useDigest
+    ? '\n\nВНИМАНИЕ: Нарратив предоставлен в сжатой форме (отмечено [...]). Оценивай на основе доступных фрагментов и скелета. Для недоступных фрагментов используй INSUFFICIENT_DATA.\n'
+    : '';
+  return `Оцени уровень L2 (Тело) — только если L1 пройден (балл: ${l1Score}%):${digestNote}
 СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
@@ -327,8 +354,8 @@ L2 фокусируется на:
 
 Для каждого применимого пункта оцени с доказательствами:
 - Status: PASS / FAIL / INSUFFICIENT_DATA
-- Evidence: Прямая цитата из нарратива
-- Functional Role: Как это функционально служит критерию
+- Evidence: Краткая цитата из нарратива (максимум 30 слов)
+- Functional Role: Как это функционально служит критерию (1-2 предложения)
 
 Верни ответ в формате JSON с той же структурой, что и L1.` + JSON_FORMAT_ENFORCEMENT;
 }
@@ -339,16 +366,21 @@ L2 фокусируется на:
 
 /**
  * Prompt for L3 (Psyche) evaluation — Russian per Language Contract
+ * @param useDigest — when true, adds a note that the narrative is provided
+ *   in compressed digest form (fragments marked with [...])
  */
 export function getL3EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
   l2Score: number,
   griefMatrixContext: string,
+  useDigest?: boolean,
 ): string {
   const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
-  return `Оцени уровень L3 (Психика) — только если L2 пройден (балл: ${l2Score}%):
-
+  const digestNote = useDigest
+    ? '\n\nВНИМАНИЕ: Нарратив предоставлен в сжатой форме (отмечено [...]). Оценивай на основе доступных фрагментов и скелета. Для недоступных фрагментов используй INSUFFICIENT_DATA.\n'
+    : '';
+  return `Оцени уровень L3 (Психика) — только если L2 пройден (балл: ${l2Score}%):${digestNote}
 СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 
@@ -381,7 +413,7 @@ L3 фокусируется на:
         "stage": "имя_стадии",
         "level": "character" | "location" | "mechanic" | "act",
         "character": "кто/что воплощает это на русском",
-        "evidence": "прямая цитата на русском",
+        "evidence": "краткая цитата до 30 слов на русском",
         "confidence": "high" | "medium" | "low" | "absent"
       }
     ]
@@ -398,15 +430,20 @@ L3 фокусируется на:
 /**
  * Prompt for L4 (Meta) evaluation — Russian per Language Contract
  * Cult potential is merged into L4 per Section 0.8
+ * @param useDigest — when true, adds a note that the narrative is provided
+ *   in compressed digest form (fragments marked with [...])
  */
 export function getL4EvaluationPrompt(
   narrative: string,
   skeleton: Skeleton,
   l3Score: number,
+  useDigest?: boolean,
 ): string {
   const safeNarrative = wrapUserInput(sanitizeNarrative(narrative));
-  return `Оцени уровень L4 (Мета) — только если L3 пройден (балл: ${l3Score}%):
-
+  const digestNote = useDigest
+    ? '\n\nВНИМАНИЕ: Нарратив предоставлен в сжатой форме (отмечено [...]). Оценивай на основе доступных фрагментов и скелета. Для недоступных фрагментов используй INSUFFICIENT_DATA.\n'
+    : '';
+  return `Оцени уровень L4 (Мета) — только если L3 пройден (балл: ${l3Score}%):${digestNote}
 СКЕЛЕТ:
 ${JSON.stringify(skeleton, null, 2)}
 

@@ -45,11 +45,14 @@ export const stepGateL2: AuditStep<GateL2Output> = {
   buildPrompt: (state: PipelineRunState): ChatMessage[] => {
     const checklistText = buildL2Checklist(state.auditMode);
     const l1Score = state.gateResults.L1?.score ?? 0;
+    const narrativeText = state.narrativeDigest || state.inputText;
+    const useDigest = !!state.narrativeDigest;
     const userPrompt = getL2EvaluationPrompt(
-      state.inputText,
+      narrativeText,
       state.skeleton!,
       l1Score,
       checklistText,
+      useDigest,
     );
     return [
       {
@@ -154,7 +157,7 @@ export const stepGateL2: AuditStep<GateL2Output> = {
     return { ...state, gateResults: { ...state.gateResults, L2: gateResult } };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
   maxTokens: 16384,
 };

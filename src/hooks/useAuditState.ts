@@ -47,6 +47,7 @@ const initialState = {
   generativeOutput: null as GenerativeOutput | null,
   nextActions: [] as NextAction[],
   finalScore: null as { total: string; percentage: number; by_level: Record<string, number> } | null,
+  narrativeDigest: null as string | null,
   isLoading: false,
   error: null as string | null,
   // Timing & resume fields
@@ -121,6 +122,8 @@ export const useAuditState = create<AuditState>()(
   
   setFinalScore: (finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null) => set({ finalScore }),
   
+  setNarrativeDigest: (narrativeDigest: string | null) => set({ narrativeDigest }),
+  
   setLoading: (isLoading: boolean) => set({ isLoading }),
   
   setError: (error: string | null) => set({ error }),
@@ -167,6 +170,7 @@ export const useAuditState = create<AuditState>()(
         generativeOutput: state.generativeOutput,
         nextActions: state.nextActions,
         finalScore: state.finalScore,
+        narrativeDigest: state.narrativeDigest,
         error: state.error,
         blockedAt: state.blockedAt,
         elapsedMs: state.elapsedMs,

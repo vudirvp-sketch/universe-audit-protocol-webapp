@@ -11,15 +11,15 @@ const PROVIDER_RPM_DEFAULTS: Record<string, number> = {
   zai: 3,       // Free tier is very limited — 3 RPM is realistic
   openai: 60,
   anthropic: 60,
-  google: 15,
+  google: 10,      // Free tier is often 10-15 RPM
   mistral: 30,
   deepseek: 30,
   qwen: 30,
   kimi: 30,
-  groq: 30,
-  openrouter: 60,
-  huggingface: 10,
-  together: 30,
+  groq: 20,        // Free tier has burst limits
+  openrouter: 30,  // Free models have lower limits
+  huggingface: 5,  // Often overloaded
+  together: 15,
   xai: 30,
   custom: 10,
 };

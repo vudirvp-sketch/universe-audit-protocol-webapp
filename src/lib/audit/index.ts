@@ -46,3 +46,4 @@ export * from './pipeline';
 export * from './json-sanitizer';
 export * from './input-sanitizer';
 export * from './error-handler';
+export * from './narrative-processor';

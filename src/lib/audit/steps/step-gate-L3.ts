@@ -54,11 +54,14 @@ export const stepGateL3: AuditStep<GateL3Output> = {
     const griefContext = state.griefMatrix
       ? JSON.stringify(state.griefMatrix, null, 2)
       : 'Архитектура горя ещё не проанализирована — проанализируй впервые';
+    const narrativeText = state.narrativeDigest || state.inputText;
+    const useDigest = !!state.narrativeDigest;
     const userPrompt = getL3EvaluationPrompt(
-      state.inputText,
+      narrativeText,
       state.skeleton!,
       l2Score,
       griefContext,
+      useDigest,
     );
     return [
       {
@@ -243,7 +246,7 @@ export const stepGateL3: AuditStep<GateL3Output> = {
     };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
   maxTokens: 16384,
 };

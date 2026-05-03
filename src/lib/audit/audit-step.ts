@@ -8,6 +8,23 @@
  * Steps 0 (input validation) and 11 (diagnostics) set skipLLM=true to bypass
  * the LLM call entirely — they are pure computation.
  *
+ * RETRY STRATEGY (v2 — "rebuild prompt" instead of "append correction"):
+ *
+ *   When an LLM returns invalid JSON or fails validation, we NO LONGER append
+ *   the failed response + a correction message to the conversation. Instead, we
+ *   rebuild the prompt from scratch with increasingly strict JSON enforcement.
+ *   This keeps the prompt size stable across retries, preventing:
+ *     - Token truncation from ever-growing prompts
+ *     - Rate limit pressure from bloated context
+ *     - Confusing context for the LLM (failed responses in history)
+ *
+ *   After 2 failed attempts, we switch to "compressed output" mode, which
+ *   explicitly instructs the LLM to produce minimal/condensed JSON — useful
+ *   for models with small output token limits.
+ *
+ *   When finish_reason is 'length' (truncated output), we rebuild with
+ *   explicit token budget instructions instead of appending a correction.
+ *
  * References: COMPLETION_PLAN Section 2.3 (AuditStep), Section 2.4 (runStep)
  */
 
@@ -61,6 +78,7 @@ export interface PipelineRunState {
   generativeOutput: GenerativeOutput | null;
   nextActions: NextAction[];
   finalScore: { total: string; percentage: number; by_level: Record<string, number> } | null;
+  narrativeDigest: string | null;
   error: string | null;
   blockedAt: string | null;
   elapsedMs: number;
@@ -98,6 +116,15 @@ export interface StepValidationResult {
 }
 
 // ---------------------------------------------------------------------------
+// ModelCapabilities — optional info about the LLM's limits
+// ---------------------------------------------------------------------------
+
+export interface ModelCapabilities {
+  /** Maximum output tokens the model can produce in a single completion */
+  maxOutputTokens?: number;
+}
+
+// ---------------------------------------------------------------------------
 // AuditStep<TOutput> — declarative configuration for one pipeline step
 // ---------------------------------------------------------------------------
 
@@ -120,7 +147,12 @@ export interface AuditStep<TOutput = unknown> {
   /** How this step mutates the audit state */
   reduce: (state: PipelineRunState, output: TOutput) => PipelineRunState;
 
-  /** Maximum retries on parse/validation failure */
+  /**
+   * Maximum retries on parse/validation failure.
+   * The total number of attempts is maxRetries + 1 (initial + retries).
+   * Gate steps (L1–L4) should use maxRetries: 4 (total 5 attempts) for
+   * resilience; other steps typically use 3 (total 4 attempts).
+   */
   maxRetries: number;
 
   /** If true, runStep skips the LLM call entirely (Steps 0 and 11) */
@@ -155,19 +187,146 @@ export class AuditStepError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Correction message for retry — in Russian per language contract
+// rebuildWithCorrection — fresh prompt with validation error info
+//
+// Instead of appending the failed response + correction to the existing
+// conversation (which bloats token count), we rebuild from scratch with a
+// user message that includes the validation errors and STRONGER JSON format
+// requirements. The prompt stays the same size as the original.
 // ---------------------------------------------------------------------------
 
-function buildCorrectionMessage(errors: string[]): string {
-  return (
-    'Ваш предыдущий ответ был невалидным: ' +
-    errors.join('; ') +
-    '. Пожалуйста, ответьте СТРОГО валидным JSON согласно запрошенной схеме. ' +
-    'КРИТИЧЕСКИЕ ПРАВИЛА: (1) Никакого текста до или после JSON. (2) Никаких markdown-блоков. ' +
-    '(3) Все строковые значения в двойных кавычках. (4) null вместо None. ' +
-    '(5) true/false вместо True/False. (6) Без trailing commas перед } или ]. ' +
-    '(7) Все ключи в двойных кавычках.'
-  );
+function rebuildWithCorrection<TOutput>(
+  step: AuditStep<TOutput>,
+  state: PipelineRunState,
+  errors: string[],
+): ChatMessage[] {
+  const baseMessages = step.buildPrompt(state);
+
+  const correctionSuffix =
+    '\n\n' +
+    '⚠️ КРИТИЧЕСКОЕ ТРЕБОВАНИЕ: Ваш предыдущий ответ не прошёл валидацию.\n' +
+    'Ошибки: ' + errors.join('; ') + '\n\n' +
+    'ПРАВИЛА ФОРМАТИРОВАНИЯ JSON (СТРОГО):\n' +
+    '(1) Весь ответ — ТОЛЬКО валидный JSON. Никакого текста до или после.\n' +
+    '(2) Никаких markdown-блоков (```json ... ```).\n' +
+    '(3) Все строковые значения в двойных кавычках.\n' +
+    '(4) null вместо None. true/false вместо True/False.\n' +
+    '(5) Без trailing commas перед } или ].\n' +
+    '(6) Все ключи в двойных кавычках.\n' +
+    '(7) Экранируйте кавычки внутри строк: \\\" вместо \".\n' +
+    '(8) Не добавляйте комментарии внутри JSON.\n' +
+    'Повторите ответ, строго соблюдая эти правила.';
+
+  // Append correction to the last user message (or add a new one)
+  const lastIdx = baseMessages.length - 1;
+  if (lastIdx >= 0 && baseMessages[lastIdx].role === 'user') {
+    return [
+      ...baseMessages.slice(0, lastIdx),
+      { role: 'user' as const, content: baseMessages[lastIdx].content + correctionSuffix },
+    ];
+  }
+
+  return [
+    ...baseMessages,
+    { role: 'user' as const, content: correctionSuffix.trim() },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// rebuildWithCompressedPrompt — fresh prompt requesting minimal/condensed JSON
+//
+// After multiple failures, we switch to "compressed output" mode. This tells
+// the LLM to use minimal JSON — short evidence, no verbose descriptions —
+// which helps models with small output token limits succeed.
+// ---------------------------------------------------------------------------
+
+function rebuildWithCompressedPrompt<TOutput>(
+  step: AuditStep<TOutput>,
+  state: PipelineRunState,
+  attempt: number,
+): ChatMessage[] {
+  const baseMessages = step.buildPrompt(state);
+
+  const compressedSuffix =
+    '\n\n' +
+    '⚠️ СРОЧНО: Ваши предыдущие ответы не прошли валидацию (попытка ' + (attempt + 1) + ').\n\n' +
+    'РЕЖИМ СЖАТОГО ВЫВОДА — строго соблюдайте:\n' +
+    '(1) Ответьте МИНИМАЛЬНЫМ JSON. Уберите все необязательные поля.\n' +
+    '(2) Используйте краткие строковые значения (1-2 предложения, не абзацы).\n' +
+    '(3) Поле "evidence" — максимум 10 слов на элемент.\n' +
+    '(4) Поле "reason" / "description" — максимум 15 слов.\n' +
+    '(5) Не добавляйте пояснений, вступлений или заключений.\n' +
+    '(6) Весь ответ — ТОЛЬКО валидный JSON, без markdown-блоков.\n' +
+    '(7) Бюджет токенов: ваш ответ должен быть максимально компактным.\n' +
+    '(8) null вместо None. true/false вместо True/False. Без trailing commas.\n' +
+    'Ответьте компактным валидным JSON.';
+
+  // Append compressed instructions to the last user message (or add a new one)
+  const lastIdx = baseMessages.length - 1;
+  if (lastIdx >= 0 && baseMessages[lastIdx].role === 'user') {
+    return [
+      ...baseMessages.slice(0, lastIdx),
+      { role: 'user' as const, content: baseMessages[lastIdx].content + compressedSuffix },
+    ];
+  }
+
+  return [
+    ...baseMessages,
+    { role: 'user' as const, content: compressedSuffix.trim() },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// rebuildWithTokenBudget — fresh prompt with explicit token budget for
+// truncated (finish_reason: 'length') responses
+// ---------------------------------------------------------------------------
+
+function rebuildWithTokenBudget<TOutput>(
+  step: AuditStep<TOutput>,
+  state: PipelineRunState,
+  effectiveMaxTokens: number,
+): ChatMessage[] {
+  const baseMessages = step.buildPrompt(state);
+
+  const budgetSuffix =
+    '\n\n' +
+    '⚠️ ВАШ ПРЕДЫДУЩИЙ ОТВЕТ БЫЛ ОБРЕЗАН из-за ограничения токенов.\n' +
+    'Бюджет токенов для ответа: не более ' + effectiveMaxTokens + ' токенов.\n\n' +
+    'ИНСТРУКЦИИ ДЛЯ КОМПАКТНОГО ОТВЕТА:\n' +
+    '(1) Уберите все необязательные поля из JSON.\n' +
+    '(2) Строковые значения — максимум 10-15 слов каждое.\n' +
+    '(3) Поле "evidence" — максимум 8 слов на элемент.\n' +
+    '(4) Не пишите пояснений, вступлений или заключений.\n' +
+    '(5) Весь ответ — ТОЛЬКО компактный валидный JSON.\n' +
+    '(6) null вместо None. true/false вместо True/False. Без trailing commas.\n' +
+    'Ответьте максимально кратким валидным JSON.';
+
+  const lastIdx = baseMessages.length - 1;
+  if (lastIdx >= 0 && baseMessages[lastIdx].role === 'user') {
+    return [
+      ...baseMessages.slice(0, lastIdx),
+      { role: 'user' as const, content: baseMessages[lastIdx].content + budgetSuffix },
+    ];
+  }
+
+  return [
+    ...baseMessages,
+    { role: 'user' as const, content: budgetSuffix.trim() },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// clampMaxTokens — ensure max_tokens doesn't exceed the model's actual limit
+// ---------------------------------------------------------------------------
+
+function clampMaxTokens(
+  requestedTokens: number,
+  modelCapabilities?: ModelCapabilities,
+): number {
+  if (modelCapabilities?.maxOutputTokens && modelCapabilities.maxOutputTokens > 0) {
+    return Math.min(requestedTokens, modelCapabilities.maxOutputTokens);
+  }
+  return requestedTokens;
 }
 
 // ---------------------------------------------------------------------------
@@ -184,18 +343,27 @@ function buildCorrectionMessage(errors: string[]): string {
  *
  * - If skipLLM is true, the LLM is never called and the step must produce
  *   output from current state alone (Steps 0 and 11).
- * - If finish_reason is 'length', the LLM ran out of tokens and we retry
- *   with a correction message asking for a more concise response.
- * - If parseResponse or validate fails, we retry up to maxRetries times,
- *   appending a Russian correction message on each retry.
+ * - If finish_reason is 'length', the LLM ran out of tokens and we REBUILD
+ *   the prompt with explicit token budget instructions (not append).
+ * - If parseResponse or validate fails, we retry up to maxRetries times.
+ *   On retries 0-1 we rebuild with validation correction; on retries 2+
+ *   we switch to compressed output mode. The prompt is always rebuilt from
+ *   scratch — never appended to — to keep token count stable.
  * - If gateCheck returns passed=false, the returned state has phase='blocked'.
  * - If all retries are exhausted, AuditStepError is thrown.
+ *
+ * @param step            The audit step configuration
+ * @param state           Current pipeline state
+ * @param llmClient       LLM client for chat completions
+ * @param onProgress      Progress callback
+ * @param modelCapabilities  Optional model limits (e.g. maxOutputTokens)
  */
 export async function runStep<TOutput = unknown>(
   step: AuditStep<TOutput>,
   state: PipelineRunState,
   llmClient: LLMClient,
   onProgress: (phase: AuditPhase) => void,
+  modelCapabilities?: ModelCapabilities,
 ): Promise<PipelineRunState> {
   const stepStart = Date.now();
   onProgress(step.id);
@@ -246,41 +414,45 @@ export async function runStep<TOutput = unknown>(
 
   // =======================================================================
   // LLM path: buildPrompt → callLLM → parseResponse → validate → gateCheck → reduce
+  //
+  // Key design principle: on retry, REBUILD the prompt from scratch rather
+  // than appending the failed response + correction. This prevents the
+  // conversation from growing with each retry, which would:
+  //   - Increase prompt token count → more likely truncation
+  //   - Waste rate limit budget on bloated context
+  //   - Confuse the LLM with failed attempts in its history
   // =======================================================================
   let accumulatedMessages: ChatMessage[] = step.buildPrompt(state);
+  const effectiveMaxTokens = clampMaxTokens(step.maxTokens, modelCapabilities);
 
   for (let attempt = 0; attempt <= step.maxRetries; attempt++) {
     try {
       const response = await llmClient.chatCompletion({
         messages: accumulatedMessages,
-        max_tokens: step.maxTokens,
+        max_tokens: effectiveMaxTokens,
       });
 
+      // -----------------------------------------------------------------
       // Detect truncated response — the LLM hit the token ceiling
+      // Instead of appending a correction (which would make the next
+      // prompt even longer), rebuild with explicit token budget.
+      // -----------------------------------------------------------------
       const finishReason = response.choices?.[0]?.finish_reason;
       if (finishReason === 'length') {
         if (attempt < step.maxRetries) {
-          // Append a correction message and retry
-          accumulatedMessages = [
-            ...accumulatedMessages,
-            {
-              role: 'assistant',
-              content: response.choices[0].message.content,
-            },
-            {
-              role: 'user',
-              content:
-                'Ваш ответ был обрезан из-за ограничения токенов. ' +
-                'Пожалуйста, ответьте более кратко, сохранив JSON-структуру.',
-            },
-          ];
+          // Rebuild with token budget instructions instead of appending
+          accumulatedMessages = rebuildWithTokenBudget(
+            step,
+            state,
+            effectiveMaxTokens,
+          );
           continue;
         }
         throw new AuditStepError(
           step.id,
           attempt + 1,
           `Ответ LLM обрезан (finish_reason: 'length'). ` +
-            `Текущий лимит max_tokens: ${step.maxTokens}. ` +
+            `Текущий лимит max_tokens: ${effectiveMaxTokens}. ` +
             'Увеличьте max_tokens или упростите промпт.',
         );
       }
@@ -315,23 +487,21 @@ export async function runStep<TOutput = unknown>(
         };
       }
 
+      // -----------------------------------------------------------------
       // Validation failed — decide whether to retry
+      // -----------------------------------------------------------------
       if (!validation.canRetry || attempt >= step.maxRetries) {
         break;
       }
 
-      // Append correction message and retry
-      accumulatedMessages = [
-        ...accumulatedMessages,
-        {
-          role: 'assistant',
-          content,
-        },
-        {
-          role: 'user',
-          content: buildCorrectionMessage(validation.errors),
-        },
-      ];
+      // Rebuild prompt with stricter JSON enforcement (NOT append).
+      // For attempts 0-1: include validation error details for correction.
+      // For attempts 2+: switch to compressed output mode.
+      if (attempt < 2) {
+        accumulatedMessages = rebuildWithCorrection(step, state, validation.errors);
+      } else {
+        accumulatedMessages = rebuildWithCompressedPrompt(step, state, attempt);
+      }
     } catch (error) {
       // Re-throw AuditStepError as-is
       if (error instanceof AuditStepError) {
@@ -373,24 +543,9 @@ export async function runStep<TOutput = unknown>(
         await new Promise((resolve) => setTimeout(resolve, backoffSeconds * 1000));
       }
 
-      // Retry on transient errors — append a contextual retry prompt
-      const retryPrompt = classified.type === 'provider_overloaded'
-        ? 'Модель была перегружена. Повторите ответ в формате валидного JSON.'
-        : classified.type === 'rate_limit'
-          ? 'Сервер перегружен. Подождите немного и повторите ответ в формате валидного JSON.'
-          : classified.type === 'timeout'
-          ? 'Ответ занял слишком много времени. Пожалуйста, ответьте более кратко в формате валидного JSON.'
-          : classified.type === 'invalid_json'
-            ? 'Ваш ответ не был валидным JSON. Пожалуйста, ответьте строго в формате валидного JSON.'
-            : 'Произошла ошибка при обработке предыдущего ответа. Пожалуйста, повторите ответ в формате валидного JSON.';
-
-      accumulatedMessages = [
-        ...accumulatedMessages,
-        {
-          role: 'user',
-          content: retryPrompt,
-        },
-      ];
+      // Rebuild prompt from scratch for next attempt — don't append to the
+      // failed conversation. This keeps prompt size stable.
+      accumulatedMessages = step.buildPrompt(state);
     }
   }
 

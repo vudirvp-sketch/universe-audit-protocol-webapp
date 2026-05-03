@@ -195,6 +195,7 @@ export default function Home() {
           if (state.generativeOutput) s.setGenerativeOutput(state.generativeOutput);
           if (state.nextActions && state.nextActions.length > 0) s.setNextActions(state.nextActions);
           if (state.finalScore) s.setFinalScore(state.finalScore);
+          if (state.narrativeDigest) s.setNarrativeDigest(state.narrativeDigest);
           if (state.checklist && state.checklist.length > 0) s.setChecklist(state.checklist);
           // Timing & blocked info
           if (state.blockedAt) s.setBlockedAt(state.blockedAt);
@@ -220,6 +221,7 @@ export default function Home() {
       if (result.generativeOutput) s.setGenerativeOutput(result.generativeOutput);
       if (result.nextActions && result.nextActions.length > 0) s.setNextActions(result.nextActions);
       if (result.finalScore) s.setFinalScore(result.finalScore);
+      if (result.narrativeDigest) s.setNarrativeDigest(result.narrativeDigest);
 
       // Set phase based on result
       if (result.error) {
@@ -294,6 +296,7 @@ export default function Home() {
       const fullState = store;
       const currentState: PipelineState = {
         inputText: fullState.inputText,
+        narrativeDigest: fullState.narrativeDigest ?? null,
         auditMode,
         authorProfile: fullState.authorProfile,
         skeleton: fullState.skeleton,
@@ -337,6 +340,7 @@ export default function Home() {
           if (state.generativeOutput) s.setGenerativeOutput(state.generativeOutput);
           if (state.nextActions && state.nextActions.length > 0) s.setNextActions(state.nextActions);
           if (state.finalScore) s.setFinalScore(state.finalScore);
+          if (state.narrativeDigest) s.setNarrativeDigest(state.narrativeDigest);
           if (state.checklist && state.checklist.length > 0) s.setChecklist(state.checklist);
           if (state.blockedAt) s.setBlockedAt(state.blockedAt);
           if (state.elapsedMs) s.setElapsedMs(state.elapsedMs);
@@ -362,6 +366,7 @@ export default function Home() {
       if (result.generativeOutput) s.setGenerativeOutput(result.generativeOutput);
       if (result.nextActions && result.nextActions.length > 0) s.setNextActions(result.nextActions);
       if (result.finalScore) s.setFinalScore(result.finalScore);
+      if (result.narrativeDigest) s.setNarrativeDigest(result.narrativeDigest);
       if (result.blockedAt) s.setBlockedAt(result.blockedAt);
       if (result.elapsedMs) s.setElapsedMs(result.elapsedMs);
       if (result.stepTimings && Object.keys(result.stepTimings).length > 0) s.setStepTimings(result.stepTimings);

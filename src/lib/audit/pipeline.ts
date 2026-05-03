@@ -7,12 +7,18 @@
  *
  * Phase 2: Replaced keyword-based orchestrator with AuditStepRunner.
  * Each step is a declarative AuditStep object registered in step-registry.
+ *
+ * Phase 3: Integrated narrative digest and model capabilities.
+ * After skeleton extraction, a deterministic digest is computed for long
+ * narratives so that gate evaluation steps (L1–L4) receive compressed
+ * but audit-relevant content instead of the full text.
  */
 
-import { createLLMClient, type LLMClient, type LLMProvider } from '@/lib/llm-client';
+import { createLLMClient, type LLMClient, type LLMProvider, getModelCapabilities, type ModelCapabilities } from '@/lib/llm-client';
 import { runStep, type PipelineRunState } from './audit-step';
 import { getStep, getStepOrder, stepRegistry } from './step-registry';
 import { classifyLLMError } from './error-handler';
+import { shouldUseDigest, computeNarrativeDigest, extractSkeletonKeywords } from './narrative-processor';
 import type {
   AuditPhase,
   MediaType,
@@ -96,6 +102,7 @@ export interface PipelineProgress {
 
 export interface PipelineState {
   inputText: string; // Original user narrative — needed for correct resume
+  narrativeDigest: string | null; // Compressed digest for long narratives (computed after skeleton extraction)
   auditMode: import('./types').AuditMode | null;
   authorProfile: import('./types').AuthorProfile | null;
   skeleton: Skeleton | null;
@@ -127,6 +134,7 @@ export interface PipelineState {
 function createEmptyPipelineState(): PipelineState {
   return {
     inputText: '',
+    narrativeDigest: null,
     auditMode: null,
     authorProfile: null,
     skeleton: null,
@@ -167,6 +175,7 @@ function createInitialRunState(input: AuditInput): PipelineRunState {
     generativeOutput: null,
     nextActions: [],
     finalScore: null,
+    narrativeDigest: null,
     error: null,
     blockedAt: null,
     elapsedMs: 0,
@@ -214,12 +223,15 @@ export async function runAuditPipeline(
     });
   }
 
+  // Get model capabilities once — used for token clamping in runStep
+  const modelCaps = getModelCapabilities(llmClient.provider, llmClient.model);
+
   // Initialize the pipeline run state
   let runState: PipelineRunState = createInitialRunState(input);
   const stepOrder = getStepOrder();
 
   // Rate limiting: use the shared rate limiter factory
-  const { enforce: enforceRateLimit } = createRateLimiter(input.rpmLimit || 10);
+  const { enforce: enforceRateLimit } = createRateLimiter(input.rpmLimit || 5);
 
   // Notify: starting
   onProgress?.('input_validation', mapToPipelineState(runState));
@@ -250,7 +262,7 @@ export async function runAuditPipeline(
       // Execute the step via AuditStepRunner
       runState = await runStep(step, runState, llmClient, (p) => {
         onProgress?.(p, mapToPipelineState(runState));
-      });
+      }, modelCaps);
 
       // Track timing
       const stepElapsed = Date.now() - stepStart;
@@ -259,6 +271,17 @@ export async function runAuditPipeline(
         elapsedMs: Date.now() - overallStart,
         stepTimings: { ...runState.stepTimings, [phase]: stepElapsed },
       };
+
+      // After skeleton extraction, compute narrative digest for long texts.
+      // Gate steps (L1–L4) will use the digest instead of the full narrative
+      // when available — they access it via state.narrativeDigest || state.inputText.
+      if (phase === 'skeleton_extraction' && runState.skeleton) {
+        const keywords = extractSkeletonKeywords(runState.skeleton);
+        const digest = shouldUseDigest(runState.inputText)
+          ? computeNarrativeDigest(runState.inputText, keywords)
+          : null;
+        runState = { ...runState, narrativeDigest: digest };
+      }
 
       // Notify progress
       onProgress?.(runState.phase, mapToPipelineState(runState));
@@ -335,6 +358,9 @@ export async function resumeAuditFromStep(
     });
   }
 
+  // Get model capabilities once — used for token clamping in runStep
+  const modelCaps = getModelCapabilities(llmClient.provider, llmClient.model);
+
   // Reconstruct PipelineRunState from the saved PipelineState
   let runState: PipelineRunState = {
     phase: savedState.phase,
@@ -353,6 +379,7 @@ export async function resumeAuditFromStep(
     generativeOutput: savedState.generativeOutput,
     nextActions: savedState.nextActions,
     finalScore: savedState.finalScore,
+    narrativeDigest: savedState.narrativeDigest ?? null,
     error: null,
     blockedAt: null,
     elapsedMs: 0, // Reset elapsed for the resume portion
@@ -366,7 +393,7 @@ export async function resumeAuditFromStep(
   }
 
   // Rate limiting: use the shared rate limiter factory with the provided rpmLimit
-  const { enforce: enforceRateLimitResume } = createRateLimiter(rpmLimit || 10);
+  const { enforce: enforceRateLimitResume } = createRateLimiter(rpmLimit || 5);
 
   // Execute steps from the resume point onward
   for (let i = resumeIndex; i < stepOrder.length; i++) {
@@ -392,7 +419,7 @@ export async function resumeAuditFromStep(
 
       runState = await runStep(step, runState, llmClient, (p) => {
         onProgress?.(p, mapToPipelineState(runState));
-      });
+      }, modelCaps);
 
       const stepElapsed = Date.now() - stepStart;
       runState = {
@@ -400,6 +427,15 @@ export async function resumeAuditFromStep(
         elapsedMs: Date.now() - overallStart,
         stepTimings: { ...runState.stepTimings, [phase]: stepElapsed },
       };
+
+      // After skeleton extraction, compute narrative digest for long texts.
+      if (phase === 'skeleton_extraction' && runState.skeleton) {
+        const keywords = extractSkeletonKeywords(runState.skeleton);
+        const digest = shouldUseDigest(runState.inputText)
+          ? computeNarrativeDigest(runState.inputText, keywords)
+          : null;
+        runState = { ...runState, narrativeDigest: digest };
+      }
 
       onProgress?.(runState.phase, mapToPipelineState(runState));
 
@@ -450,6 +486,7 @@ function mapToPipelineState(runState: PipelineRunState): PipelineState {
 
   return {
     inputText: runState.inputText,
+    narrativeDigest: runState.narrativeDigest,
     auditMode: runState.auditMode,
     authorProfile: runState.authorProfile,
     skeleton: runState.skeleton,

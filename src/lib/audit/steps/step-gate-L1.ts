@@ -46,11 +46,14 @@ export const stepGateL1: AuditStep<GateL1Output> = {
 
   buildPrompt: (state: PipelineRunState): ChatMessage[] => {
     const checklistText = buildL1Checklist(state.auditMode);
+    const narrativeText = state.narrativeDigest || state.inputText;
+    const useDigest = !!state.narrativeDigest;
     const userPrompt = getL1EvaluationPrompt(
-      state.inputText,
+      narrativeText,
       state.skeleton!,
       state.mediaType,
       checklistText,
+      useDigest,
     );
     return [
       {
@@ -187,7 +190,7 @@ export const stepGateL1: AuditStep<GateL1Output> = {
     };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
   maxTokens: 16384,
 };

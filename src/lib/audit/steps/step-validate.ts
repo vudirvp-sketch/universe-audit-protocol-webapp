@@ -1,8 +1,9 @@
 /**
  * Step 0: Input Validation — pure client-side, no LLM call.
  *
- * Checks: non-empty, minimum length (50 chars), maximum length (50000 chars),
+ * Checks: non-empty, minimum length (50 chars),
  * not just whitespace. On failure the pipeline is blocked immediately.
+ * No upper length limit — the narrative processor handles large texts.
  * No LLM tokens are wasted on invalid input.
  *
  * skipLLM: true — the step produces its result entirely from state.
@@ -53,8 +54,6 @@ export function validateInputText(text: string): InputValidationOutput {
     errors.push('Концепт пустой — невозможно продолжить');
   } else if (text.trim().length < 50) {
     errors.push('Концепт слишком краткий для полноценного аудита (минимум 50 символов)');
-  } else if (text.length > 500000) {
-    errors.push('Текст слишком длинный. Сократите до 500 000 символов.');
   }
 
   const valid = errors.length === 0;
