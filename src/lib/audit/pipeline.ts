@@ -103,6 +103,7 @@ export interface PipelineProgress {
 export interface PipelineState {
   inputText: string; // Original user narrative — needed for correct resume
   narrativeDigest: string | null; // Compressed digest for long narratives (computed after skeleton extraction)
+  mediaType: MediaType; // Media type — persisted for correct resume
   auditMode: import('./types').AuditMode | null;
   authorProfile: import('./types').AuthorProfile | null;
   skeleton: Skeleton | null;
@@ -135,6 +136,7 @@ function createEmptyPipelineState(): PipelineState {
   return {
     inputText: '',
     narrativeDigest: null,
+    mediaType: 'novel' as MediaType,
     auditMode: null,
     authorProfile: null,
     skeleton: null,
@@ -370,7 +372,9 @@ export async function resumeAuditFromStep(
     inputText: savedState.inputText || (savedState.report?.skeleton?.elements
       ? savedState.report.skeleton.elements.map(e => e.extracted ?? e.value ?? '').filter(Boolean).join('\n')
       : ''), // Prefer original inputText; fall back to skeleton recovery
-    mediaType: (savedState.gateResults.L1?.metadata?.mediaType as MediaType | undefined) ?? 'novel',
+    // Use saved mediaType directly — it's now properly persisted in PipelineState.
+    // Only fall back to 'novel' if mediaType is somehow missing.
+    mediaType: savedState.mediaType ?? 'novel',
     auditMode: savedState.auditMode,
     authorProfile: savedState.authorProfile,
     skeleton: savedState.skeleton,
@@ -492,6 +496,7 @@ function mapToPipelineState(runState: PipelineRunState): PipelineState {
   return {
     inputText: runState.inputText,
     narrativeDigest: runState.narrativeDigest,
+    mediaType: runState.mediaType,
     auditMode: runState.auditMode,
     authorProfile: runState.authorProfile,
     skeleton: runState.skeleton,

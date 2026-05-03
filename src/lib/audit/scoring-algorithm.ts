@@ -435,3 +435,47 @@ export function getApplicableChecklistCount(mediaType: MediaType): number {
   const filtered = filterByMediaType([...MASTER_CHECKLIST], mediaType);
   return filtered.filter(i => i.applicable).length;
 }
+
+/**
+ * Recalculate gate score from a list of evaluations.
+ *
+ * This is the DETERMINISTIC score calculation used by gate steps (L1–L4).
+ * The LLM's self-reported score is NEVER trusted — only the code-computed
+ * result determines whether a gate passes or fails.
+ *
+ * Formula: PASS / (PASS + FAIL) × 100%, excluding INSUFFICIENT_DATA.
+ * If more than 50% of items have INSUFFICIENT_DATA, the result is flagged
+ * as unreliable (isUnreliable = true), but the score is still computed.
+ */
+export function recalculateGateScore(
+  evaluations: Array<{ id: string; status: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA' }>
+): {
+  score: number;
+  passedItems: number;
+  failedItems: number;
+  insufficientDataItems: number;
+  applicableItems: number;
+  effectiveTotal: number;
+  isUnreliable: boolean;
+  insufficientRatio: number;
+} {
+  const passedItems = evaluations.filter(e => e.status === 'PASS').length;
+  const failedItems = evaluations.filter(e => e.status === 'FAIL').length;
+  const insufficientDataItems = evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length;
+  const applicableItems = evaluations.length;
+  const effectiveTotal = applicableItems - insufficientDataItems;
+  const insufficientRatio = applicableItems > 0 ? insufficientDataItems / applicableItems : 0;
+  const isUnreliable = applicableItems > 0 && insufficientDataItems > applicableItems * 0.5;
+  const score = effectiveTotal > 0 ? Math.round((passedItems / effectiveTotal) * 100) : 0;
+
+  return {
+    score,
+    passedItems,
+    failedItems,
+    insufficientDataItems,
+    applicableItems,
+    effectiveTotal,
+    isUnreliable,
+    insufficientRatio,
+  };
+}

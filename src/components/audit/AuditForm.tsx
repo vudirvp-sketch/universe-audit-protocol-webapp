@@ -57,6 +57,10 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
   const [localInput, setLocalInput] = React.useState(inputText);
   const debounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Input length warning thresholds
+  const LONG_TEXT_WARNING = 100000;  // ~100K chars — digest will be used for most models
+  const VERY_LONG_TEXT_WARNING = 500000; // ~500K chars — may cause browser performance issues
+
   // Sync local input when external inputText changes (e.g. on reset)
   React.useEffect(() => {
     setLocalInput(inputText);
@@ -151,6 +155,16 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
             <p className="text-xs text-muted-foreground">
               {t.form.characterCount.replace('{count}', String(localInput.length))}
             </p>
+            {localInput.length >= VERY_LONG_TEXT_WARNING && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Очень длинный текст ({Math.round(localInput.length / 1000)}K символов). Обработка может занять больше времени, но ограничений нет — пайплайн автоматически сожмёт текст через дайджест.
+              </p>
+            )}
+            {localInput.length >= LONG_TEXT_WARNING && localInput.length < VERY_LONG_TEXT_WARNING && (
+              <p className="text-xs text-muted-foreground">
+                Длинный текст — пайплайн автоматически создаст дайджест для моделей с ограниченным контекстом.
+              </p>
+            )}
           </div>
 
           {/* Media Type Selection */}

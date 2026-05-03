@@ -297,6 +297,7 @@ export default function Home() {
       const currentState: PipelineState = {
         inputText: fullState.inputText,
         narrativeDigest: fullState.narrativeDigest ?? null,
+        mediaType,
         auditMode,
         authorProfile: fullState.authorProfile,
         skeleton: fullState.skeleton,

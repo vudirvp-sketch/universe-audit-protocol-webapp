@@ -446,13 +446,21 @@ function buildProviderRequestBody(
         }));
 
       // Anthropic doesn't support response_format: json_object.
-      // When JSON output is needed, the caller should use a prefill trick
-      // (append an assistant message with "{") at a higher layer.
+      // Prefill trick: append an assistant message with "{" so Claude
+      // continues generating valid JSON. This is the standard workaround
+      // recommended by Anthropic for structured JSON output.
+      // We detect JSON intent by checking if the system prompt requests JSON.
+      const systemContent = systemMessage?.content || '';
+      const needsJsonPrefill = /ТОЛЬКО\s+валидным\s+JSON|JSON\s+only|ответ.*json/i.test(systemContent);
+      if (needsJsonPrefill && nonSystemMessages[nonSystemMessages.length - 1]?.role !== 'assistant') {
+        nonSystemMessages.push({ role: 'assistant', content: '{' });
+      }
+
       return JSON.stringify({
         model: effectiveModel,
         max_tokens: effectiveMaxTokens,
         messages: nonSystemMessages,
-        system: systemMessage?.content,
+        system: systemContent,
       });
     }
 
@@ -534,11 +542,21 @@ function normalizeProviderResponse(
       let anthropicFinishReason: string;
       switch (r.stop_reason) {
         case 'end_turn':      anthropicFinishReason = 'stop'; break;
-        case 'max_tokens':    anthropicFinishReason = 'length'; break;  // ← was missing!
+        case 'max_tokens':    anthropicFinishReason = 'length'; break;
         case 'stop_sequence': anthropicFinishReason = 'stop'; break;
         case 'tool_use':      anthropicFinishReason = 'tool_calls'; break;
         default:              anthropicFinishReason = String(r.stop_reason || 'stop'); break;
       }
+      // When we used the JSON prefill trick (assistant message with "{"),
+      // Claude's response does NOT include the prefill — we must prepend it
+      // so the JSON parser gets a complete object starting with "{".
+      const rawContent = String((r.content as Array<Record<string, unknown>>)?.[0]?.text || '');
+      // Detect if prefill was used: if the response starts with a key (not "{"),
+      // it means we sent a "{" prefill and Claude continued from there.
+      const needsPrefillRestore = rawContent.length > 0
+        && !rawContent.trimStart().startsWith('{')
+        && !rawContent.trimStart().startsWith('[');
+      const finalContent = needsPrefillRestore ? '{' + rawContent : rawContent;
       return {
         id: String(r.id || 'unknown'),
         object: 'chat.completion',
@@ -548,7 +566,7 @@ function normalizeProviderResponse(
           index: 0,
           message: {
             role: 'assistant',
-            content: String((r.content as Array<Record<string, unknown>>)?.[0]?.text || ''),
+            content: finalContent,
           },
           finish_reason: anthropicFinishReason,
         }],

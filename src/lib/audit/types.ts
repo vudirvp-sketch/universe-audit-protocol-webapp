@@ -467,6 +467,7 @@ export interface AuditState {
   setElapsedMs: (ms: number) => void;
   setStepTimings: (timings: Partial<Record<AuditPhase, number>>) => void;
   reset: () => void;
+  editAndReset: () => void;
 }
 
 // ============================================================================

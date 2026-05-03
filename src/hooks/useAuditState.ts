@@ -140,6 +140,24 @@ export const useAuditState = create<AuditState>()(
       checklist: filterByMediaType([...MASTER_CHECKLIST], initialState.mediaType),
     });
   },
+
+  // Partial reset: preserve user input (text, media type, audit mode, author answers/profile)
+  // but clear all audit results. Used when the user clicks "Edit & Restart" after
+  // a gate failure — they expect to go back to the form with their text pre-filled
+  // so they can modify it and re-run, NOT lose everything.
+  editAndReset: () => {
+    set(state => ({
+      ...initialState,
+      // Preserve input-related state so the user can edit and re-run
+      inputText: state.inputText,
+      mediaType: state.mediaType,
+      auditMode: state.auditMode,
+      authorAnswers: state.authorAnswers,
+      authorProfile: state.authorProfile,
+      // Reset checklist for current media type
+      checklist: filterByMediaType([...MASTER_CHECKLIST], state.mediaType),
+    }));
+  },
 }),
     {
       name: AUDIT_STATE_STORAGE_KEY,
@@ -186,7 +204,12 @@ export const useAuditState = create<AuditState>()(
           if (state) {
             // Only 'idle' and 'complete' are safe states to restore.
             // Everything else means the pipeline was interrupted.
-            const safePhases: AuditPhase[] = ['idle', 'complete'];
+            // Terminal states that are safe to restore across page refresh.
+            // 'blocked' and 'failed' are safe because the pipeline is not running —
+            // the user can still interact with results, download them, or resume.
+            // Only mid-pipeline phases (screening, L1_evaluation, etc.) are unsafe
+            // because the pipeline is not actually running after a page refresh.
+            const safePhases: AuditPhase[] = ['idle', 'complete', 'blocked', 'failed', 'cancelled'];
             if (!safePhases.includes(state.phase)) {
               queueMicrotask(() => {
                 useAuditState.setState({

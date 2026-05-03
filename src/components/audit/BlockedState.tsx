@@ -45,7 +45,7 @@ export function BlockedState({ onResume }: { onResume?: (blockedAt: AuditPhase) 
   const issues = useAuditState((s) => s.issues);
   const blockedAt = useAuditState((s) => s.blockedAt);
   const isLoading = useAuditState((s) => s.isLoading);
-  const reset = useAuditState((s) => s.reset);
+  const editAndReset = useAuditState((s) => s.editAndReset);
 
   const [copied, setCopied] = React.useState(false);
 
@@ -205,7 +205,7 @@ export function BlockedState({ onResume }: { onResume?: (blockedAt: AuditPhase) 
               {isLoading ? t.blocked.resuming : t.blocked.resumeFromStep}
             </Button>
           )}
-          <Button variant="default" onClick={reset}>
+          <Button variant="default" onClick={editAndReset}>
             <RotateCcw className="h-4 w-4 mr-2" />
             {t.blocked.editAndRestart}
           </Button>
