@@ -160,6 +160,20 @@ export interface AuditStep<TOutput = unknown> {
 
   /** Minimum max_tokens for the LLM response */
   maxTokens: number;
+
+  /**
+   * Minimum output tokens a model must support for this step to produce
+   * valid output. If the model's maxOutputTokens is below this threshold,
+   * runStep will proactively add compressed-output instructions to the
+   * prompt before the first LLM call, and will emit a warning.
+   *
+   * This prevents the "silent truncation loop" where a model with small
+   * output limits repeatedly generates incomplete JSON that fails
+   * validation and exhausts the retry budget.
+   *
+   * Set to 0 (default) if the step has no minimum requirement.
+   */
+  minOutputTokens?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -425,6 +439,20 @@ export async function runStep<TOutput = unknown>(
   let accumulatedMessages: ChatMessage[] = step.buildPrompt(state);
   const effectiveMaxTokens = clampMaxTokens(step.maxTokens, modelCapabilities);
 
+  // ── Proactive compressed mode for models with small output limits ─────
+  // If the model's maxOutputTokens is below the step's declared minimum,
+  // we add compressed-output instructions BEFORE the first call. This
+  // prevents the "silent truncation loop" where the model repeatedly
+  // generates incomplete JSON that fails validation.
+  const stepMinOutput = (step as AuditStep<unknown> & { minOutputTokens?: number }).minOutputTokens || 0;
+  if (stepMinOutput > 0 && effectiveMaxTokens < stepMinOutput) {
+    console.warn(
+      `[Model capability] Step ${step.id}: model maxOutputTokens (${effectiveMaxTokens}) ` +
+      `is below step minimum (${stepMinOutput}). Adding compressed output mode proactively.`
+    );
+    accumulatedMessages = rebuildWithCompressedPrompt(step, state, 0);
+  }
+
   for (let attempt = 0; attempt <= step.maxRetries; attempt++) {
     try {
       const response = await llmClient.chatCompletion({
@@ -438,6 +466,19 @@ export async function runStep<TOutput = unknown>(
       // prompt even longer), rebuild with explicit token budget.
       // -----------------------------------------------------------------
       const finishReason = response.choices?.[0]?.finish_reason;
+
+      // Handle content_filter (safety/blocked responses) — NOT retryable
+      // with the same prompt. This occurs when Gemini returns SAFETY/
+      // RECITATION/BLOCKLIST or similar providers block the response.
+      if (finishReason === 'content_filter') {
+        throw new AuditStepError(
+          step.id,
+          attempt + 1,
+          'Ответ LLM заблокирован фильтром безопасности провайдера. ' +
+          'Попробуйте переформулировать входной текст или использовать другого провайдера/модель.',
+        );
+      }
+
       if (finishReason === 'length') {
         if (attempt < step.maxRetries) {
           // Rebuild with token budget instructions instead of appending

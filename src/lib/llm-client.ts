@@ -102,7 +102,23 @@ export interface ModelCapabilities {
   supportsSystemMessages: boolean;
 }
 
-/** Conservative defaults for unknown models */
+/**
+ * Provider-aware default capabilities.
+ * Used when a specific model is not found in KNOWN_MODEL_CAPABILITIES.
+ * Different providers have different baseline expectations — e.g. Google Gemini
+ * models generally support JSON mode and have larger context windows than the
+ * most conservative default.
+ */
+const PROVIDER_DEFAULT_CAPABILITIES: Partial<Record<LLMProvider, ModelCapabilities>> = {
+  google:     { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  anthropic:  { contextWindow: 200_000,   maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+  openai:     { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
+  groq:       { contextWindow: 128_000,   maxOutputTokens: 32768, supportsJSONMode: false, supportsSystemMessages: true },
+  deepseek:   { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  mistral:    { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+};
+
+/** Conservative defaults for unknown providers/models — the absolute floor */
 const DEFAULT_CAPABILITIES: ModelCapabilities = {
   contextWindow: 32000,
   maxOutputTokens: 4096,
@@ -115,17 +131,23 @@ const DEFAULT_CAPABILITIES: ModelCapabilities = {
  * The key format is `${provider}/${model}` to avoid ambiguity across providers.
  */
 const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
-  // Google Gemini
-  'google/gemini-2.0-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  // Google Gemini — full family coverage
   'google/gemini-2.5-flash':       { contextWindow: 1_000_000, maxOutputTokens: 65536, supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.5-pro':         { contextWindow: 1_000_000, maxOutputTokens: 65536, supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.0-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.0-flash-lite':  { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
   'google/gemini-1.5-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-1.5-pro':         { contextWindow: 2_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-1.0-pro':         { contextWindow: 32_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
 
   // OpenAI
   'openai/gpt-4o-mini':            { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
   'openai/gpt-4.1-mini':           { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4o':                 { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4.1':                { contextWindow: 1_000_000, maxOutputTokens: 32768, supportsJSONMode: true,  supportsSystemMessages: true },
 
   // Anthropic Claude — use prefill trick for JSON (no native json_object mode)
-  'anthropic/claude-sonnet-4-20250514': { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-sonnet-4-20250514': { contextWindow: 200_000, maxOutputTokens: 16384, supportsJSONMode: false, supportsSystemMessages: true },
   'anthropic/claude-3-5-sonnet':        { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
   'anthropic/claude-3-haiku':           { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
 
@@ -134,6 +156,7 @@ const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
 
   // DeepSeek
   'deepseek/deepseek-chat':        { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'deepseek/deepseek-reasoner':    { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
 
   // Mistral
   'mistral/mistral-large-latest':   { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
@@ -141,8 +164,30 @@ const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
 
 /**
  * Get the capabilities for a given provider + model combination.
- * For unknown models, returns conservative defaults.
+ * For unknown models, uses provider-aware defaults, then conservative defaults.
+ *
+ * Resolution order:
+ *  1. Exact match in KNOWN_MODEL_CAPABILITIES
+ *  2. Normalized model name (strips preview/date suffixes)
+ *  3. Prefix matching (longest match first)
+ *  4. Provider-specific defaults (e.g. Google models generally support JSON mode)
+ *  5. Conservative DEFAULT_CAPABILITIES (the absolute floor)
  */
+
+/**
+ * Normalize a model name for prefix matching (e.g. "gemini-2.5-flash-preview-05-20" → "gemini-2.5-flash").
+ * Strips trailing date/version suffixes that providers often append.
+ */
+function normalizeModelName(model: string): string {
+  // Strip common preview/date suffixes: -preview-NN-NN, -preview, -NN-NN-NN, etc.
+  return model
+    .replace(/-preview-\d{2}-\d{2,4}$/, '')   // gemini-2.5-flash-preview-05-20
+    .replace(/-preview$/, '')                      // gemini-2.5-flash-preview
+    .replace(/-\d{4}-\d{2}-\d{2}$/, '')         // claude-sonnet-4-20250514 → keep as-is (no dash before date)
+    .replace(/-\d{8}$/, '')                       // some-20250514
+    ;
+}
+
 export function getModelCapabilities(provider: LLMProvider, model: string): ModelCapabilities {
   // Try exact match first
   const key = `${provider}/${model}`;
@@ -150,14 +195,39 @@ export function getModelCapabilities(provider: LLMProvider, model: string): Mode
     return KNOWN_MODEL_CAPABILITIES[key];
   }
 
+  // Try normalized model name (strips preview/date suffixes)
+  const normalizedKey = `${provider}/${normalizeModelName(model)}`;
+  if (KNOWN_MODEL_CAPABILITIES[normalizedKey]) {
+    return KNOWN_MODEL_CAPABILITIES[normalizedKey];
+  }
+
+  // Try prefix matching — walk from longest to shortest prefix
+  // e.g. "gemini-2.5-flash-exp" matches "gemini-2.5-flash"
+  const providerModels = Object.entries(KNOWN_MODEL_CAPABILITIES)
+    .filter(([k]) => k.startsWith(`${provider}/`))
+    .sort((a, b) => b[0].length - a[0].length); // longest first for best match
+
+  for (const [k, caps] of providerModels) {
+    const modelPart = k.slice(provider.length + 1);
+    if (model.startsWith(modelPart)) {
+      return caps;
+    }
+  }
+
   // For Anthropic, all claude-* models share the same capability profile
   if (provider === 'anthropic' && model.startsWith('claude')) {
     return {
       contextWindow: 200_000,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       supportsJSONMode: false,
       supportsSystemMessages: true,
     };
+  }
+
+  // Provider-aware defaults — use provider baseline if available
+  const providerDefault = PROVIDER_DEFAULT_CAPABILITIES[provider];
+  if (providerDefault) {
+    return { ...providerDefault };
   }
 
   // No match — return conservative defaults
@@ -459,6 +529,16 @@ function normalizeProviderResponse(
   switch (provider) {
     case 'anthropic': {
       const r = responseData as Record<string, unknown>;
+      // Map Anthropic-specific stop reasons to OpenAI equivalents.
+      // Anthropic uses 'end_turn', 'max_tokens', 'stop_sequence', 'tool_use'.
+      let anthropicFinishReason: string;
+      switch (r.stop_reason) {
+        case 'end_turn':      anthropicFinishReason = 'stop'; break;
+        case 'max_tokens':    anthropicFinishReason = 'length'; break;  // ← was missing!
+        case 'stop_sequence': anthropicFinishReason = 'stop'; break;
+        case 'tool_use':      anthropicFinishReason = 'tool_calls'; break;
+        default:              anthropicFinishReason = String(r.stop_reason || 'stop'); break;
+      }
       return {
         id: String(r.id || 'unknown'),
         object: 'chat.completion',
@@ -470,7 +550,7 @@ function normalizeProviderResponse(
             role: 'assistant',
             content: String((r.content as Array<Record<string, unknown>>)?.[0]?.text || ''),
           },
-          finish_reason: r.stop_reason === 'end_turn' ? 'stop' : String(r.stop_reason || 'stop'),
+          finish_reason: anthropicFinishReason,
         }],
       };
     }
@@ -482,6 +562,40 @@ function normalizeProviderResponse(
       const parts = content?.parts as Array<Record<string, unknown>> | undefined;
       const text = parts?.[0]?.text as string | undefined;
       const finishReason = candidates[0]?.finishReason as string | undefined;
+
+      // CRITICAL: Map Gemini-specific finish reasons to OpenAI equivalents.
+      // Gemini returns 'MAX_TOKENS' when output is truncated — this MUST map
+      // to 'length' so the audit pipeline detects truncation and applies
+      // recovery strategies (compressed prompt, token budget rebuild, etc.).
+      // Without this mapping, truncated responses silently fail validation
+      // and exhaust the retry budget.
+      // See: https://ai.google.dev/api/generate-content#finishreason
+      let normalizedFinishReason: string;
+      switch (finishReason) {
+        case 'STOP':       normalizedFinishReason = 'stop'; break;
+        case 'MAX_TOKENS': normalizedFinishReason = 'length'; break;  // ← was missing!
+        case 'SAFETY':     normalizedFinishReason = 'content_filter'; break;
+        case 'RECITATION': normalizedFinishReason = 'content_filter'; break;
+        case 'BLOCKLIST':  normalizedFinishReason = 'content_filter'; break;
+        case 'PROHIBITED': normalizedFinishReason = 'content_filter'; break;
+        case 'SPII':       normalizedFinishReason = 'content_filter'; break;
+        case 'MALFORMED_FUNCTION_CALL': normalizedFinishReason = 'tool_call_error'; break;
+        default:           normalizedFinishReason = finishReason || 'stop'; break;
+      }
+
+      // Handle blocklist / safety filter — extract block reason message if available
+      let responseText = text || '';
+      if (!responseText && normalizedFinishReason === 'content_filter') {
+        const promptFeedback = r.promptFeedback as Record<string, unknown> | undefined;
+        const blockReason = promptFeedback?.blockReason as string | undefined;
+        const safetyRatings = promptFeedback?.safetyRatings as Array<Record<string, unknown>> | undefined;
+        responseText = JSON.stringify({
+          _blocked: true,
+          blockReason: blockReason || finishReason,
+          safetyRatings: safetyRatings || [],
+        });
+      }
+
       return {
         id: 'gemini-' + Date.now(),
         object: 'chat.completion',
@@ -491,9 +605,9 @@ function normalizeProviderResponse(
           index: 0,
           message: {
             role: 'assistant',
-            content: text || '',
+            content: responseText,
           },
-          finish_reason: finishReason === 'STOP' ? 'stop' : (finishReason || 'stop'),
+          finish_reason: normalizedFinishReason,
         }],
       };
     }

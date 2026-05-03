@@ -50,31 +50,70 @@ export function extractJSON(raw: string): string | null {
 
   // Step 3 & 4: Find balanced outermost braces using depth counting.
   const jsonCandidate = extractBalancedBraces(text);
-  if (jsonCandidate === null) {
-    return null;
+
+  if (jsonCandidate !== null) {
+    // Balanced braces found — standard path
+    const sanitized = sanitizeLLMJSON(jsonCandidate);
+    try {
+      JSON.parse(sanitized);
+      return sanitized;
+    } catch {
+      // Sanitized candidate failed — fall through to truncated recovery
+    }
   }
 
-  // Step 5: Pre-parse sanitization — fix common LLM output issues
-  const sanitized = sanitizeLLMJSON(jsonCandidate);
-
-  // Step 6: Validate the extracted string is parseable JSON
-  try {
-    JSON.parse(sanitized);
-    return sanitized;
-  } catch {
-    // Try the sanitized full text as a last resort
+  // ── Truncated JSON recovery path ──────────────────────────────────
+  // If extractBalancedBraces returned null (no closing brace found),
+  // the LLM response was likely truncated mid-JSON. Instead of giving up,
+  // we attempt recovery by sanitizing the raw text — sanitizeLLMJSON
+  // can add missing closing brackets/braces to form valid JSON.
+  //
+  // This is the critical fix for the L2_evaluation crash: when a model
+  // hits its output token limit, the JSON is cut off without a closing }.
+  // Previously extractJSON returned null immediately, causing parseResponse
+  // to produce an empty default output → validation fails → retries exhaust.
+  {
+    // Try sanitized full text with bracket/brace repair
+    const sanitizedFull = sanitizeLLMJSON(text);
     try {
-      const sanitizedFull = sanitizeLLMJSON(text);
       JSON.parse(sanitizedFull);
       return sanitizedFull;
     } catch {
-      // Final fallback: try original text without sanitization
+      // Fall through
+    }
+
+    // Try extracting from first { to end of text, then sanitize + repair
+    const firstBrace = text.indexOf('{');
+    if (firstBrace !== -1) {
+      const partial = text.substring(firstBrace);
+      const sanitizedPartial = sanitizeLLMJSON(partial);
       try {
-        JSON.parse(text);
-        return text;
+        JSON.parse(sanitizedPartial);
+        return sanitizedPartial;
       } catch {
-        return null;
+        // Fall through
       }
+    }
+
+    // Try extracting from first [ to end of text, then sanitize + repair
+    const firstBracket = text.indexOf('[');
+    if (firstBracket !== -1) {
+      const partial = text.substring(firstBracket);
+      const sanitizedPartial = sanitizeLLMJSON(partial);
+      try {
+        JSON.parse(sanitizedPartial);
+        return sanitizedPartial;
+      } catch {
+        // Fall through
+      }
+    }
+
+    // Final fallback: try original text without sanitization
+    try {
+      JSON.parse(text);
+      return text;
+    } catch {
+      return null;
     }
   }
 }

@@ -58,6 +58,27 @@ const MIN_KEYWORD_LENGTH = 4;
 /** Rough token-to-char ratio for Russian text (1 token ≈ 4 chars). */
 const CHARS_PER_TOKEN = 4;
 
+/**
+ * Safety margin: we never let the digest exceed this fraction of the
+ * model's context window, to leave room for the system prompt, skeleton,
+ * checklist, and the model's response. Even large-context models get
+ * capped at a reasonable digest size to avoid unnecessary costs.
+ */
+const MAX_CONTEXT_FRACTION = 0.4;
+
+/**
+ * Reserve tokens for non-narrative parts of the prompt (system message,
+ * skeleton JSON, checklist, instructions, JSON format enforcement).
+ * This is a conservative estimate of ~3000 tokens.
+ */
+const PROMPT_OVERHEAD_TOKENS = 3_000;
+
+/**
+ * Reserve tokens for the model's response output.
+ * Gate evaluations typically need 2000-4000 tokens of output.
+ */
+const RESPONSE_RESERVE_TOKENS = 4_000;
+
 // ---------------------------------------------------------------------------
 // Utility helpers
 // ---------------------------------------------------------------------------
@@ -81,6 +102,52 @@ export function estimateTokenCount(text: string): number {
  */
 export function shouldUseDigest(text: string): boolean {
   return text.length >= DIGEST_THRESHOLD_CHARS;
+}
+
+/**
+ * Compute the maximum character budget for the narrative digest given a
+ * model's context window size (in tokens).
+ *
+ * This ensures the digest never exceeds what the model can actually process,
+ * leaving room for the system prompt, skeleton, checklist, and response.
+ *
+ * Formula:
+ *   available_tokens = contextWindow - PROMPT_OVERHEAD - RESPONSE_RESERVE
+ *   max_digest_chars = min(available_tokens × CHARS_PER_TOKEN, MAX_DIGEST_CHARS)
+ *
+ * For a model with contextWindow = 32K tokens:
+ *   available = 32000 - 3000 - 4000 = 25000 tokens → 100K chars (capped to 12K)
+ * For a model with contextWindow = 8K tokens:
+ *   available = 8192 - 3000 - 4000 = 1192 tokens → 4768 chars (significant reduction!)
+ *
+ * @param contextWindowTokens - The model's total context window in tokens
+ * @returns Maximum character count for the narrative digest
+ */
+export function computeMaxDigestChars(contextWindowTokens: number): number {
+  const availableTokens = Math.max(
+    0,
+    contextWindowTokens - PROMPT_OVERHEAD_TOKENS - RESPONSE_RESERVE_TOKENS
+  );
+  const maxFromContext = Math.floor(availableTokens * MAX_CONTEXT_FRACTION * CHARS_PER_TOKEN);
+  // Always cap at MAX_DIGEST_CHARS — even huge context windows don't need more
+  return Math.min(maxFromContext, MAX_DIGEST_CHARS);
+}
+
+/**
+ * Determine whether a narrative needs compression based on the model's
+ * context window. Unlike shouldUseDigest (which uses a fixed threshold),
+ * this accounts for models with very small context windows where even
+ * shorter texts might not fit.
+ *
+ * @param text - The narrative text
+ * @param contextWindowTokens - The model's total context window in tokens
+ * @returns true if the text should be compressed for this model
+ */
+export function shouldUseDigestForModel(text: string, contextWindowTokens: number): boolean {
+  if (shouldUseDigest(text)) return true;
+  // Even for shorter texts, check if they fit in the model's context
+  const maxDigestChars = computeMaxDigestChars(contextWindowTokens);
+  return text.length > maxDigestChars;
 }
 
 // ---------------------------------------------------------------------------

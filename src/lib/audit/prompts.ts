@@ -357,7 +357,34 @@ L2 фокусируется на:
 - Evidence: Краткая цитата из нарратива (максимум 30 слов)
 - Functional Role: Как это функционально служит критерию (1-2 предложения)
 
-Верни ответ в формате JSON с той же структурой, что и L1.` + JSON_FORMAT_ENFORCEMENT;
+КРИТИЧЕСКИЕ ПРАВИЛА:
+1. НЕ включай пункты INSUFFICIENT_DATA в расчёт пройдено/провалено
+2. Если >50% пунктов имеют INSUFFICIENT_DATA, отметь потребность в дополнительном материале
+3. Порог гейта зависит от режима аудита (60% конфликт, 50% кирё, 55% гибрид)
+4. Балл = (пройдено / (пройдено + провалено)) × 100%
+
+Верни ответ в формате JSON:
+{
+  "evaluations": [
+    {
+      "id": "item_id",
+      "status": "PASS" | "FAIL" | "INSUFFICIENT_DATA",
+      "evidence": "краткая цитата до 30 слов или null",
+      "functionalRole": "объяснение на русском (1-2 предложения) или null"
+    }
+  ],
+  "score": число,
+  "gatePassed": true/false,
+  "fixList": [
+    {
+      "id": "fix_id",
+      "description": "что исправить на русском",
+      "severity": "critical" | "major" | "minor",
+      "type": "motivation" | "competence" | "scale" | "resources" | "memory" | "ideology" | "time",
+      "recommendedApproach": "conservative" | "compromise" | "radical"
+    }
+  ]
+}` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================

@@ -18,7 +18,7 @@ import { createLLMClient, type LLMClient, type LLMProvider, getModelCapabilities
 import { runStep, type PipelineRunState } from './audit-step';
 import { getStep, getStepOrder, stepRegistry } from './step-registry';
 import { classifyLLMError } from './error-handler';
-import { shouldUseDigest, computeNarrativeDigest, extractSkeletonKeywords } from './narrative-processor';
+import { shouldUseDigest, shouldUseDigestForModel, computeNarrativeDigest, extractSkeletonKeywords, computeMaxDigestChars } from './narrative-processor';
 import type {
   AuditPhase,
   MediaType,
@@ -275,9 +275,12 @@ export async function runAuditPipeline(
       // After skeleton extraction, compute narrative digest for long texts.
       // Gate steps (L1–L4) will use the digest instead of the full narrative
       // when available — they access it via state.narrativeDigest || state.inputText.
+      // Use model-aware digest check: even texts below the 15K threshold may
+      // need compression for models with small context windows.
       if (phase === 'skeleton_extraction' && runState.skeleton) {
         const keywords = extractSkeletonKeywords(runState.skeleton);
-        const digest = shouldUseDigest(runState.inputText)
+        const needsDigest = shouldUseDigestForModel(runState.inputText, modelCaps.contextWindow);
+        const digest = needsDigest
           ? computeNarrativeDigest(runState.inputText, keywords)
           : null;
         runState = { ...runState, narrativeDigest: digest };
@@ -429,9 +432,11 @@ export async function resumeAuditFromStep(
       };
 
       // After skeleton extraction, compute narrative digest for long texts.
+      // Use model-aware digest check for the resume path as well.
       if (phase === 'skeleton_extraction' && runState.skeleton) {
         const keywords = extractSkeletonKeywords(runState.skeleton);
-        const digest = shouldUseDigest(runState.inputText)
+        const needsDigest = shouldUseDigestForModel(runState.inputText, modelCaps.contextWindow);
+        const digest = needsDigest
           ? computeNarrativeDigest(runState.inputText, keywords)
           : null;
         runState = { ...runState, narrativeDigest: digest };

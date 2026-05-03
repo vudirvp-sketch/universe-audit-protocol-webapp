@@ -242,6 +242,7 @@ export const stepGateL4: AuditStep<GateL4Output> = {
   maxRetries: 4,
   skipLLM: false,
   maxTokens: 16384,
+  minOutputTokens: 3072,
 };
 
 // ---------------------------------------------------------------------------
