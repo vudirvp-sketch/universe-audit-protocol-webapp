@@ -439,6 +439,10 @@ export interface AuditState {
   elapsedMs: number;
   stepTimings: Partial<Record<AuditPhase, number>>;
 
+  // Streaming & chunking — NOT persisted (session-only)
+  streamingText: string;
+  chunkingInfo: { current: number; total: number } | null;
+
   // Actions
   setPhase: (phase: AuditPhase) => void;
   setInputText: (text: string) => void;
@@ -466,6 +470,10 @@ export interface AuditState {
   setBlockedAt: (blockedAt: string | null) => void;
   setElapsedMs: (ms: number) => void;
   setStepTimings: (timings: Partial<Record<AuditPhase, number>>) => void;
+  setStreamingText: (text: string) => void;
+  appendStreamingText: (chunk: string) => void;
+  clearStreamingText: () => void;
+  setChunkingInfo: (info: { current: number; total: number } | null) => void;
   reset: () => void;
   editAndReset: () => void;
 }

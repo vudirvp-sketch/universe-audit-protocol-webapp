@@ -378,6 +378,7 @@ export async function runStep<TOutput = unknown>(
   llmClient: LLMClient,
   onProgress: (phase: AuditPhase) => void,
   modelCapabilities?: ModelCapabilities,
+  onChunk?: (text: string, delta: string) => void,
 ): Promise<PipelineRunState> {
   const stepStart = Date.now();
   onProgress(step.id);
@@ -455,10 +456,22 @@ export async function runStep<TOutput = unknown>(
 
   for (let attempt = 0; attempt <= step.maxRetries; attempt++) {
     try {
-      const response = await llmClient.chatCompletion({
-        messages: accumulatedMessages,
-        max_tokens: effectiveMaxTokens,
-      });
+      // Use streaming if onChunk callback is provided and the client supports it
+      let response: import('@/lib/llm-client').ChatCompletionResponse;
+      if (onChunk && typeof llmClient.chatCompletionStream === 'function') {
+        response = await llmClient.chatCompletionStream(
+          {
+            messages: accumulatedMessages,
+            max_tokens: effectiveMaxTokens,
+          },
+          onChunk,
+        );
+      } else {
+        response = await llmClient.chatCompletion({
+          messages: accumulatedMessages,
+          max_tokens: effectiveMaxTokens,
+        });
+      }
 
       // -----------------------------------------------------------------
       // Detect truncated response — the LLM hit the token ceiling

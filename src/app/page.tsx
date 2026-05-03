@@ -180,6 +180,9 @@ export default function Home() {
           const s = useAuditState.getState();
           s.setPhase(phase);
 
+          // Clear streaming text when transitioning to a new step
+          s.clearStreamingText();
+
           // Preserve original inputText in Zustand for correct resume
           if (state.inputText) {
             const currentInputText = s.inputText;
@@ -212,6 +215,10 @@ export default function Home() {
           if (state.stepTimings && Object.keys(state.stepTimings).length > 0) s.setStepTimings(state.stepTimings);
         },
         controller.signal,
+        // Streaming callback — update streamingText in Zustand for live UI display
+        (text: string, delta: string) => {
+          useAuditState.getState().setStreamingText(text);
+        },
       );
 
       // Update state with pipeline results
@@ -358,6 +365,10 @@ export default function Home() {
         },
         controller.signal,
         rpmLimit,
+        // Streaming callback for resume
+        (text: string, delta: string) => {
+          useAuditState.getState().setStreamingText(text);
+        },
       );
 
       // Update with final results

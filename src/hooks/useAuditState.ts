@@ -54,6 +54,9 @@ const initialState = {
   blockedAt: null as string | null,
   elapsedMs: 0,
   stepTimings: {} as Partial<Record<import('@/lib/audit/types').AuditPhase, number>>,
+  // Streaming & chunking — NOT persisted (session-only)
+  streamingText: '',
+  chunkingInfo: null as { current: number; total: number } | null,
 };
 
 const AUDIT_STATE_STORAGE_KEY = 'universe-audit-state';
@@ -134,10 +137,20 @@ export const useAuditState = create<AuditState>()(
   
   setStepTimings: (stepTimings: Partial<Record<import('@/lib/audit/types').AuditPhase, number>>) => set({ stepTimings }),
   
+  setStreamingText: (streamingText: string) => set({ streamingText }),
+  
+  appendStreamingText: (chunk: string) => set(state => ({ streamingText: state.streamingText + chunk })),
+  
+  clearStreamingText: () => set({ streamingText: '' }),
+  
+  setChunkingInfo: (chunkingInfo: { current: number; total: number } | null) => set({ chunkingInfo }),
+  
   reset: () => {
     set({
       ...initialState,
       checklist: filterByMediaType([...MASTER_CHECKLIST], initialState.mediaType),
+      streamingText: '',
+      chunkingInfo: null,
     });
   },
 
@@ -156,6 +169,9 @@ export const useAuditState = create<AuditState>()(
       authorProfile: state.authorProfile,
       // Reset checklist for current media type
       checklist: filterByMediaType([...MASTER_CHECKLIST], state.mediaType),
+      // Clear session-only state
+      streamingText: '',
+      chunkingInfo: null,
     }));
   },
 }),

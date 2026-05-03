@@ -833,8 +833,89 @@ export function createLLMClient(config: LLMClientConfig) {
     return normalizeProviderResponse(config.provider, responseData);
   }
 
+  /**
+   * Make a streaming chat completion request via the CORS proxy.
+   * Returns the full text after streaming completes, calling onChunk
+   * for each delta received from the provider.
+   *
+   * For HuggingFace (which doesn't support streaming), falls back to
+   * the buffered chatCompletion method.
+   */
+  async function chatCompletionStream(
+    options: ChatCompletionOptions,
+    onChunk: (text: string, delta: string) => void,
+  ): Promise<ChatCompletionResponse> {
+    const effectiveModel = options.model || model;
+
+    // HuggingFace doesn't support streaming — fallback to buffered
+    if (config.provider === 'huggingface') {
+      const buffered = await chatCompletion(options);
+      const content = buffered.choices?.[0]?.message?.content || '';
+      onChunk(content, content);
+      return buffered;
+    }
+
+    // Determine target URL
+    let targetUrl: string;
+    if (config.provider === 'custom' && config.baseUrl) {
+      targetUrl = `${config.baseUrl}/chat/completions`;
+    } else {
+      targetUrl = getProviderUrl(config.provider, effectiveModel);
+    }
+
+    if (!targetUrl) {
+      throw new Error(`URL провайдера не задан для «${config.provider}». Укажите baseUrl в настройках.`);
+    }
+
+    // Build the request body with stream: true injected
+    const rawPayload = buildProviderRequestBody(config.provider, options, effectiveModel);
+    const { streamChatCompletion, enableStreamingInPayload } = await import('./streaming');
+    const { payload: streamingPayload, targetUrl: streamingTargetUrl } =
+      enableStreamingInPayload(config.provider, rawPayload, targetUrl);
+
+    // Determine proxy URL
+    const proxyUrl = config.proxyUrl || '';
+    if (!proxyUrl) {
+      throw new Error(
+        'URL CORS-прокси не настроен. Укажите его в Настройки → Расширенные настройки → URL прокси.'
+      );
+    }
+
+    // Execute streaming request
+    const fullText = await streamChatCompletion({
+      provider: config.provider,
+      proxyUrl,
+      apiKey: config.apiKey,
+      targetUrl: streamingTargetUrl,
+      payload: streamingPayload,
+      signal: options.signal,
+      onChunk: (chunk) => {
+        onChunk(chunk.text, chunk.delta);
+      },
+    });
+
+    // Normalize the full text response into ChatCompletionResponse format
+    // We already have the full text, so create a synthetic response
+    const providerConfig = LLM_PROVIDERS[config.provider];
+    return {
+      id: `${config.provider}-stream-${Date.now()}`,
+      object: 'chat.completion',
+      created: Date.now(),
+      model: effectiveModel,
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: fullText,
+        },
+        finish_reason: 'stop',
+      }],
+    };
+  }
+
   return {
     chatCompletion,
+    chatCompletionStream,
     provider: config.provider,
     model,
     /**
@@ -910,3 +991,9 @@ export const AVAILABLE_PROVIDERS = Object.entries(LLM_PROVIDERS)
   }));
 
 export type LLMClient = ReturnType<typeof createLLMClient>;
+
+// ============================================================================
+// TOKEN ESTIMATION (re-exported from chunking.ts for convenience)
+// ============================================================================
+
+export { estimateTokens, canModelHandleInput } from './chunking';

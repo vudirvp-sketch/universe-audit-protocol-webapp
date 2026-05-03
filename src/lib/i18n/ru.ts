@@ -56,6 +56,10 @@ export const t = {
     profileDeterminedHint:
       'Ваш авторский профиль будет рассчитан при запуске аудита.',
     minCharsWarning: 'Минимум 50 символов для запуска аудита',
+    uploadFile: 'Загрузить файл',
+    supportedFormats: 'Поддерживаемые форматы: .txt, .md, .docx, .pdf',
+    fileUploaded: 'Файл загружен: {name} ({size} символов)',
+    fileReadError: 'Ошибка чтения файла',
   },
 
   phases: {
@@ -226,6 +230,8 @@ export const t = {
     percentComplete: '{percent}% выполнено',
     progress: 'Прогресс',
     auditStopped: 'Аудит остановлен',
+    streamingResponse: 'Ответ модели (streaming):',
+    chunkPart: 'Часть {current} из {total}',
   },
 
   settings: {

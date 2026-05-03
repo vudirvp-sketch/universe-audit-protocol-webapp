@@ -19,9 +19,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, Sparkles, BookOpen, Film, Gamepad2, Tv, Dices } from 'lucide-react';
+import { ChevronDown, ChevronUp, Sparkles, BookOpen, Film, Gamepad2, Tv, Dices, Upload, FileText, X } from 'lucide-react';
 import type { MediaType, AuditMode, AuthorProfileAnswers } from '@/lib/audit/types';
 import { t } from '@/lib/i18n/ru';
+import { readFileAsText, isFileSupported, type FileInfo } from '@/lib/file-reader';
 
 const mediaIcons: Record<MediaType, React.ReactNode> = {
   game: <Gamepad2 className="h-4 w-4" />,
@@ -52,6 +53,9 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
   } = useAuditState();
 
   const [authorQuizExpanded, setAuthorQuizExpanded] = React.useState(false);
+  const [uploadedFileInfo, setUploadedFileInfo] = React.useState<FileInfo | null>(null);
+  const [fileWarnings, setFileWarnings] = React.useState<string[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Debounce text input to avoid excessive Zustand writes on every keystroke
   const [localInput, setLocalInput] = React.useState(inputText);
@@ -128,6 +132,50 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
     }
   };
 
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check format
+    if (!isFileSupported(file)) {
+      setFileWarnings([`Неподдерживаемый формат. ${t.form.supportedFormats}`]);
+      return;
+    }
+
+    try {
+      const result = await readFileAsText(file);
+
+      if (result.text.trim()) {
+        // If there's already text, append (don't replace without asking)
+        const shouldReplace = localInput.trim().length === 0;
+        const newText = shouldReplace
+          ? result.text
+          : localInput + '\n\n---\n\n' + result.text;
+
+        setLocalInput(newText);
+        setInputText(newText);
+        setUploadedFileInfo(result.info);
+        setFileWarnings(result.warnings);
+      } else {
+        setFileWarnings(['Файл не содержит текста или текст не удалось извлечь.']);
+      }
+    } catch (err) {
+      setFileWarnings([err instanceof Error ? err.message : 'Ошибка чтения файла']);
+    }
+
+    // Reset file input so the same file can be re-uploaded
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Clear uploaded file info
+  const clearUploadedFile = () => {
+    setUploadedFileInfo(null);
+    setFileWarnings([]);
+  };
+
   return (
     <div className="space-y-6">
       {/* Narrative Input */}
@@ -143,7 +191,40 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="narrative">{t.form.narrativeLabel}</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="narrative">{t.form.narrativeLabel}</Label>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.md,.docx,.pdf"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="h-7 text-xs"
+                >
+                  <Upload className="h-3 w-3 mr-1" />
+                  {t.form.uploadFile}
+                </Button>
+                {uploadedFileInfo && (
+                  <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                    <FileText className="h-3 w-3" />
+                    {uploadedFileInfo.name} ({Math.round(uploadedFileInfo.charCount / 1000)}K)
+                    <button
+                      onClick={clearUploadedFile}
+                      className="ml-1 hover:text-destructive"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                )}
+              </div>
+            </div>
             <Textarea
               id="narrative"
               placeholder={t.form.narrativePlaceholder}
@@ -155,6 +236,11 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
             <p className="text-xs text-muted-foreground">
               {t.form.characterCount.replace('{count}', String(localInput.length))}
             </p>
+            {fileWarnings.map((warning, i) => (
+              <p key={i} className="text-xs text-amber-600 dark:text-amber-400">
+                {warning}
+              </p>
+            ))}
             {localInput.length >= VERY_LONG_TEXT_WARNING && (
               <p className="text-xs text-amber-600 dark:text-amber-400">
                 Очень длинный текст ({Math.round(localInput.length / 1000)}K символов). Обработка может занять больше времени, но ограничений нет — пайплайн автоматически сожмёт текст через дайджест.

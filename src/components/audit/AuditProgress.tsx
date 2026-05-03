@@ -48,6 +48,8 @@ export function AuditProgress() {
   const error = useAuditState((state) => state.error);
   const elapsedMs = useAuditState((state) => state.elapsedMs);
   const stepTimings = useAuditState((state) => state.stepTimings);
+  const streamingText = useAuditState((state) => state.streamingText);
+  const chunkingInfo = useAuditState((state) => state.chunkingInfo);
 
   // FIX: Use individual field selectors instead of object-returning selectors
   // to prevent re-render storms. selectGateStatus and selectOverallProgress
@@ -239,6 +241,31 @@ export function AuditProgress() {
             {t.gates.requirement}
           </p>
         </div>
+
+        {/* Streaming Text Display */}
+        {isLoading && streamingText && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{t.progress.streamingResponse}</span>
+              {chunkingInfo && (
+                <Badge variant="secondary" className="text-xs">
+                  {t.progress.chunkPart.replace('{current}', String(chunkingInfo.current)).replace('{total}', String(chunkingInfo.total))}
+                </Badge>
+              )}
+            </div>
+            <div className="max-h-40 overflow-y-auto rounded-md bg-muted/50 p-3 text-xs font-mono whitespace-pre-wrap break-words border">
+              {streamingText}
+            </div>
+          </div>
+        )}
+
+        {/* Chunking Info */}
+        {isLoading && chunkingInfo && !streamingText && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>{t.progress.chunkPart.replace('{current}', String(chunkingInfo.current)).replace('{total}', String(chunkingInfo.total))}</span>
+          </div>
+        )}
 
         {/* Error Display */}
         {error && (

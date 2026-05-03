@@ -47,3 +47,8 @@ export * from './json-sanitizer';
 export * from './input-sanitizer';
 export * from './error-handler';
 export * from './narrative-processor';
+
+// New modules — streaming and chunking support
+export { estimateTokens, canModelHandleInput, splitIntoChunks, getRecommendedChunkCount, DEFAULT_CHUNKING_CONFIG, type ChunkingConfig, type ChunkResult } from '../chunking';
+export { streamChatCompletion, enableStreamingInPayload, parseSSELines, extractDelta, type StreamingChunk, type OnChunkCallback, type StreamingConfig } from '../streaming';
+export { readFileAsText, isFileSupported, getSupportedFormatsDescription, type FileInfo, type ReadResult } from '../file-reader';

@@ -203,6 +203,7 @@ export async function runAuditPipeline(
   llmClientOrConfig: LLMClient | { provider: LLMProvider; apiKey: string; model?: string | null; proxyUrl?: string },
   onProgress?: (phase: AuditPhase, state: PipelineState) => void,
   abortSignal?: AbortSignal,
+  onChunk?: (text: string, delta: string) => void,
 ): Promise<PipelineState> {
   const overallStart = Date.now();
 
@@ -262,9 +263,12 @@ export async function runAuditPipeline(
       }
 
       // Execute the step via AuditStepRunner
+      // Pass onChunk callback for streaming support — the step will use
+      // chatCompletionStream if onChunk is provided, falling back to buffered
+      // chatCompletion if the client doesn't support streaming.
       runState = await runStep(step, runState, llmClient, (p) => {
         onProgress?.(p, mapToPipelineState(runState));
-      }, modelCaps);
+      }, modelCaps, onChunk);
 
       // Track timing
       const stepElapsed = Date.now() - stepStart;
@@ -342,6 +346,7 @@ export async function resumeAuditFromStep(
   onProgress?: (phase: AuditPhase, state: PipelineState) => void,
   abortSignal?: AbortSignal,
   rpmLimit?: number,
+  onChunk?: (text: string, delta: string) => void,
 ): Promise<PipelineState> {
   const overallStart = Date.now();
 
@@ -426,7 +431,7 @@ export async function resumeAuditFromStep(
 
       runState = await runStep(step, runState, llmClient, (p) => {
         onProgress?.(p, mapToPipelineState(runState));
-      }, modelCaps);
+      }, modelCaps, onChunk);
 
       const stepElapsed = Date.now() - stepStart;
       runState = {
