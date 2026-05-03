@@ -118,10 +118,12 @@ const PROVIDER_DEFAULT_CAPABILITIES: Partial<Record<LLMProvider, ModelCapabiliti
   mistral:    { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
 };
 
-/** Conservative defaults for unknown providers/models — the absolute floor */
+/** Conservative defaults for unknown providers/models — the absolute floor.
+ * Updated to 128K context / 8K output — modern models almost all have ≥128K.
+ */
 const DEFAULT_CAPABILITIES: ModelCapabilities = {
-  contextWindow: 32000,
-  maxOutputTokens: 4096,
+  contextWindow: 128000,
+  maxOutputTokens: 8192,
   supportsJSONMode: false,
   supportsSystemMessages: true,
 };
@@ -179,6 +181,7 @@ const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
  * Strips trailing date/version suffixes that providers often append.
  */
 function normalizeModelName(model: string): string {
+  if (!model) return '';
   // Strip common preview/date suffixes: -preview-NN-NN, -preview, -NN-NN-NN, etc.
   return model
     .replace(/-preview-\d{2}-\d{2,4}$/, '')   // gemini-2.5-flash-preview-05-20

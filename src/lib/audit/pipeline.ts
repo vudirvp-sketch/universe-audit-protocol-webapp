@@ -19,6 +19,8 @@ import { runStep, type PipelineRunState } from './audit-step';
 import { getStep, getStepOrder, stepRegistry } from './step-registry';
 import { classifyLLMError } from './error-handler';
 import { shouldUseDigest, shouldUseDigestForModel, computeNarrativeDigest, extractSkeletonKeywords, computeMaxDigestChars } from './narrative-processor';
+import { splitIntoChunks, canModelHandleInput, estimateTokens, DEFAULT_CHUNKING_CONFIG, type ChunkingConfig } from '@/lib/chunking';
+import { getPreSkeletonExtractionPrompt, getSkeletonSynthesisPrompt } from './prompts';
 import type {
   AuditPhase,
   MediaType,
@@ -78,6 +80,189 @@ function createRateLimiter(rpmLimit: number) {
   }
 
   return { enforce };
+}
+
+// ============================================================================
+// TWO-PASS SKELETON EXTRACTION
+// ============================================================================
+
+/**
+ * Two-pass skeleton extraction for long texts that require chunking.
+ *
+ * Pass 1 (Pre-skeleton): For each chunk, extract basic structural elements
+ *   (thematic law, root trauma, pillars) via parallel LLM calls.
+ * Pass 2 (Synthesis): Feed all pre-skeletons into the LLM and ask it to
+ *   synthesize a unified skeleton from the consolidated context.
+ *
+ * If chunking is not needed (text fits within model context), falls back
+ * to the standard single-pass skeleton extraction via runStep().
+ *
+ * @returns The updated PipelineRunState with skeleton extracted
+ */
+async function runTwoPassSkeletonExtraction(
+  runState: PipelineRunState,
+  llmClient: LLMClient,
+  modelCaps: ModelCapabilities,
+  enforceRateLimit: () => Promise<void>,
+  onProgress: (phase: AuditPhase) => void,
+  onChunk?: (text: string, delta: string) => void,
+): Promise<PipelineRunState> {
+  const inputChars = runState.inputText.length;
+  const promptOverhead = 4000; // Estimated tokens for system prompt + instructions
+
+  // Check if chunking is needed
+  const needsChunking = !canModelHandleInput(modelCaps.contextWindow, inputChars, promptOverhead);
+
+  if (!needsChunking) {
+    // Text fits within context — use standard single-pass extraction
+    const step = getStep('skeleton_extraction');
+    return runStep(step, runState, llmClient, onProgress, modelCaps, onChunk);
+  }
+
+  // ── Chunking IS needed — use two-pass strategy ──────────────────────────
+  const chunkingConfig: ChunkingConfig = {
+    modelContextWindow: modelCaps.contextWindow,
+    promptOverhead,
+    overlapRatio: 0.12,
+    minChunkSize: 500,
+  };
+
+  const chunks = splitIntoChunks(runState.inputText, chunkingConfig);
+
+  if (chunks.length <= 1) {
+    // Only one chunk after all — fall back to standard approach
+    const step = getStep('skeleton_extraction');
+    return runStep(step, runState, llmClient, onProgress, modelCaps, onChunk);
+  }
+
+  console.log(
+    `[Two-pass skeleton] Input: ${inputChars} chars → ${chunks.length} chunks ` +
+    `(context window: ${modelCaps.contextWindow} tokens)`
+  );
+
+  // ── Pass 1: Extract pre-skeleton from each chunk ────────────────────────
+  const preSkeletons: string[] = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    await enforceRateLimit();
+
+    const chunkPrompt = getPreSkeletonExtractionPrompt(
+      chunks[i].text,
+      chunks[i].index,
+      chunks[i].total,
+      runState.mediaType,
+    );
+
+    try {
+      const messages = [
+        {
+          role: 'system' as const,
+          content:
+            'Ты — эксперт-аудитор нарративов, реализующий Протокол Аудита Вселенной v10.0. ' +
+            'Отвечай ТОЛЬКО валидным JSON. Все описания и извлечённые элементы — на русском языке. ' +
+            'Enum-значения (emotionalEngine) — на английском. ' +
+            'Если элемент не удаётся извлечь, используй null для этого поля.',
+        },
+        { role: 'user' as const, content: chunkPrompt },
+      ];
+
+      // Use streaming if onChunk is provided, else buffered
+      let response;
+      if (onChunk && typeof llmClient.chatCompletionStream === 'function') {
+        response = await llmClient.chatCompletionStream(
+          { messages, max_tokens: 4096 },
+          onChunk,
+        );
+      } else {
+        response = await llmClient.chatCompletion({ messages, max_tokens: 4096 });
+      }
+
+      const content = response.choices?.[0]?.message?.content ?? '';
+      preSkeletons.push(content);
+    } catch (error) {
+      const classified = classifyLLMError(error);
+      console.warn(
+        `[Two-pass skeleton] Pass 1 chunk ${i + 1}/${chunks.length} failed: ${classified.userMessage}`
+      );
+      // Push empty result — the synthesis step will handle gaps
+      preSkeletons.push('');
+    }
+  }
+
+  // ── Pass 2: Synthesize unified skeleton from all pre-skeletons ──────────
+  await enforceRateLimit();
+
+  const synthesisPrompt = getSkeletonSynthesisPrompt(preSkeletons, runState.mediaType);
+  const synthesisMessages = [
+    {
+      role: 'system' as const,
+      content:
+        'Ты — эксперт-аудитор нарративов, реализующий Протокол Аудита Вселенной v10.0. ' +
+        'Отвечай ТОЛЬКО валидным JSON. Все описания и извлечённые элементы — на русском языке. ' +
+        'Enum-значения (emotionalEngine) — на английском. ' +
+        'Если элемент не удаётся извлечь, используй null для этого поля. ' +
+        'Проведи анализ слабостей на русском языке.',
+    },
+    { role: 'user' as const, content: synthesisPrompt },
+  ];
+
+  // Execute Pass 2 through the normal step flow (for retry/validation/gateCheck logic)
+  // We replace the buildPrompt to use our synthesis prompt instead
+  const step = getStep('skeleton_extraction');
+
+  // Create a modified state with the synthesis context baked in
+  // The standard stepSkeleton will be called, but we use a custom approach:
+  // Run the synthesis LLM call, then pass the result through parseResponse/validate/gateCheck/reduce
+  let synthesisContent = '';
+
+  try {
+    let response;
+    if (onChunk && typeof llmClient.chatCompletionStream === 'function') {
+      response = await llmClient.chatCompletionStream(
+        { messages: synthesisMessages, max_tokens: step.maxTokens },
+        onChunk,
+      );
+    } else {
+      response = await llmClient.chatCompletion({
+        messages: synthesisMessages,
+        max_tokens: step.maxTokens,
+      });
+    }
+
+    synthesisContent = response.choices?.[0]?.message?.content ?? '';
+  } catch (error) {
+    const classified = classifyLLMError(error);
+    throw new Error(
+      `Ошибка при синтезе скелета из ${chunks.length} фрагментов: ${classified.userMessage}`
+    );
+  }
+
+  // Parse, validate, gateCheck, and reduce using the step's own methods
+  const parsed = step.parseResponse(synthesisContent);
+  const validation = step.validate(parsed);
+
+  if (!validation.valid) {
+    // If synthesis output fails validation, fall back to single-pass on digest
+    console.warn(
+      `[Two-pass skeleton] Synthesis output failed validation: ${validation.errors.join('; ')}. ` +
+      'Falling back to single-pass on digest.'
+    );
+    return runStep(step, runState, llmClient, onProgress, modelCaps, onChunk);
+  }
+
+  const decision = step.gateCheck(parsed, runState);
+  const newState = step.reduce(runState, parsed);
+
+  if (!decision.passed) {
+    return {
+      ...newState,
+      phase: 'blocked',
+      error: decision.reason ?? 'Извлечение скелета не прошло',
+      blockedAt: 'skeleton_extraction',
+    };
+  }
+
+  return newState;
 }
 
 // ============================================================================
@@ -263,12 +448,21 @@ export async function runAuditPipeline(
       }
 
       // Execute the step via AuditStepRunner
+      // For skeleton_extraction with long texts, use two-pass strategy
       // Pass onChunk callback for streaming support — the step will use
       // chatCompletionStream if onChunk is provided, falling back to buffered
       // chatCompletion if the client doesn't support streaming.
-      runState = await runStep(step, runState, llmClient, (p) => {
-        onProgress?.(p, mapToPipelineState(runState));
-      }, modelCaps, onChunk);
+      if (phase === 'skeleton_extraction') {
+        runState = await runTwoPassSkeletonExtraction(
+          runState, llmClient, modelCaps, enforceRateLimit,
+          (p) => { onProgress?.(p, mapToPipelineState(runState)); },
+          onChunk,
+        );
+      } else {
+        runState = await runStep(step, runState, llmClient, (p) => {
+          onProgress?.(p, mapToPipelineState(runState));
+        }, modelCaps, onChunk);
+      }
 
       // Track timing
       const stepElapsed = Date.now() - stepStart;
@@ -429,9 +623,18 @@ export async function resumeAuditFromStep(
         await enforceRateLimitResume();
       }
 
-      runState = await runStep(step, runState, llmClient, (p) => {
-        onProgress?.(p, mapToPipelineState(runState));
-      }, modelCaps, onChunk);
+      // For skeleton_extraction with long texts, use two-pass strategy (same as main pipeline)
+      if (phase === 'skeleton_extraction') {
+        runState = await runTwoPassSkeletonExtraction(
+          runState, llmClient, modelCaps, enforceRateLimitResume,
+          (p) => { onProgress?.(p, mapToPipelineState(runState)); },
+          onChunk,
+        );
+      } else {
+        runState = await runStep(step, runState, llmClient, (p) => {
+          onProgress?.(p, mapToPipelineState(runState));
+        }, modelCaps, onChunk);
+      }
 
       const stepElapsed = Date.now() - stepStart;
       runState = {

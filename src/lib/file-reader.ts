@@ -152,7 +152,8 @@ async function readPdf(file: File): Promise<string> {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items
-        .map((item: { str?: string }) => item.str || '')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((item: any) => item.str || '')
         .join(' ');
       textParts.push(pageText);
     }

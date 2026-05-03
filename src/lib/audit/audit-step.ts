@@ -145,7 +145,7 @@ export interface AuditStep<TOutput = unknown> {
   gateCheck: (output: TOutput, state: PipelineRunState) => GateDecision;
 
   /** How this step mutates the audit state */
-  reduce: (state: PipelineRunState, output: TOutput) => PipelineRunState;
+  reduce: (state: PipelineRunState, output: TOutput, gateData?: unknown) => PipelineRunState;
 
   /**
    * Maximum retries on parse/validation failure.
@@ -405,7 +405,8 @@ export async function runStep<TOutput = unknown>(
     }
 
     const decision = step.gateCheck(computed, state);
-    const newState = step.reduce(state, computed);
+    const gateData = (decision as GateDecision & { gateData?: unknown }).gateData;
+    const newState = step.reduce(state, computed, gateData);
 
     const elapsed = Date.now() - stepStart;
 
@@ -520,7 +521,8 @@ export async function runStep<TOutput = unknown>(
       if (validation.valid) {
         // Output is valid — run gate check and reduce
         const decision = step.gateCheck(parsed, state);
-        const newState = step.reduce(state, parsed);
+        const gateData = (decision as GateDecision & { gateData?: unknown }).gateData;
+        const newState = step.reduce(state, parsed, gateData);
         const elapsed = Date.now() - stepStart;
 
         if (!decision.passed) {

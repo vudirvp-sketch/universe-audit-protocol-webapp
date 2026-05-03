@@ -99,6 +99,7 @@ export default function Home() {
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const { provider, apiKey, model, proxyUrl, rpmLimit } = useSettings();
   const [isSettingsLoaded, setIsSettingsLoaded] = React.useState(false);
+  const [proxyUnavailable, setProxyUnavailable] = React.useState(false);
 
   // Rehydrate settings from localStorage (Zustand persist with skipHydration)
   React.useEffect(() => {
@@ -114,6 +115,28 @@ export default function Home() {
     }
     return unsub;
   }, []);
+
+  // ── Health-check: silent background request to proxy /health endpoint ────
+  // Runs once on mount (after hydration). If the proxy is unreachable,
+  // shows a non-blocking banner. Never blocks the UI or prevents interaction.
+  React.useEffect(() => {
+    if (!proxyUrl) return;
+    const checkHealth = async () => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const response = await fetch(`${proxyUrl}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        setProxyUnavailable(!response.ok);
+      } catch {
+        setProxyUnavailable(true);
+      }
+    };
+    checkHealth();
+  }, [proxyUrl]);
 
   // Toggle theme
   React.useEffect(() => {
@@ -436,6 +459,13 @@ export default function Home() {
   return (
     <ErrorBoundary>
     <div className="min-h-screen bg-background text-foreground">
+      {/* Proxy health-check banner — non-blocking warning */}
+      {proxyUnavailable && (
+        <div className="bg-amber-600/90 text-white text-center py-2 px-4 text-sm font-medium">
+          {t.settings.proxyHealthCheckBanner}
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-16 items-center justify-between">
