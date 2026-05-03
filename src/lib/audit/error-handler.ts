@@ -19,6 +19,7 @@ export type AuditErrorType =
   | 'cors'
   | 'auth'
   | 'rate_limit'
+  | 'provider_overloaded'
   | 'provider'
   | 'timeout'
   | 'invalid_json'
@@ -47,15 +48,17 @@ export interface AuditError {
  * Classify an unknown error from an LLM call into a structured AuditError.
  *
  * Classification priority (first match wins):
- *   1. TypeError with 'fetch' in message → network
- *   2. Response with status 401           → auth
- *   3. Response with status 429           → rate_limit
- *   4. Response with status 500           → provider
- *   5. Error message with 'CORS'/'proxy'  → cors
- *   6. Error message with 'timeout'       → timeout
- *   7. Error message with 'JSON'/'parse'  → invalid_json
- *   8. Error message with 'truncated'/'finish_reason' → truncated
- *   9. Default                            → provider
+ *   1.  TypeError with 'fetch' in message → network
+ *   2.  Response with status 401           → auth
+ *   3.  Response with status 429           → rate_limit
+ *   4.  Response with status 503 / message with 'overloaded'/'high demand' → provider_overloaded
+ *   5.  Response with status 502 / message with 'bad gateway' → provider_overloaded
+ *   6.  Response with status 500           → provider
+ *   7.  Error message with 'CORS'/'proxy'  → cors
+ *   8.  Error message with 'timeout'       → timeout
+ *   9.  Error message with 'JSON'/'parse'  → invalid_json
+ *   10. Error message with 'truncated'/'finish_reason' → truncated
+ *   11. Default                            → provider
  */
 export function classifyLLMError(error: unknown): AuditError {
   // Extract a message string for pattern matching
@@ -100,7 +103,29 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 4. Response with status 500 — provider-side error
+  // 4. Response with status 503 — service unavailable (model overloaded)
+  if (isResponseWithStatus(error, 503) || messageLower.includes('503') || messageLower.includes('overloaded') || messageLower.includes('high demand') || messageLower.includes('unavailable')) {
+    return {
+      type: 'provider_overloaded',
+      userMessage:
+        'Модель LLM-провайдера перегружена (503). Это временная проблема — система автоматически повторит запрос через несколько секунд.',
+      retryable: true,
+      status: 503,
+    };
+  }
+
+  // 5. Response with status 502 — bad gateway (upstream timeout)
+  if (isResponseWithStatus(error, 502) || messageLower.includes('502') || messageLower.includes('bad gateway')) {
+    return {
+      type: 'provider_overloaded',
+      userMessage:
+        'Шлюз LLM-провайдера временно недоступен (502). Это временная проблема — система автоматически повторит запрос.',
+      retryable: true,
+      status: 502,
+    };
+  }
+
+  // 6. Response with status 500 — provider-side error
   if (isResponseWithStatus(error, 500)) {
     return {
       type: 'provider',
@@ -111,7 +136,7 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 5. CORS / proxy errors — typically from the Cloudflare Worker
+  // 7. CORS / proxy errors — typically from the Cloudflare Worker
   if (messageLower.includes('cors') || messageLower.includes('proxy')) {
     return {
       type: 'cors',
@@ -121,7 +146,7 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 6. Timeout errors
+  // 8. Timeout errors
   if (messageLower.includes('timeout')) {
     return {
       type: 'timeout',
@@ -131,7 +156,7 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 7. JSON parse errors — LLM returned malformed output
+  // 9. JSON parse errors — LLM returned malformed output
   if (messageLower.includes('json') || messageLower.includes('parse')) {
     return {
       type: 'invalid_json',
@@ -141,7 +166,7 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 8. Truncated response — finish_reason was 'length'
+  // 10. Truncated response — finish_reason was 'length'
   if (messageLower.includes('truncated') || messageLower.includes('finish_reason')) {
     return {
       type: 'truncated',
@@ -151,7 +176,7 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 9. Default — unclassified provider error
+  // 11. Default — unclassified provider error
   return {
     type: 'provider',
     userMessage:

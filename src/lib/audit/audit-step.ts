@@ -361,10 +361,24 @@ export async function runStep<TOutput = unknown>(
         );
       }
 
+      // Exponential backoff for transient server errors (503, 502, 429, timeout)
+      // These need breathing room before retrying — hammering an overloaded
+      // server will only make it worse.
+      if (classified.type === 'provider_overloaded' || classified.type === 'rate_limit' || classified.type === 'timeout') {
+        const backoffSeconds = Math.min(10 * Math.pow(2, attempt), 60); // 10s, 20s, 40s, 60s max
+        console.warn(
+          `[Transient error] Step ${step.id}, attempt ${attempt + 1}/${step.maxRetries + 1}: ` +
+          `${classified.type} — waiting ${backoffSeconds}s before retry...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffSeconds * 1000));
+      }
+
       // Retry on transient errors — append a contextual retry prompt
-      const retryPrompt = classified.type === 'rate_limit'
-        ? 'Сервер перегружен. Подождите немного и повторите ответ в формате валидного JSON.'
-        : classified.type === 'timeout'
+      const retryPrompt = classified.type === 'provider_overloaded'
+        ? 'Модель была перегружена. Повторите ответ в формате валидного JSON.'
+        : classified.type === 'rate_limit'
+          ? 'Сервер перегружен. Подождите немного и повторите ответ в формате валидного JSON.'
+          : classified.type === 'timeout'
           ? 'Ответ занял слишком много времени. Пожалуйста, ответьте более кратко в формате валидного JSON.'
           : classified.type === 'invalid_json'
             ? 'Ваш ответ не был валидным JSON. Пожалуйста, ответьте строго в формате валидного JSON.'

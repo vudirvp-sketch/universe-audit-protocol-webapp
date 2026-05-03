@@ -58,10 +58,14 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
 };
 
-// Server-side 429 retry configuration
-// Total max wait: 3s + 9s = 12s (well within 30s Worker timeout)
+// Server-side retry configuration for transient errors (429 + 5xx)
+// Total max wait for 429: 3s + 9s = 12s
+// Total max wait for 5xx: 2s + 5s = 7s
+// All within 30s Worker timeout
 const MAX_429_RETRIES = 2;
 const RETRY_BACKOFF_MS = [3000, 9000]; // 3s, 9s
+const MAX_5XX_RETRIES = 2;
+const RETRY_5XX_BACKOFF_MS = [2000, 5000]; // 2s, 5s
 
 /**
  * Sleep for the specified number of milliseconds.
@@ -96,68 +100,87 @@ function is429ModelNotFound(body, provider) {
 }
 
 /**
- * Attempt a fetch with automatic 429 retry and exponential backoff.
- * Returns the final Response object (may still be 429 if all retries exhausted).
- * Skips retries if the 429 body indicates a model-not-found error.
+ * Check if an HTTP status is a transient server error worth retrying.
+ * 503 = Service Unavailable (model overloaded, usually temporary)
+ * 502 = Bad Gateway (upstream timeout, usually temporary)
+ * @param {number} status - HTTP status code
+ * @returns {boolean}
+ */
+function isTransient5xx(status) {
+  return status === 503 || status === 502;
+}
+
+/**
+ * Attempt a fetch with automatic retry for 429 rate limits and 5xx transient errors.
+ * Returns the final Response object (may still be 429/5xx if all retries exhausted).
+ * Skips 429 retries if the body indicates a model-not-found error.
+ * For 5xx errors, retries with exponential backoff since they are typically temporary.
  * @param {string} url - Target URL
  * @param {RequestInit} options - Fetch options
- * @param {number} maxRetries - Maximum number of retries (default: MAX_429_RETRIES)
+ * @param {number} max429Retries - Maximum number of 429 retries (default: MAX_429_RETRIES)
+ * @param {number} max5xxRetries - Maximum number of 5xx retries (default: MAX_5XX_RETRIES)
  * @param {string} provider - Provider identifier (for 429 body inspection)
  */
-async function fetchWith429Retry(url, options, maxRetries = MAX_429_RETRIES, provider = '') {
+async function fetchWithRetry(url, options, max429Retries = MAX_429_RETRIES, max5xxRetries = MAX_5XX_RETRIES, provider = '') {
   let lastResponse = null;
+  let retry5xxAttempt = 0;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt429 = 0; ; attempt429++) {
     lastResponse = await fetch(url, options);
 
-    // If not 429, return immediately
-    if (lastResponse.status !== 429) {
-      return lastResponse;
+    // --- Handle 5xx transient errors (503, 502) ---
+    if (isTransient5xx(lastResponse.status) && retry5xxAttempt < max5xxRetries) {
+      const waitMs = Math.min(RETRY_5XX_BACKOFF_MS[retry5xxAttempt] || 5000, 10000);
+      console.warn(`[Proxy 5xx] ${lastResponse.status} from upstream — retry ${retry5xxAttempt + 1}/${max5xxRetries} in ${waitMs}ms`);
+      await sleep(waitMs);
+      retry5xxAttempt++;
+      attempt429--; // Don't count 5xx retries against 429 budget
+      continue;
     }
 
-    // Read body to check if this is a model-not-found error disguised as 429
-    const bodyText = await lastResponse.text();
-    if (is429ModelNotFound(bodyText, provider)) {
-      // Return a new Response with the same body so rewrite429IfModelNotFound
-      // can convert it to 400 downstream. Do NOT retry — it's not rate limit.
-      return new Response(bodyText, {
-        status: 429,
-        headers: lastResponse.headers,
-      });
-    }
-
-    // If this was the last retry attempt, return the 429 response
-    if (attempt >= maxRetries) {
-      // Reconstruct response with the already-read body
-      return new Response(bodyText, {
-        status: lastResponse.status,
-        headers: lastResponse.headers,
-      });
-    }
-
-    // Determine wait time: prefer Retry-After header, fall back to backoff schedule
-    const retryAfterHeader = lastResponse.headers.get('retry-after');
-    let waitMs;
-
-    if (retryAfterHeader) {
-      const parsed = parseInt(retryAfterHeader, 10);
-      if (!isNaN(parsed) && parsed > 0) {
-        waitMs = parsed * 1000;
-      } else {
-        const retryDate = new Date(retryAfterHeader).getTime();
-        waitMs = Math.max(1000, retryDate - Date.now());
+    // --- Handle 429 rate limit ---
+    if (lastResponse.status === 429) {
+      // Read body to check if this is a model-not-found error disguised as 429
+      const bodyText = await lastResponse.text();
+      if (is429ModelNotFound(bodyText, provider)) {
+        return new Response(bodyText, {
+          status: 429,
+          headers: lastResponse.headers,
+        });
       }
-    } else {
-      waitMs = RETRY_BACKOFF_MS[attempt] || 9000;
+
+      // If 429 retries exhausted, return the 429 response
+      if (attempt429 >= max429Retries) {
+        return new Response(bodyText, {
+          status: lastResponse.status,
+          headers: lastResponse.headers,
+        });
+      }
+
+      // Determine wait time: prefer Retry-After header, fall back to backoff schedule
+      const retryAfterHeader = lastResponse.headers.get('retry-after');
+      let waitMs;
+
+      if (retryAfterHeader) {
+        const parsed = parseInt(retryAfterHeader, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          waitMs = parsed * 1000;
+        } else {
+          const retryDate = new Date(retryAfterHeader).getTime();
+          waitMs = Math.max(1000, retryDate - Date.now());
+        }
+      } else {
+        waitMs = RETRY_BACKOFF_MS[attempt429] || 9000;
+      }
+
+      waitMs = Math.min(waitMs, 10000);
+      await sleep(waitMs);
+      continue;
     }
 
-    // Cap wait at 10s per attempt to stay within Worker timeout budget
-    waitMs = Math.min(waitMs, 10000);
-
-    await sleep(waitMs);
+    // --- Non-retryable status: return immediately ---
+    return lastResponse;
   }
-
-  return lastResponse;
 }
 
 /**
@@ -243,13 +266,14 @@ export default {
         apiKey,
       });
 
-      // Forward to target — with or without 429 retry based on X-No-Retry header
-      const maxRetries = skipRetry ? 0 : MAX_429_RETRIES;
-      const response = await fetchWith429Retry(transformed.targetUrl, {
+      // Forward to target — with or without retry based on X-No-Retry header
+      const max429Retries = skipRetry ? 0 : MAX_429_RETRIES;
+      const max5xxRetries = skipRetry ? 0 : MAX_5XX_RETRIES;
+      const response = await fetchWithRetry(transformed.targetUrl, {
         method: 'POST',
         headers: transformed.headers,
         body: transformed.body,
-      }, maxRetries, provider);
+      }, max429Retries, max5xxRetries, provider);
 
       // Return with CORS headers
       const responseData = await response.text();
@@ -264,9 +288,9 @@ export default {
         ...CORS_HEADERS,
       };
 
-      // If 429, add a helpful header so the client knows the proxy already retried
-      if (rewritten.status === 429) {
-        responseHeaders['X-Proxy-Retried'] = String(skipRetry ? 0 : MAX_429_RETRIES);
+      // If 429 or 5xx, add a helpful header so the client knows the proxy already retried
+      if (rewritten.status === 429 || isTransient5xx(rewritten.status)) {
+        responseHeaders['X-Proxy-Retried'] = String(skipRetry ? 0 : (rewritten.status === 429 ? MAX_429_RETRIES : MAX_5XX_RETRIES));
       }
 
       return new Response(rewritten.body, {

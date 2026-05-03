@@ -440,10 +440,10 @@ export function createLLMClient(config: LLMClientConfig) {
       fetchHeaders['X-No-Retry'] = 'true';
     }
 
-    // 429 Rate Limit auto-retry with exponential backoff + countdown
-    // The Worker proxy already retries 429s 2 times server-side,
+    // 429 Rate Limit + 5xx transient error auto-retry with exponential backoff
+    // The Worker proxy already retries 429s and 503s server-side,
     // so client retries here are a second line of defense.
-    let last429Error: Error | null = null;
+    let lastError: Error | null = null;
     for (let retryAttempt = 0; retryAttempt <= max429Retries; retryAttempt++) {
       const response = await fetch(proxyUrl, {
         method: 'POST',
@@ -483,13 +483,12 @@ export function createLLMClient(config: LLMClientConfig) {
           console.warn(
             `[429 Rate Limit] Retry ${retryAttempt + 1}/${max429Retries}${proxyRetryInfo} — waiting ${waitSeconds}s before retry...`
           );
-          // Wait with countdown — allows UI to show progress if needed
           await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
           continue;
         }
 
         // Final 429 after all retries — throw with clear Russian message
-        last429Error = new Error(
+        lastError = new Error(
           `Превышен лимит запросов к провайдеру «${providerConfig.name}»${proxyRetryInfo}. ` +
           `Все попытки повтора исчерпаны (${max429Retries}). ` +
           `Рекомендации:
@@ -502,7 +501,35 @@ export function createLLMClient(config: LLMClientConfig) {
 ` +
           `4. Используйте платный API-ключ для более высоких лимитов`
         );
-        throw last429Error;
+        throw lastError;
+      }
+
+      // Handle 503/502 transient server errors with auto-retry
+      // These are typically temporary — model overloaded, upstream timeout, etc.
+      if (response.status === 503 || response.status === 502) {
+        const proxyRetries = response.headers.get('X-Proxy-Retried');
+        const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
+
+        // Exponential backoff: 15s, 30s, 60s — 503 usually needs longer waits
+        const waitSeconds = Math.min(15 * Math.pow(2, retryAttempt), 90);
+
+        if (retryAttempt < max429Retries) {
+          const statusLabel = response.status === 503 ? 'Сервер перегружен (503)' : 'Шлюз недоступен (502)';
+          console.warn(
+            `[${statusLabel}] Retry ${retryAttempt + 1}/${max429Retries}${proxyRetryInfo} — waiting ${waitSeconds}s before retry...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+          continue;
+        }
+
+        // Final 503/502 after all retries
+        const errorBody = await response.text().catch(() => '');
+        lastError = new Error(
+          `Провайдер «${providerConfig.name}» временно недоступен (${response.status})${proxyRetryInfo}. ` +
+          `Модель перегружена — попробуйте позже или смените модель/провайдера. ` +
+          (errorBody ? `Детали: ${errorBody}` : '')
+        );
+        throw lastError;
       }
 
       if (!response.ok) {
@@ -516,7 +543,7 @@ export function createLLMClient(config: LLMClientConfig) {
     }
 
     // Should not reach here, but just in case
-    throw last429Error || new Error('Неожиданная ошибка при обработке запроса к LLM.');
+    throw lastError || new Error('Неожиданная ошибка при обработке запроса к LLM.');
   }
 
   return {
