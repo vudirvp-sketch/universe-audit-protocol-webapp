@@ -4,3 +4,12 @@ compatibility_date = "2024-01-01"
 
 # Deploy with: cd worker && npx wrangler deploy
 # Workers on *.workers.dev are automatically routed — no explicit routes needed.
+
+# Worker limits — increased for streaming and long requests
+[limits]
+cpu_ms = 50000
+
+# Environment variables (NOT secrets — just config)
+[vars]
+MAX_REQUESTS_PER_MINUTE = "60"
+MAX_BODY_SIZE_BYTES = "2097152"

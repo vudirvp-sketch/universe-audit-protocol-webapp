@@ -21,30 +21,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import { t } from '@/lib/i18n/ru';
 import { Label } from '@/components/ui/label';
-
-// Classification display helpers
-const CLASSIFICATION_COLORS: Record<string, string> = {
-  cult_masterpiece: 'bg-purple-500 text-white',
-  powerful: 'bg-green-500 text-white',
-  living_weak_soul: 'bg-yellow-500 text-black',
-  decoration: 'bg-red-500 text-white',
-};
-
-const CLASSIFICATION_LABELS: Record<string, string> = {
-  cult_masterpiece: t.report.cult_masterpiece,
-  powerful: t.report.powerful,
-  living_weak_soul: t.report.living_weak_soul,
-  decoration: t.report.decoration,
-};
-
-// Derive classification from percentage — MUST match scoring-algorithm.ts thresholds
-// scoring-algorithm.ts (calculateOverallScore): 90/75/55
-function getClassification(percentage: number): string {
-  if (percentage >= 90) return 'cult_masterpiece';
-  if (percentage >= 75) return 'powerful';
-  if (percentage >= 55) return 'living_weak_soul';
-  return 'decoration';
-}
+import { getClassification, CLASSIFICATION_COLORS, CLASSIFICATION_LABELS } from '@/lib/audit/scoring-algorithm';
 
 export function ReportDisplay() {
   const report = useAuditState((state) => state.report);
@@ -66,7 +43,7 @@ export function ReportDisplay() {
   }
 
   const percentage = report.finalScore?.percentage ?? 0;
-  const classification = getClassification(percentage);
+  const classification = getClassification(percentage).key;
 
   return (
     <Card className="h-full">
@@ -172,7 +149,7 @@ function HumanReadableReport({
     if (report.finalScore) {
       lines.push(`## ${t.report.finalScore}`);
       lines.push(`**${report.finalScore.total}** (${percentage}%)`);
-      lines.push(`**${CLASSIFICATION_LABELS[classification] || classification}**`);
+      lines.push(`**${CLASSIFICATION_LABELS[classification]}**`);
     }
 
     return lines.join('\n');
@@ -257,7 +234,7 @@ function HumanReadableReport({
             <p className="text-muted-foreground">{t.report.protocolVersion}</p>
           </div>
           <Badge className={CLASSIFICATION_COLORS[classification]}>
-            {CLASSIFICATION_LABELS[classification] || classification}
+            {CLASSIFICATION_LABELS[classification]}
           </Badge>
         </div>
 
@@ -460,8 +437,8 @@ function HumanReadableReport({
                   </div>
                   <div className="text-lg text-muted-foreground">{percentage}%</div>
                 </div>
-                <Badge className={`${CLASSIFICATION_COLORS[classification] || ''} text-lg px-4 py-2`}>
-                  {CLASSIFICATION_LABELS[classification] || classification}
+                <Badge className={`${CLASSIFICATION_COLORS[classification]} text-lg px-4 py-2`}>
+                  {CLASSIFICATION_LABELS[classification]}
                 </Badge>
               </div>
             </CardContent>

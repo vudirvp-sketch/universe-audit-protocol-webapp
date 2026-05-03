@@ -42,7 +42,7 @@ import type { AuditPhase } from '@/lib/audit/types';
 import { runAuditPipeline, resumeAuditFromStep, type PipelineState } from '@/lib/audit/pipeline';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { BlockedState } from '@/components/audit/BlockedState';
-import { useSettings } from '@/hooks/useSettings';
+import { useSettings, rehydrateSettings, hasSettingsHydrated } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n/ru';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 
@@ -97,14 +97,23 @@ export default function Home() {
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
-  const { provider, apiKey, model, proxyUrl, rpmLimit, loadSettings, isLoaded } = useSettings();
+  const { provider, apiKey, model, proxyUrl, rpmLimit } = useSettings();
+  const [isSettingsLoaded, setIsSettingsLoaded] = React.useState(false);
 
-  // Load settings on mount
+  // Rehydrate settings from localStorage (Zustand persist with skipHydration)
   React.useEffect(() => {
-    if (!isLoaded) {
-      loadSettings();
+    rehydrateSettings();
+  }, []);
+
+  React.useEffect(() => {
+    const unsub = useSettings.persist.onFinishHydration(() => {
+      setIsSettingsLoaded(true);
+    });
+    if (hasSettingsHydrated()) {
+      setIsSettingsLoaded(true);
     }
-  }, [isLoaded, loadSettings]);
+    return unsub;
+  }, []);
 
   // Toggle theme
   React.useEffect(() => {

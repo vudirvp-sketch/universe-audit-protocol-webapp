@@ -1,7 +1,8 @@
-// Settings hook for managing LLM provider, API key, and proxy URL in localStorage
-// All config is client-side — no environment variables or server-side references
-import React from 'react';
+// Settings hook for managing LLM provider, API key, and proxy URL
+// Uses Zustand persist middleware with skipHydration (same pattern as useAuditState)
+// to prevent React hydration mismatch in static-export Next.js apps.
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { LLMProvider } from '@/lib/llm-client';
 
 const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
@@ -36,7 +37,6 @@ interface SettingsState extends AppSettings {
   isLoaded: boolean;
 
   // Actions
-  loadSettings: () => void;
   setProvider: (provider: LLMProvider) => void;
   setApiKey: (key: string | null) => void;
   setModel: (model: string | null) => void;
@@ -64,136 +64,83 @@ const DEFAULT_SETTINGS: AppSettings = {
   rpmLimit: PROVIDER_RPM_DEFAULTS.zai,
 };
 
-export const useSettings = create<SettingsState>((set, get) => ({
-  ...DEFAULT_SETTINGS,
-  isLoaded: false,
+export const useSettings = create<SettingsState>()(
+  persist(
+    (set, get) => ({
+      ...DEFAULT_SETTINGS,
+      isLoaded: false,
 
-  loadSettings: () => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as Partial<AppSettings>;
-        const provider = parsed.provider || DEFAULT_SETTINGS.provider;
+      setProvider: (provider: LLMProvider) => {
         set({
           provider,
-          apiKey: parsed.apiKey || null,
-          model: parsed.model || null,
-          proxyUrl: parsed.proxyUrl || PROXY_URL_DEFAULT,
-          rpmLimit: parsed.rpmLimit || PROVIDER_RPM_DEFAULTS[provider] || DEFAULT_SETTINGS.rpmLimit,
-          isLoaded: true,
+          model: null, // Reset model when provider changes
+          rpmLimit: PROVIDER_RPM_DEFAULTS[provider] || get().rpmLimit,
         });
-      } else {
+      },
+
+      setApiKey: (apiKey: string | null) => {
+        set({ apiKey });
+      },
+
+      setModel: (model: string | null) => {
+        set({ model });
+      },
+
+      setProxyUrl: (proxyUrl: string) => {
+        set({ proxyUrl });
+      },
+
+      setRpmLimit: (rpmLimit: number) => {
+        set({ rpmLimit });
+      },
+
+      updateSettings: (settings: Partial<AppSettings>) => {
+        set(settings);
+      },
+
+      clearSettings: () => {
         set({ ...DEFAULT_SETTINGS, isLoaded: true });
-      }
-    } catch {
-      set({ ...DEFAULT_SETTINGS, isLoaded: true });
+      },
+    }),
+    {
+      name: SETTINGS_STORAGE_KEY,
+      // CRITICAL: skipHydration prevents React Error #185 (hydration mismatch).
+      // Same pattern as useAuditState — rehydrate() is called in useEffect in page.tsx.
+      skipHydration: true,
+      // Only persist AppSettings fields (not isLoaded or action functions)
+      partialize: (state) => ({
+        provider: state.provider,
+        apiKey: state.apiKey,
+        model: state.model,
+        proxyUrl: state.proxyUrl,
+        rpmLimit: state.rpmLimit,
+      }),
+      // After rehydration, mark as loaded and apply defaults for missing fields
+      onRehydrateStorage: () => {
+        return (state) => {
+          if (state) {
+            // Apply PROXY_URL_DEFAULT if proxyUrl is empty
+            if (!state.proxyUrl) {
+              state.proxyUrl = PROXY_URL_DEFAULT;
+            }
+            // Apply provider-specific RPM if rpmLimit is 0 or missing
+            if (!state.rpmLimit || state.rpmLimit <= 0) {
+              state.rpmLimit = PROVIDER_RPM_DEFAULTS[state.provider] || PROVIDER_RPM_DEFAULTS.zai;
+            }
+            state.isLoaded = true;
+          }
+        };
+      },
     }
-  },
+  )
+);
 
-  setProvider: (provider: LLMProvider) => {
-    const state = get();
-    const newSettings = {
-      ...state,
-      provider,
-      model: null, // Reset model when provider changes
-      rpmLimit: PROVIDER_RPM_DEFAULTS[provider] || state.rpmLimit,
-    };
-    saveToStorage(newSettings);
-    set(newSettings);
-  },
+// Exported for use in page.tsx to trigger rehydration on mount
+export const rehydrateSettings = () => {
+  useSettings.persist.rehydrate();
+};
 
-  setApiKey: (apiKey: string | null) => {
-    const state = get();
-    const newSettings = { ...state, apiKey };
-    saveToStorage(newSettings);
-    set(newSettings);
-  },
-
-  setModel: (model: string | null) => {
-    const state = get();
-    const newSettings = { ...state, model };
-    saveToStorage(newSettings);
-    set(newSettings);
-  },
-
-  setProxyUrl: (proxyUrl: string) => {
-    const state = get();
-    const newSettings = { ...state, proxyUrl };
-    saveToStorage(newSettings);
-    set(newSettings);
-  },
-
-  setRpmLimit: (rpmLimit: number) => {
-    const state = get();
-    const newSettings = { ...state, rpmLimit };
-    saveToStorage(newSettings);
-    set(newSettings);
-  },
-
-  updateSettings: (settings: Partial<AppSettings>) => {
-    const state = get();
-    const newSettings = { ...state, ...settings };
-    saveToStorage(newSettings);
-    set(newSettings);
-  },
-
-  clearSettings: () => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.removeItem(SETTINGS_STORAGE_KEY);
-      set({ ...DEFAULT_SETTINGS, isLoaded: true });
-    } catch {
-      // Silently fail — localStorage may be unavailable
-    }
-  },
-}));
-
-// Helper to save to localStorage
-function saveToStorage(settings: AppSettings) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify({
-      provider: settings.provider,
-      apiKey: settings.apiKey,
-      model: settings.model,
-      proxyUrl: settings.proxyUrl,
-      rpmLimit: settings.rpmLimit,
-    }));
-  } catch {
-    // Silently fail — localStorage may be unavailable
-  }
-}
-
-// Hook that auto-loads settings on mount (client-side only)
-export const useAppSettings = () => {
-  const {
-    provider, apiKey, model, proxyUrl, rpmLimit, isLoaded,
-    loadSettings, setProvider, setApiKey, setModel, setProxyUrl, setRpmLimit,
-    updateSettings, clearSettings,
-  } = useSettings();
-
-  // Save on first use — via useEffect, not during render
-  React.useEffect(() => {
-    if (!isLoaded && typeof window !== 'undefined') {
-      loadSettings();
-    }
-  }, [isLoaded, loadSettings]);
-
-  return {
-    provider,
-    apiKey,
-    model,
-    proxyUrl,
-    rpmLimit,
-    isLoaded,
-    setProvider,
-    setApiKey,
-    setModel,
-    setProxyUrl,
-    setRpmLimit,
-    updateSettings,
-    clearSettings,
-  };
+// Exported to check hydration status
+export const hasSettingsHydrated = () => {
+  return useSettings.persist.hasHydrated();
 };

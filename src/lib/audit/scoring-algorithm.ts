@@ -319,6 +319,58 @@ export function initializeGriefMatrix(): GriefArchitectureMatrix {
 }
 
 /**
+ * Classification thresholds — single source of truth.
+ * Used by both calculateOverallScore() and the UI (ReportDisplay).
+ * DO NOT duplicate these thresholds elsewhere.
+ */
+const CLASSIFICATION_THRESHOLDS = {
+  cult_masterpiece: 90,
+  powerful: 75,
+  living_weak_soul: 55,
+} as const;
+
+type ClassificationKey = 'cult_masterpiece' | 'powerful' | 'living_weak_soul' | 'decoration';
+
+/** Classification colors for UI display */
+export const CLASSIFICATION_COLORS: Record<ClassificationKey, string> = {
+  cult_masterpiece: 'bg-purple-500 text-white',
+  powerful: 'bg-green-500 text-white',
+  living_weak_soul: 'bg-yellow-500 text-black',
+  decoration: 'bg-red-500 text-white',
+};
+
+/** Classification labels (Russian) for UI display */
+export const CLASSIFICATION_LABELS: Record<ClassificationKey, string> = {
+  cult_masterpiece: 'Культовый шедевр',
+  powerful: 'Мощный нарратив',
+  living_weak_soul: 'Живой мир, слабая душа',
+  decoration: 'Декорация',
+};
+
+/**
+ * Derive classification from percentage — single source of truth.
+ * Uses the same thresholds as calculateOverallScore() (90/75/55).
+ * Returns the classification key, label, and display color.
+ */
+export function getClassification(percentage: number): { key: ClassificationKey; label: string; color: string } {
+  let key: ClassificationKey;
+  if (percentage >= CLASSIFICATION_THRESHOLDS.cult_masterpiece) {
+    key = 'cult_masterpiece';
+  } else if (percentage >= CLASSIFICATION_THRESHOLDS.powerful) {
+    key = 'powerful';
+  } else if (percentage >= CLASSIFICATION_THRESHOLDS.living_weak_soul) {
+    key = 'living_weak_soul';
+  } else {
+    key = 'decoration';
+  }
+  return {
+    key,
+    label: CLASSIFICATION_LABELS[key],
+    color: CLASSIFICATION_COLORS[key],
+  };
+}
+
+/**
  * Calculate overall audit score
  */
 export function calculateOverallScore(checklist: ChecklistItem[]): {

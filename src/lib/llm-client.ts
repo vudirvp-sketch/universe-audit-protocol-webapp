@@ -724,12 +724,56 @@ export function createLLMClient(config: LLMClientConfig) {
     // ── Single request attempt ──────────────────────────────────────────
     // The proxy already retries 429/503 server-side. We do NOT retry here
     // to avoid the exponential cascade (client_retry × proxy_retry).
-    const response = await fetch(proxyUrl, {
-      method: 'POST',
-      headers: fetchHeaders,
-      body: JSON.stringify(proxyRequest),
-      signal: options.signal, // AbortSignal — enables real timeout cancellation
-    });
+    let response: Response;
+    try {
+      response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: fetchHeaders,
+        body: JSON.stringify(proxyRequest),
+        signal: options.signal, // AbortSignal — enables real timeout cancellation
+      });
+    } catch (fetchError: unknown) {
+      // Handle proxy-down / network errors with user-friendly messages
+      if (fetchError instanceof TypeError) {
+        // TypeError: Failed to fetch — proxy unreachable or network error
+        throw new Error(
+          'Не удалось подключиться к прокси. Проверьте интернет-соединение. ' +
+          'Если проблема сохраняется — прокси может быть временно недоступен.'
+        );
+      }
+      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+        // Request was aborted (timeout or user cancellation)
+        throw new Error(
+          'Запрос отменён по таймауту. Попробуйте более быструю модель или более короткий текст.'
+        );
+      }
+      // Unknown fetch error — rethrow with context
+      throw new Error(
+        `Ошибка сети при обращении к прокси: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+      );
+    }
+
+    // ── 504 Gateway Timeout (from proxy) ─────────────────────────────────
+    // Proxy timed out waiting for the provider to respond.
+    if (response.status === 504) {
+      let proxyMessage = '';
+      try { const errData = await response.json() as { message?: string }; proxyMessage = errData.message || ''; } catch { /* ignore */ }
+      throw new Error(
+        proxyMessage ||
+        'Таймаут. Модель думает слишком долго. Попробуйте более быструю модель (Gemini Flash, GPT-4o-mini) или более короткий текст.'
+      );
+    }
+
+    // ── 413 Payload Too Large (from proxy) ──────────────────────────────
+    // Request body exceeded the proxy's size limit.
+    if (response.status === 413) {
+      let proxyMessage = '';
+      try { const errData = await response.json() as { message?: string }; proxyMessage = errData.message || ''; } catch { /* ignore */ }
+      throw new Error(
+        proxyMessage ||
+        'Слишком большой запрос. Текст будет разбит на части автоматически (chunking).'
+      );
+    }
 
     // ── 429 Rate Limit ──────────────────────────────────────────────────
     // Proxy already retried — throw immediately with actionable advice.
@@ -746,17 +790,35 @@ export function createLLMClient(config: LLMClientConfig) {
       );
     }
 
-    // ── 503 / 502 Server Errors ─────────────────────────────────────────
-    // Proxy already retried — throw immediately.
-    if (response.status === 503 || response.status === 502) {
+    // ── 500 / 502 Proxy Errors ──────────────────────────────────────────
+    // Proxy itself had an error (not the provider).
+    if (response.status === 500 || response.status === 502) {
+      let errorDetail = '';
+      try { const errData = await response.json() as { error?: string; message?: string; details?: string }; errorDetail = errData.message || errData.error || errData.details || ''; } catch { /* ignore */ }
+      // Distinguish between proxy errors and provider errors
+      if (errorDetail.includes('proxy_error') || errorDetail.includes('Внутренняя ошибка прокси')) {
+        throw new Error(
+          'Прокси временно недоступен. Подождите минуту и попробуйте снова. ' +
+          'Если проблема сохраняется — прокси может быть временно недоступен.'
+        );
+      }
+      // Provider-side 502/503 — proxy already retried
       const proxyRetries = response.headers.get('X-Proxy-Retried');
       const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
-      const errorBody = await response.text().catch(() => '');
-      const statusLabel = response.status === 503 ? 'Сервер перегружен (503)' : 'Шлюз недоступен (502)';
       throw new Error(
-        `Провайдер «${providerConfig.name}» временно недоступен — ${statusLabel}${proxyRetryInfo}. ` +
+        `Провайдер «${providerConfig.name}» временно недоступен (${response.status})${proxyRetryInfo}. ` +
         `Прокси уже делал повторы. Попробуйте позже или смените модель/провайдера.` +
-        (errorBody ? ` Детали: ${errorBody}` : '')
+        (errorDetail ? ` Детали: ${errorDetail}` : '')
+      );
+    }
+
+    // ── 503 Service Unavailable ─────────────────────────────────────────
+    if (response.status === 503) {
+      const proxyRetries = response.headers.get('X-Proxy-Retried');
+      const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
+      throw new Error(
+        `Провайдер «${providerConfig.name}» перегружен (503)${proxyRetryInfo}. ` +
+        `Прокси уже делал повторы. Попробуйте позже или смените модель/провайдера.`
       );
     }
 

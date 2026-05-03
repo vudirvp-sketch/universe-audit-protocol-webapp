@@ -52,13 +52,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const model = useSettings((s) => s.model);
   const proxyUrl = useSettings((s) => s.proxyUrl);
   const rpmLimit = useSettings((s) => s.rpmLimit);
-  const isLoaded = useSettings((s) => s.isLoaded);
   const setProvider = useSettings((s) => s.setProvider);
   const setApiKey = useSettings((s) => s.setApiKey);
   const setModel = useSettings((s) => s.setModel);
   const setProxyUrl = useSettings((s) => s.setProxyUrl);
   const setRpmLimit = useSettings((s) => s.setRpmLimit);
-  const loadSettings = useSettings((s) => s.loadSettings);
   const clearSettings = useSettings((s) => s.clearSettings);
 
   const isMobile = useIsMobile();
@@ -75,13 +73,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     success: false,
     error: null,
   });
-
-  // Load settings on mount
-  React.useEffect(() => {
-    if (!isLoaded) {
-      loadSettings();
-    }
-  }, [isLoaded, loadSettings]);
 
   // Sync inputs with stored settings when dialog opens
   React.useEffect(() => {

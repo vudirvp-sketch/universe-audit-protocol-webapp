@@ -273,6 +273,21 @@ export const GateResultCard = React.memo(function GateResultCard({ level, result
           </div>
         )}
 
+        {/* Reliability Warning */}
+        {(result.metadata?.isUnreliable || (result.insufficientDataItems && result.applicableItems && result.insufficientDataItems / result.applicableItems > 0.3)) && (
+          <div className="flex items-start gap-3 p-3 rounded-md bg-amber-500/10 border border-amber-500/30">
+            <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-600">{t.gates.unreliableResult}</p>
+              <p className="text-xs text-muted-foreground">
+                {t.gates.unreliableResultDesc
+                  .replace('{insufficient}', String(result.insufficientDataItems ?? 0))
+                  .replace('{total}', String(result.applicableItems ?? 0))}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Fix List (if failed) */}
         {!passed && result.fixList && result.fixList.length > 0 && (
           <Accordion type="single" collapsible>
