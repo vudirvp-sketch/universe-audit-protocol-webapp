@@ -226,7 +226,7 @@ ${gateContext}
     };
   },
 
-  maxRetries: 2,
+  maxRetries: 3,
   skipLLM: false,
-  maxTokens: 2048,
+  maxTokens: 16384,
 };

@@ -28,8 +28,6 @@ export function extractJSON(raw: string): string | null {
   let text = raw;
 
   // Step 1: Strip markdown code fences — ```json ... ``` or ``` ... ```
-  // Note: no 'g' flag — we only need the first match, and .exec() with 'g'
-  // mutates lastIndex which causes subtle bugs on repeated calls.
   const fencePattern = /```(?:json|JSON)?\s*\n?([\s\S]*?)\n?\s*```/;
   const fenceMatch = fencePattern.exec(text);
   if (fenceMatch) {
@@ -40,28 +38,60 @@ export function extractJSON(raw: string): string | null {
   text = text.trim();
 
   // Step 3 & 4: Find balanced outermost braces using depth counting.
-  // We look for the first '{' and then track brace depth to find the
-  // matching '}'. This handles LLM explanatory text before/after JSON.
   const jsonCandidate = extractBalancedBraces(text);
   if (jsonCandidate === null) {
     return null;
   }
 
-  // Step 5: Validate the extracted string is parseable JSON
+  // Step 5: Pre-parse sanitization — fix common LLM output issues
+  const sanitized = sanitizeLLMJSON(jsonCandidate);
+
+  // Step 6: Validate the extracted string is parseable JSON
   try {
-    JSON.parse(jsonCandidate);
-    return jsonCandidate;
+    JSON.parse(sanitized);
+    return sanitized;
   } catch {
-    // The balanced-brace extraction may have found braces that don't form
-    // valid JSON (e.g. prose with curly quotes). Try the full text as a
-    // last resort — sometimes the LLM outputs clean JSON without any fence.
+    // Try the sanitized full text as a last resort
     try {
-      JSON.parse(text);
-      return text;
+      const sanitizedFull = sanitizeLLMJSON(text);
+      JSON.parse(sanitizedFull);
+      return sanitizedFull;
     } catch {
-      return null;
+      // Final fallback: try original text without sanitization
+      try {
+        JSON.parse(text);
+        return text;
+      } catch {
+        return null;
+      }
     }
   }
+}
+
+/**
+ * Sanitize common LLM JSON output issues that prevent parsing.
+ * Handles: Python-style None/True/False, trailing commas, and other quirks.
+ * This runs BEFORE JSON.parse() to maximize compatibility across all LLM providers.
+ */
+function sanitizeLLMJSON(text: string): string {
+  let result = text;
+
+  // Fix Python-style None → null (case-sensitive, only standalone word)
+  result = result.replace(/\bNone\b/g, 'null');
+
+  // Fix Python-style True/False → true/false (case-sensitive, only standalone words)
+  result = result.replace(/\bTrue\b/g, 'true');
+  result = result.replace(/\bFalse\b/g, 'false');
+
+  // Fix trailing commas before closing braces/brackets
+  // This is one of the most common LLM JSON errors
+  result = result.replace(/,\s*([}\]])/g, '$1');
+
+  // Fix unquoted property names (e.g., {thematicLaw: "..."} → {"thematicLaw": "..."})
+  // Only matches word characters followed by colon that are NOT already quoted
+  result = result.replace(/(?<!["\w])(\w+)\s*:/g, '"$1":');
+
+  return result;
 }
 
 /**

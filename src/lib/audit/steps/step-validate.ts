@@ -53,8 +53,8 @@ export function validateInputText(text: string): InputValidationOutput {
     errors.push('Концепт пустой — невозможно продолжить');
   } else if (text.trim().length < 50) {
     errors.push('Концепт слишком краткий для полноценного аудита (минимум 50 символов)');
-  } else if (text.length > 50000) {
-    errors.push('Концепт слишком длинный. Сократите до 50000 символов.');
+  } else if (text.length > 500000) {
+    errors.push('Текст слишком длинный. Сократите до 500 000 символов.');
   }
 
   const valid = errors.length === 0;

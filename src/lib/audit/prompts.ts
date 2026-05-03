@@ -10,6 +10,20 @@
 import type { MediaType, AuditMode, Skeleton } from './types';
 import { wrapUserInput, sanitizeNarrative } from './input-sanitizer';
 
+/**
+ * Universal JSON format enforcement — appended to every LLM prompt.
+ * Works across all providers and models to maximize structured output reliability.
+ */
+const JSON_FORMAT_ENFORCEMENT =
+  '\n\nКРИТИЧЕСКИЕ ПРАВИЛА ФОРМАТА: ' +
+  '1. Ответ должен содержать ТОЛЬКО валидный JSON — никакого текста до или после. ' +
+  '2. Никаких markdown-блоков (```json ... ```). ' +
+  '3. Все строковые значения в двойных кавычках. ' +
+  '4. Используй null (не None) для отсутствующих значений. ' +
+  '5. Используй true/false (не True/False) для булевых значений. ' +
+  '6. Без trailing commas перед } или ]. ' +
+  '7. Все ключи объектов в двойных кавычках.';
+
 // ============================================================================
 // SYSTEM PROMPTS (Russian)
 // ============================================================================
@@ -68,7 +82,7 @@ ${safeNarrative}
   "externalConflict": true/false,
   "mode": "conflict" | "kishō" | "hybrid",
   "reasoning": "краткое обоснование на русском"
-}`;
+}` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================
@@ -108,7 +122,7 @@ ${safeNarrative}
   "confidence": "high" | "medium" | "low",
   "mainRisks": ["риск1 на русском", "риск2 на русском"],
   "auditPriorities": ["приоритет1 на русском", "приоритет2 на русском"]
-}`;
+}` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================
@@ -164,7 +178,7 @@ ${safeNarrative}
   "centralQuestion": "текст на русском или null"
 }
 
-Если элемент не удаётся извлечь, используй null для этого поля.`;
+Если элемент не удаётся извлечь, используй null для этого поля.` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================
@@ -214,7 +228,7 @@ ${safeNarrative}
 Подсчёт:
 - 0-1 НЕТ: "ready_for_audit"
 - 2-3 НЕТ: "requires_sections"
-- 4+ НЕТ: "stop_return_to_skeleton"`;
+- 4+ НЕТ: "stop_return_to_skeleton"` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================
@@ -279,11 +293,9 @@ ${checklist}
       "recommendedApproach": "conservative" | "compromise" | "radical"
     }
   ]
-}`;
+}` + JSON_FORMAT_ENFORCEMENT;
 }
 
-// ============================================================================
-// STEP 6: GATE L2 EVALUATION PROMPT
 // ============================================================================
 
 /**
@@ -318,7 +330,7 @@ L2 фокусируется на:
 - Evidence: Прямая цитата из нарратива
 - Functional Role: Как это функционально служит критерию
 
-Верни ответ в формате JSON с той же структурой, что и L1.`;
+Верни ответ в формате JSON с той же структурой, что и L1.` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================
@@ -376,7 +388,7 @@ L3 фокусируется на:
   },
   "score": число,
   "gatePassed": true/false
-}`;
+}` + JSON_FORMAT_ENFORCEMENT;
 }
 
 // ============================================================================
@@ -448,5 +460,5 @@ L4 фокусируется на:
   },
   "score": число,
   "gatePassed": true/false
-}`;
+}` + JSON_FORMAT_ENFORCEMENT;
 }

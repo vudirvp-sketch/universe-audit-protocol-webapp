@@ -154,9 +154,9 @@ export const stepGateL2: AuditStep<GateL2Output> = {
     return { ...state, gateResults: { ...state.gateResults, L2: gateResult } };
   },
 
-  maxRetries: 2,
+  maxRetries: 3,
   skipLLM: false,
-  maxTokens: 4096,
+  maxTokens: 16384,
 };
 
 // ---------------------------------------------------------------------------

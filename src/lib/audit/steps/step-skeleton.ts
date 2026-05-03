@@ -168,9 +168,9 @@ export const stepSkeleton: AuditStep<SkeletonOutput> = {
     };
   },
 
-  maxRetries: 3,
+  maxRetries: 4,
   skipLLM: false,
-  maxTokens: 2048,
+  maxTokens: 8192,
 };
 
 // ---------------------------------------------------------------------------

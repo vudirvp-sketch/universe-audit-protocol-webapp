@@ -105,7 +105,7 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
     // Use localInput (always current) instead of inputText (may be stale
     // due to 300ms debounce). This is the root cause of the audit silently
     // not starting: inputText from Zustand lags behind what the user typed.
-    if (!localInput.trim() || localInput.length < 50) return;
+    if (!localInput.trim()) return;
 
     // Flush debounce: immediately sync localInput to Zustand so that
     // startAudit() in page.tsx reads the current text from getState().
@@ -295,7 +295,7 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
         </Button>
         <Button
           onClick={handleStartAudit}
-          disabled={!localInput.trim() || localInput.length < 50 || isLoading}
+          disabled={!localInput.trim() || isLoading}
           className="min-w-[150px]"
         >
           {isLoading ? (

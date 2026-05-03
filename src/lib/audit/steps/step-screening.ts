@@ -151,9 +151,9 @@ export const stepScreening: AuditStep<ScreeningOutput> = {
     };
   },
 
-  maxRetries: 2,
+  maxRetries: 3,
   skipLLM: false,
-  maxTokens: 1024,
+  maxTokens: 4096,
 };
 
 // ---------------------------------------------------------------------------

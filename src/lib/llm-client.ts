@@ -255,7 +255,7 @@ function buildProviderRequestBody(
         }));
       return JSON.stringify({
         model: effectiveModel,
-        max_tokens: options.max_tokens || 4096,
+        max_tokens: options.max_tokens || 8192,
         messages: nonSystemMessages,
         system: systemMessage?.content,
       });
@@ -276,7 +276,8 @@ function buildProviderRequestBody(
           : {}),
         generationConfig: {
           temperature: options.temperature ?? 0.7,
-          maxOutputTokens: options.max_tokens || 2048,
+          maxOutputTokens: options.max_tokens || 8192,
+          responseMimeType: 'application/json',
         },
       });
     }
@@ -301,6 +302,7 @@ function buildProviderRequestBody(
         temperature: options.temperature ?? 0.7,
         max_tokens: options.max_tokens,
         stream: false,
+        response_format: { type: 'json_object' },
       });
     }
   }
