@@ -9,6 +9,7 @@
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
 import type { GateResult, FixItem } from '../types';
 import { getGateThreshold } from '../types';
+import { recalculateGateScore } from '../scoring-algorithm';
 import { getL4EvaluationPrompt } from '../prompts';
 import { extractJSON } from '../json-sanitizer';
 import type { ChatMessage } from '@/lib/llm-client';
@@ -135,8 +136,22 @@ export const stepGateL4: AuditStep<GateL4Output> = {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L4');
 
-    if (output.score < threshold) {
+    // DETERMINISTIC SCORE: Code calculates the score from evaluations
+    const recalc = recalculateGateScore(output.evaluations);
+
+    if (recalc.score < threshold) {
       const fixes: FixItem[] = [];
+
+      // Add unreliability notice if >50% INSUFFICIENT_DATA (before sub-checks)
+      if (recalc.isUnreliable) {
+        fixes.push({
+          id: 'FIX-unreliable',
+          description: `Более 50% критериев имеют статус INSUFFICIENT_DATA (${recalc.insufficientDataItems} из ${recalc.applicableItems}). Для надёжной оценки необходим более полный текст.`,
+          severity: 'critical',
+          type: 'competence',
+          recommendedApproach: 'conservative',
+        });
+      }
 
       // Cult potential mandatory criteria (Phase 1 of cult evaluation)
       if (output.cultPotential.score < 50) {
@@ -174,7 +189,7 @@ export const stepGateL4: AuditStep<GateL4Output> = {
       if (fixes.length === 0) {
         fixes.push({
           id: 'FIX-L4-general',
-          description: `Гейт L4 не пройден: балл ${output.score}% ниже порога ${threshold}%`,
+          description: `Гейт L4 не пройден: балл ${recalc.score}% ниже порога ${threshold}%`,
           severity: 'major',
           type: 'competence',
           recommendedApproach: 'compromise',
@@ -183,19 +198,24 @@ export const stepGateL4: AuditStep<GateL4Output> = {
 
       return {
         passed: false,
-        score: output.score,
+        score: recalc.score,
         threshold,
-        reason: `Гейт L4 не пройден: балл ${output.score}% ниже порога ${threshold}% (режим: ${mode})`,
+        reason: recalc.isUnreliable
+          ? `Гейт L4 не пройден: недостаточно данных для надёжной оценки (${recalc.insufficientDataItems} из ${recalc.applicableItems} критериев — INSUFFICIENT_DATA)`
+          : `Гейт L4 не пройден: балл ${recalc.score}% ниже порога ${threshold}% (режим: ${mode})`,
         fixes,
       };
     }
 
-    return { passed: true, score: output.score, threshold };
+    return { passed: true, score: recalc.score, threshold };
   },
 
   reduce: (state: PipelineRunState, output: GateL4Output): PipelineRunState => {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L4');
+
+    // DETERMINISTIC SCORE: Recalculate from evaluations, not LLM
+    const recalc = recalculateGateScore(output.evaluations);
 
     const conditions = output.evaluations.map(e => ({
       id: e.id, passed: e.status === 'PASS',
@@ -204,25 +224,30 @@ export const stepGateL4: AuditStep<GateL4Output> = {
 
     const breakdown: Record<string, string> = {};
     for (const e of output.evaluations) breakdown[e.id] = e.status;
-    breakdown['threeLayers'] = `${output.threeLayers.personal.stable ? '✓' : '✗'}/${output.threeLayers.plot.stable ? '✓' : '✗'}/${output.threeLayers.meta.stable ? '✓' : '✗'}`;
+    breakdown['threeLayers'] = `${output.threeLayers.personal.stable ? '\u2713' : '\u2717'}/${output.threeLayers.plot.stable ? '\u2713' : '\u2717'}/${output.threeLayers.meta.stable ? '\u2713' : '\u2717'}`;
     breakdown['cornelianDilemma'] = output.cornelianDilemma.valid ? 'VALID' : 'INVALID';
     breakdown['agentMirror'] = output.agentMirror.integrated ? 'INTEGRATED' : 'MISSING';
     breakdown['cultPotential'] = `${output.cultPotential.score}%`;
 
     const gateResult: GateResult = {
       gateId: 'GATE-L4', gateName: 'Гейт L4: Мета',
-      status: output.score >= threshold ? 'passed' : 'failed',
-      score: output.score, passed: output.score >= threshold,
-      conditions, halt: output.score < threshold,
-      fixes: output.score < threshold 
+      status: recalc.score >= threshold ? 'passed' : 'failed',
+      score: recalc.score, passed: recalc.score >= threshold,
+      conditions, halt: recalc.score < threshold,
+      fixes: recalc.score < threshold
         ? output.evaluations.filter(e => e.status === 'FAIL').map((e, i) => `[L4] ${e.functionalRole || e.evidence || e.id}`)
         : [],
-      metadata: { breakdown, level: 'L4' }, level: 'L4',
-      applicableItems: output.evaluations.length,
-      passedItems: output.evaluations.filter(e => e.status === 'PASS').length,
-      failedItems: output.evaluations.filter(e => e.status === 'FAIL').length,
-      insufficientDataItems: output.evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length,
-      fixList: output.score < threshold
+      metadata: {
+        breakdown, level: 'L4',
+        isUnreliable: recalc.isUnreliable,
+        insufficientRatio: recalc.insufficientRatio,
+        effectiveTotal: recalc.effectiveTotal,
+      }, level: 'L4',
+      applicableItems: recalc.applicableItems,
+      passedItems: recalc.passedItems,
+      failedItems: recalc.failedItems,
+      insufficientDataItems: recalc.insufficientDataItems,
+      fixList: recalc.score < threshold
         ? output.evaluations.filter(e => e.status === 'FAIL').map((e, i) => ({
             id: `FIX-L4-${i}`,
             description: e.evidence || e.functionalRole || e.id,

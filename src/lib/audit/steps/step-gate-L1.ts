@@ -11,6 +11,7 @@
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
 import type { GateResult, FixItem } from '../types';
 import { getGateThreshold } from '../types';
+import { recalculateGateScore } from '../scoring-algorithm';
 import { getL1EvaluationPrompt } from '../prompts';
 import { extractJSON } from '../json-sanitizer';
 import type { ChatMessage } from '@/lib/llm-client';
@@ -119,7 +120,11 @@ export const stepGateL1: AuditStep<GateL1Output> = {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L1');
 
-    if (output.score < threshold) {
+    // DETERMINISTIC SCORE: Code calculates the score from evaluations,
+    // never trusts the LLM's self-reported score.
+    const recalc = recalculateGateScore(output.evaluations);
+
+    if (recalc.score < threshold) {
       const fixes: FixItem[] = output.fixList.map(f => ({
         id: f.id,
         description: f.description,
@@ -128,21 +133,37 @@ export const stepGateL1: AuditStep<GateL1Output> = {
         recommendedApproach: f.recommendedApproach,
       }));
 
+      // Add unreliability notice if >50% INSUFFICIENT_DATA
+      if (recalc.isUnreliable) {
+        fixes.unshift({
+          id: 'FIX-unreliable',
+          description: `Более 50% критериев имеют статус INSUFFICIENT_DATA (${recalc.insufficientDataItems} из ${recalc.applicableItems}). Для надёжной оценки необходим более полный текст.`,
+          severity: 'critical',
+          type: 'competence',
+          recommendedApproach: 'conservative',
+        });
+      }
+
       return {
         passed: false,
-        score: output.score,
+        score: recalc.score,
         threshold,
-        reason: `Гейт L1 не пройден: балл ${output.score}% ниже порога ${threshold}% (режим: ${mode})`,
+        reason: recalc.isUnreliable
+          ? `Гейт L1 не пройден: недостаточно данных для надёжной оценки (${recalc.insufficientDataItems} из ${recalc.applicableItems} критериев — INSUFFICIENT_DATA)`
+          : `Гейт L1 не пройден: балл ${recalc.score}% ниже порога ${threshold}% (режим: ${mode})`,
         fixes,
       };
     }
 
-    return { passed: true, score: output.score, threshold };
+    return { passed: true, score: recalc.score, threshold };
   },
 
   reduce: (state: PipelineRunState, output: GateL1Output): PipelineRunState => {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L1');
+
+    // DETERMINISTIC SCORE: Recalculate from evaluations, not LLM
+    const recalc = recalculateGateScore(output.evaluations);
 
     const conditions = output.evaluations.map(e => ({
       id: e.id,
@@ -155,26 +176,27 @@ export const stepGateL1: AuditStep<GateL1Output> = {
       breakdown[e.id] = e.status;
     }
 
-    const applicableItems = output.evaluations.length;
-    const passedItems = output.evaluations.filter(e => e.status === 'PASS').length;
-    const failedItems = output.evaluations.filter(e => e.status === 'FAIL').length;
-    const insufficientDataItems = output.evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length;
-
     const gateResult: GateResult = {
       gateId: 'GATE-L1',
       gateName: 'Гейт L1: Механизм',
-      status: output.score >= threshold ? 'passed' : 'failed',
-      score: output.score,
-      passed: output.score >= threshold,
+      status: recalc.score >= threshold ? 'passed' : 'failed',
+      score: recalc.score,
+      passed: recalc.score >= threshold,
       conditions,
-      halt: output.score < threshold,
+      halt: recalc.score < threshold,
       fixes: output.fixList.map(f => f.description),
-      metadata: { breakdown, level: 'L1' },
+      metadata: {
+        breakdown,
+        level: 'L1',
+        isUnreliable: recalc.isUnreliable,
+        insufficientRatio: recalc.insufficientRatio,
+        effectiveTotal: recalc.effectiveTotal,
+      },
       level: 'L1',
-      applicableItems,
-      passedItems,
-      failedItems,
-      insufficientDataItems,
+      applicableItems: recalc.applicableItems,
+      passedItems: recalc.passedItems,
+      failedItems: recalc.failedItems,
+      insufficientDataItems: recalc.insufficientDataItems,
       fixList: output.fixList.map(f => ({
         id: f.id,
         description: f.description,

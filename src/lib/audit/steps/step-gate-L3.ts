@@ -13,6 +13,7 @@
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
 import type { GateResult, GriefStage, GriefLevel, GriefMatrixCell, GriefArchitectureMatrix, FixItem } from '../types';
 import { getGateThreshold } from '../types';
+import { recalculateGateScore } from '../scoring-algorithm';
 import { getL3EvaluationPrompt } from '../prompts';
 import { extractJSON } from '../json-sanitizer';
 import type { ChatMessage } from '@/lib/llm-client';
@@ -157,15 +158,18 @@ export const stepGateL3: AuditStep<GateL3Output> = {
 
       return {
         passed: false,
-        score: output.score,
+        score: 0, // HARD FAIL overrides any score
         threshold,
         reason: `Grief HARD CHECK не пройден: доминантная стадия "${dominantStage}" имеет проявления только на ${dominantLevels.size} уровне(ях) — минимум 2 обязательно`,
         fixes,
       };
     }
 
+    // DETERMINISTIC SCORE: Code calculates the score from evaluations
+    const recalc = recalculateGateScore(output.evaluations);
+
     // Score check
-    if (output.score < threshold) {
+    if (recalc.score < threshold) {
       const fixes: FixItem[] = output.evaluations
         .filter(e => e.status === 'FAIL')
         .map((e, i) => ({
@@ -176,28 +180,45 @@ export const stepGateL3: AuditStep<GateL3Output> = {
           recommendedApproach: 'compromise' as const,
         }));
 
+      // Add unreliability notice if >50% INSUFFICIENT_DATA
+      if (recalc.isUnreliable) {
+        fixes.unshift({
+          id: 'FIX-unreliable',
+          description: `Более 50% критериев имеют статус INSUFFICIENT_DATA (${recalc.insufficientDataItems} из ${recalc.applicableItems}). Для надёжной оценки необходим более полный текст.`,
+          severity: 'critical',
+          type: 'competence',
+          recommendedApproach: 'conservative',
+        });
+      }
+
       return {
         passed: false,
-        score: output.score,
+        score: recalc.score,
         threshold,
-        reason: `Гейт L3 не пройден: балл ${output.score}% ниже порога ${threshold}% (режим: ${mode})`,
+        reason: recalc.isUnreliable
+          ? `Гейт L3 не пройден: недостаточно данных для надёжной оценки (${recalc.insufficientDataItems} из ${recalc.applicableItems} критериев — INSUFFICIENT_DATA)`
+          : `Гейт L3 не пройден: балл ${recalc.score}% ниже порога ${threshold}% (режим: ${mode})`,
         fixes,
       };
     }
 
-    return { passed: true, score: output.score, threshold };
+    return { passed: true, score: recalc.score, threshold };
   },
 
   reduce: (state: PipelineRunState, output: GateL3Output): PipelineRunState => {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L3');
+
+    // DETERMINISTIC SCORE: Recalculate from evaluations, not LLM
+    const recalc = recalculateGateScore(output.evaluations);
+
     const dominantLevels = new Set(
       output.griefMatrix.cells
         .filter(c => c.stage === output.griefMatrix.dominantStage && c.confidence !== 'absent')
         .map(c => c.level),
     );
     const griefHardCheckPassed = dominantLevels.size >= 2;
-    const scorePassed = output.score >= threshold;
+    const scorePassed = recalc.score >= threshold;
     const overallPassed = griefHardCheckPassed && scorePassed;
 
     // Build GriefArchitectureMatrix
@@ -225,18 +246,23 @@ export const stepGateL3: AuditStep<GateL3Output> = {
     const gateResult: GateResult = {
       gateId: 'GATE-L3', gateName: 'Гейт L3: Психика',
       status: overallPassed ? 'passed' : 'failed',
-      score: output.score, passed: overallPassed,
+      score: recalc.score, passed: overallPassed,
       conditions, halt: !overallPassed,
       fixes: !griefHardCheckPassed
         ? [`Grief HARD CHECK: доминантная стадия "${output.griefMatrix.dominantStage}" требует минимум 2 уровня воплощения`]
         : !scorePassed
-          ? [`Гейт L3: балл ${output.score}% ниже порога ${threshold}%`]
+          ? [`Гейт L3: балл ${recalc.score}% ниже порога ${threshold}%`]
           : [],
-      metadata: { breakdown, level: 'L3' }, level: 'L3',
-      applicableItems: output.evaluations.length,
-      passedItems: output.evaluations.filter(e => e.status === 'PASS').length,
-      failedItems: output.evaluations.filter(e => e.status === 'FAIL').length,
-      insufficientDataItems: output.evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length,
+      metadata: {
+        breakdown, level: 'L3',
+        isUnreliable: recalc.isUnreliable,
+        insufficientRatio: recalc.insufficientRatio,
+        effectiveTotal: recalc.effectiveTotal,
+      }, level: 'L3',
+      applicableItems: recalc.applicableItems,
+      passedItems: recalc.passedItems,
+      failedItems: recalc.failedItems,
+      insufficientDataItems: recalc.insufficientDataItems,
     };
 
     return {

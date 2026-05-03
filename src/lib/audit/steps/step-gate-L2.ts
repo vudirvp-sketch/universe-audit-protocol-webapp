@@ -9,6 +9,7 @@
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
 import type { GateResult, FixItem } from '../types';
 import { getGateThreshold } from '../types';
+import { recalculateGateScore } from '../scoring-algorithm';
 import { getL2EvaluationPrompt } from '../prompts';
 import { extractJSON } from '../json-sanitizer';
 import type { ChatMessage } from '@/lib/llm-client';
@@ -109,23 +110,44 @@ export const stepGateL2: AuditStep<GateL2Output> = {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L2');
 
-    if (output.score < threshold) {
+    // DETERMINISTIC SCORE: Code calculates the score from evaluations
+    const recalc = recalculateGateScore(output.evaluations);
+
+    if (recalc.score < threshold) {
       const fixes: FixItem[] = output.fixList.map(f => ({
         id: f.id, description: f.description, severity: f.severity,
         type: f.type, recommendedApproach: f.recommendedApproach,
       }));
+
+      // Add unreliability notice if >50% INSUFFICIENT_DATA
+      if (recalc.isUnreliable) {
+        fixes.unshift({
+          id: 'FIX-unreliable',
+          description: `Более 50% критериев имеют статус INSUFFICIENT_DATA (${recalc.insufficientDataItems} из ${recalc.applicableItems}). Для надёжной оценки необходим более полный текст.`,
+          severity: 'critical',
+          type: 'competence',
+          recommendedApproach: 'conservative',
+        });
+      }
+
       return {
-        passed: false, score: output.score, threshold,
-        reason: `Гейт L2 не пройден: балл ${output.score}% ниже порога ${threshold}% (режим: ${mode})`,
+        passed: false, score: recalc.score, threshold,
+        reason: recalc.isUnreliable
+          ? `Гейт L2 не пройден: недостаточно данных для надёжной оценки (${recalc.insufficientDataItems} из ${recalc.applicableItems} критериев — INSUFFICIENT_DATA)`
+          : `Гейт L2 не пройден: балл ${recalc.score}% ниже порога ${threshold}% (режим: ${mode})`,
         fixes,
       };
     }
-    return { passed: true, score: output.score, threshold };
+    return { passed: true, score: recalc.score, threshold };
   },
 
   reduce: (state: PipelineRunState, output: GateL2Output): PipelineRunState => {
     const mode = state.auditMode || 'conflict';
     const threshold = getGateThreshold(mode, 'L2');
+
+    // DETERMINISTIC SCORE: Recalculate from evaluations, not LLM
+    const recalc = recalculateGateScore(output.evaluations);
+
     const conditions = output.evaluations.map(e => ({
       id: e.id, passed: e.status === 'PASS',
       message: e.functionalRole || e.evidence || (e.status === 'PASS' ? 'Пройдено' : 'Не пройдено'),
@@ -133,22 +155,22 @@ export const stepGateL2: AuditStep<GateL2Output> = {
     const breakdown: Record<string, string> = {};
     for (const e of output.evaluations) breakdown[e.id] = e.status;
 
-    const applicableItems = output.evaluations.length;
-    const passedItems = output.evaluations.filter(e => e.status === 'PASS').length;
-    const failedItems = output.evaluations.filter(e => e.status === 'FAIL').length;
-    const insufficientDataItems = output.evaluations.filter(e => e.status === 'INSUFFICIENT_DATA').length;
-
     const gateResult: GateResult = {
       gateId: 'GATE-L2', gateName: 'Гейт L2: Тело',
-      status: output.score >= threshold ? 'passed' : 'failed',
-      score: output.score, passed: output.score >= threshold,
-      conditions, halt: output.score < threshold,
+      status: recalc.score >= threshold ? 'passed' : 'failed',
+      score: recalc.score, passed: recalc.score >= threshold,
+      conditions, halt: recalc.score < threshold,
       fixes: output.fixList.map(f => f.description),
-      metadata: { breakdown, level: 'L2' }, level: 'L2',
-      applicableItems,
-      passedItems,
-      failedItems,
-      insufficientDataItems,
+      metadata: {
+        breakdown, level: 'L2',
+        isUnreliable: recalc.isUnreliable,
+        insufficientRatio: recalc.insufficientRatio,
+        effectiveTotal: recalc.effectiveTotal,
+      }, level: 'L2',
+      applicableItems: recalc.applicableItems,
+      passedItems: recalc.passedItems,
+      failedItems: recalc.failedItems,
+      insufficientDataItems: recalc.insufficientDataItems,
       fixList: output.fixList.map(f => ({
         id: f.id, description: f.description, severity: f.severity,
         type: f.type, recommendedApproach: f.recommendedApproach,
