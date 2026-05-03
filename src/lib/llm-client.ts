@@ -28,6 +28,8 @@ export interface LLMProviderConfig {
   apiKeyPrefix?: string;
   defaultModel: string;
   headers?: Record<string, string>;
+  /** URL of the provider's model documentation / pricing page */
+  modelDocsUrl?: string;
 }
 
 export interface ProxyRequest {
@@ -122,26 +124,30 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://api.z.ai/v1',
     defaultModel: 'default',
     headers: { 'X-Z-AI-From': 'Z' },
+    modelDocsUrl: 'https://z.ai/docs',
   },
 
   openai: {
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
     apiKeyPrefix: 'sk-',
-    defaultModel: 'gpt-4o-mini',
+    defaultModel: 'gpt-4.1-mini',
+    modelDocsUrl: 'https://platform.openai.com/docs/models',
   },
 
   anthropic: {
     name: 'Anthropic (Claude)',
     baseUrl: 'https://api.anthropic.com/v1',
     apiKeyPrefix: 'sk-ant-',
-    defaultModel: 'claude-3-5-sonnet-20241022',
+    defaultModel: 'claude-sonnet-4-20250514',
+    modelDocsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
   },
 
   google: {
     name: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-2.5-flash',
+    modelDocsUrl: 'https://ai.google.dev/gemini-api/docs/models',
   },
 
   mistral: {
@@ -149,6 +155,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://api.mistral.ai/v1',
     apiKeyPrefix: 'sk-',
     defaultModel: 'mistral-large-latest',
+    modelDocsUrl: 'https://docs.mistral.ai/getting-started/models/models_overview/',
   },
 
   deepseek: {
@@ -156,6 +163,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://api.deepseek.com/v1',
     apiKeyPrefix: 'sk-',
     defaultModel: 'deepseek-chat',
+    modelDocsUrl: 'https://api-docs.deepseek.com/quick_start/pricing',
   },
 
   qwen: {
@@ -163,6 +171,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     apiKeyPrefix: 'sk-',
     defaultModel: 'qwen-turbo',
+    modelDocsUrl: 'https://help.aliyun.com/zh/model-studio/getting-started/models',
   },
 
   kimi: {
@@ -170,6 +179,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://api.moonshot.cn/v1',
     apiKeyPrefix: 'sk-',
     defaultModel: 'moonshot-v1-8k',
+    modelDocsUrl: 'https://platform.moonshot.cn/docs/intro',
   },
 
   groq: {
@@ -177,12 +187,14 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     baseUrl: 'https://api.groq.com/openai/v1',
     apiKeyPrefix: 'gsk_',
     defaultModel: 'llama-3.3-70b-versatile',
+    modelDocsUrl: 'https://console.groq.com/docs/models',
   },
 
   openrouter: {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'anthropic/claude-3.5-sonnet',
+    defaultModel: 'anthropic/claude-sonnet-4',
+    modelDocsUrl: 'https://openrouter.ai/models',
     headers: {
       'HTTP-Referer': 'https://universe-audit-protocol.pages.dev',
       'X-Title': 'Universe Audit Protocol',
@@ -193,18 +205,21 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     name: 'Hugging Face',
     baseUrl: 'https://api-inference.huggingface.co/models',
     defaultModel: 'meta-llama/Llama-3.2-3B-Instruct',
+    modelDocsUrl: 'https://huggingface.co/docs/api-inference/index',
   },
 
   together: {
     name: 'Together AI',
     baseUrl: 'https://api.together.xyz/v1',
     defaultModel: 'meta-llama/Llama-3.2-3B-Instruct-Turbo',
+    modelDocsUrl: 'https://docs.together.ai/docs/inference-models',
   },
 
   xai: {
     name: 'xAI (Grok)',
     baseUrl: 'https://api.x.ai/v1',
-    defaultModel: 'grok-beta',
+    defaultModel: 'grok-3-mini-fast',
+    modelDocsUrl: 'https://docs.x.ai/docs/models',
   },
 
   custom: {
@@ -562,6 +577,7 @@ export function getProviderInfo(provider: LLMProvider) {
     defaultModel: config.defaultModel,
     apiKeyPrefix: config.apiKeyPrefix,
     hasFreeTier: ['google', 'groq', 'huggingface', 'openrouter', 'together'].includes(provider),
+    modelDocsUrl: config.modelDocsUrl,
   };
 }
 

@@ -270,6 +270,18 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             <p className="text-xs text-muted-foreground">
               {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
             </p>
+            {currentProvider?.modelDocsUrl && (
+              <p className="text-xs">
+                <a
+                  href={currentProvider.modelDocsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:underline"
+                >
+                  {t.settings.modelDocsLink}
+                </a>
+              </p>
+            )}
           </div>
 
           {/* API Key Input */}

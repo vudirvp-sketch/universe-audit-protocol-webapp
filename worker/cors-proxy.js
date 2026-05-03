@@ -71,13 +71,40 @@ function sleep(ms) {
 }
 
 /**
+ * Check if a 429 response body indicates a model-not-found or deprecated-model
+ * error. Returns true if the 429 is actually a model error (not rate limit).
+ * @param {string} body - Response body text
+ * @param {string} provider - Provider identifier
+ * @returns {boolean}
+ */
+function is429ModelNotFound(body, provider) {
+  if (provider !== 'google') return false;
+  try {
+    const parsed = JSON.parse(body);
+    const msg = (parsed?.error?.message || '').toLowerCase();
+    return (
+      msg.includes('model not found') ||
+      msg.includes('not found for version') ||
+      msg.includes('does not exist') ||
+      msg.includes('is not available') ||
+      msg.includes('has been deprecated') ||
+      msg.includes('model is not supported')
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
  * Attempt a fetch with automatic 429 retry and exponential backoff.
  * Returns the final Response object (may still be 429 if all retries exhausted).
+ * Skips retries if the 429 body indicates a model-not-found error.
  * @param {string} url - Target URL
  * @param {RequestInit} options - Fetch options
  * @param {number} maxRetries - Maximum number of retries (default: MAX_429_RETRIES)
+ * @param {string} provider - Provider identifier (for 429 body inspection)
  */
-async function fetchWith429Retry(url, options, maxRetries = MAX_429_RETRIES) {
+async function fetchWith429Retry(url, options, maxRetries = MAX_429_RETRIES, provider = '') {
   let lastResponse = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -88,9 +115,24 @@ async function fetchWith429Retry(url, options, maxRetries = MAX_429_RETRIES) {
       return lastResponse;
     }
 
+    // Read body to check if this is a model-not-found error disguised as 429
+    const bodyText = await lastResponse.text();
+    if (is429ModelNotFound(bodyText, provider)) {
+      // Return a new Response with the same body so rewrite429IfModelNotFound
+      // can convert it to 400 downstream. Do NOT retry — it's not rate limit.
+      return new Response(bodyText, {
+        status: 429,
+        headers: lastResponse.headers,
+      });
+    }
+
     // If this was the last retry attempt, return the 429 response
     if (attempt >= maxRetries) {
-      return lastResponse;
+      // Reconstruct response with the already-read body
+      return new Response(bodyText, {
+        status: lastResponse.status,
+        headers: lastResponse.headers,
+      });
     }
 
     // Determine wait time: prefer Retry-After header, fall back to backoff schedule
@@ -112,13 +154,60 @@ async function fetchWith429Retry(url, options, maxRetries = MAX_429_RETRIES) {
     // Cap wait at 10s per attempt to stay within Worker timeout budget
     waitMs = Math.min(waitMs, 10000);
 
-    // Read and discard the 429 response body to free the connection
-    try { await lastResponse.text(); } catch (_) { /* ignore */ }
-
     await sleep(waitMs);
   }
 
   return lastResponse;
+}
+
+/**
+ * Check if a 429 response body indicates a model-not-found or deprecated-model
+ * error rather than a genuine rate limit. Google Gemini API returns 429 with
+ * a body like {"error":{"code":429,"message":"...model not found..."}} when
+ * the requested model does not exist or has been sunset. We convert this to
+ * 400 (Bad Request) so the client does not retry indefinitely.
+ *
+ * @param {number} status - HTTP status of the upstream response
+ * @param {string} body - Response body text from upstream
+ * @param {string} provider - Provider identifier (e.g. 'google')
+ * @returns {{ status: number, body: string }} - Possibly rewritten status/body
+ */
+function rewrite429IfModelNotFound(status, body, provider) {
+  if (status !== 429) return { status, body };
+
+  // Only Google is known to return 429 for missing models
+  if (provider !== 'google') return { status, body };
+
+  try {
+    const parsed = JSON.parse(body);
+    const msg = (parsed?.error?.message || '').toLowerCase();
+    // Google error patterns for missing/deprecated models
+    if (
+      msg.includes('model not found') ||
+      msg.includes('not found for version') ||
+      msg.includes('does not exist') ||
+      msg.includes('is not available') ||
+      msg.includes('has been deprecated') ||
+      msg.includes('model is not supported')
+    ) {
+      return {
+        status: 400,
+        body: JSON.stringify({
+          error: {
+            code: 400,
+            message:
+              'Модель не найдена или устарела. Проверьте название модели в настройках. ' +
+              'Актуальные модели: https://ai.google.dev/gemini-api/docs/models',
+            status: 'INVALID_ARGUMENT',
+          },
+        }),
+      };
+    }
+  } catch (_) {
+    // Body is not JSON — leave as-is
+  }
+
+  return { status, body };
 }
 
 export default {
@@ -160,10 +249,14 @@ export default {
         method: 'POST',
         headers: transformed.headers,
         body: transformed.body,
-      }, maxRetries);
+      }, maxRetries, provider);
 
       // Return with CORS headers
       const responseData = await response.text();
+
+      // Rewrite 429 → 400 if the body indicates a missing/deprecated model
+      // rather than a genuine rate limit (Google-specific quirk)
+      const rewritten = rewrite429IfModelNotFound(response.status, responseData, provider);
 
       // Build response headers — preserve content-type and add CORS
       const responseHeaders = {
@@ -172,12 +265,12 @@ export default {
       };
 
       // If 429, add a helpful header so the client knows the proxy already retried
-      if (response.status === 429) {
+      if (rewritten.status === 429) {
         responseHeaders['X-Proxy-Retried'] = String(skipRetry ? 0 : MAX_429_RETRIES);
       }
 
-      return new Response(responseData, {
-        status: response.status,
+      return new Response(rewritten.body, {
+        status: rewritten.status,
         headers: responseHeaders,
       });
     } catch (error) {

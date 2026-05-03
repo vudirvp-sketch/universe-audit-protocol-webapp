@@ -32,7 +32,12 @@ const mediaIcons: Record<MediaType, React.ReactNode> = {
   ttrpg: <Dices className="h-4 w-4" />,
 };
 
-export function AuditForm() {
+interface AuditFormProps {
+  /** Callback to actually start the audit pipeline (calls runAuditPipeline). */
+  onStartAudit?: () => void;
+}
+
+export function AuditForm({ onStartAudit }: AuditFormProps) {
   const {
     inputText,
     setInputText,
@@ -43,7 +48,6 @@ export function AuditForm() {
     authorAnswers,
     setAuthorAnswers,
     setAuthorProfile,
-    setPhase,
     isLoading,
   } = useAuditState();
 
@@ -99,7 +103,11 @@ export function AuditForm() {
 
   const handleStartAudit = () => {
     if (!inputText.trim() || inputText.length < 50) return;
-    setPhase('input_validation');
+    // Call the real pipeline starter from page.tsx if provided.
+    // This is the ONLY way to actually invoke runAuditPipeline().
+    if (onStartAudit) {
+      onStartAudit();
+    }
   };
 
   return (

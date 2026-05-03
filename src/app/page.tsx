@@ -467,7 +467,7 @@ export default function Home() {
               ))}
             </div>
 
-            <AuditForm />
+            <AuditForm onStartAudit={startAudit} />
           </div>
         ) : (
           /* Analysis Phase — responsive layout */

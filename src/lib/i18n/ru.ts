@@ -237,6 +237,7 @@ export const t = {
     freeTierAvailable: 'У этого провайдера есть бесплатный тариф!',
     model: 'Модель',
     modelDefault: 'По умолчанию: {model}',
+    modelDocsLink: 'Список актуальных моделей →',
     apiKey: 'API Ключ',
     apiKeyPlaceholder: 'Введите ваш API ключ...',
     proxyUrl: 'URL Прокси',

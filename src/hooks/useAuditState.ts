@@ -172,14 +172,18 @@ export const useAuditState = create<AuditState>()(
         elapsedMs: state.elapsedMs,
         stepTimings: state.stepTimings,
       }),
-      // On hydration, reset terminal states (failed/blocked/cancelled) to idle.
+      // On hydration, reset non-idle states to prevent stale UI.
+      // Previously only terminal states (failed/blocked/cancelled) were reset,
+      // but mid-pipeline phases (mode_detection, screening, etc.) left from
+      // a crashed/abandoned session would show a frozen progress bar with no
+      // actual pipeline running behind it.
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {
-            const terminalPhases: AuditPhase[] = ['failed', 'blocked', 'cancelled'];
-            if (terminalPhases.includes(state.phase)) {
-              // Use queueMicrotask + setState instead of direct mutation.
-              // This ensures Zustand properly notifies all subscribers.
+            // Only 'idle' and 'complete' are safe states to restore.
+            // Everything else means the pipeline was interrupted.
+            const safePhases: AuditPhase[] = ['idle', 'complete'];
+            if (!safePhases.includes(state.phase)) {
               queueMicrotask(() => {
                 useAuditState.setState({
                   phase: 'idle',
