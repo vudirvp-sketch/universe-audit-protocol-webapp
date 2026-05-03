@@ -102,7 +102,21 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
   const allAuthorQuestionsAnswered = authorAnswers && Object.keys(authorAnswers).length === 7;
 
   const handleStartAudit = () => {
-    if (!inputText.trim() || inputText.length < 50) return;
+    // Use localInput (always current) instead of inputText (may be stale
+    // due to 300ms debounce). This is the root cause of the audit silently
+    // not starting: inputText from Zustand lags behind what the user typed.
+    if (!localInput.trim() || localInput.length < 50) return;
+
+    // Flush debounce: immediately sync localInput to Zustand so that
+    // startAudit() in page.tsx reads the current text from getState().
+    // Without this flush, Zustand inputText may be empty when the
+    // pipeline tries to read it, causing a silent early return.
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    setInputText(localInput);
+
     // Call the real pipeline starter from page.tsx if provided.
     // This is the ONLY way to actually invoke runAuditPipeline().
     if (onStartAudit) {

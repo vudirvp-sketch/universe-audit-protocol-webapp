@@ -113,15 +113,25 @@ export default function Home() {
 
   // Run full audit analysis via client-side pipeline
   const startAudit = async () => {
-    if (!inputText.trim()) return;
+    // CRITICAL: Read from getState() instead of the React selector.
+    // The AuditForm flushes the debounce before calling this function,
+    // but the React selector value (inputText) may still be stale in
+    // the current closure because React hasn't re-rendered yet.
+    // getState() always returns the latest Zustand state.
+    const currentInputText = useAuditState.getState().inputText;
+    if (!currentInputText.trim()) return;
 
-    if (!apiKey) {
+    // apiKey and proxyUrl come from useSettings (not debounced), so closure values are fine.
+    const currentApiKey = apiKey;
+    const currentProxyUrl = proxyUrl;
+
+    if (!currentApiKey) {
       useAuditState.getState().setError(t.errors.noApiKey);
       useAuditState.getState().setPhase('failed');
       return;
     }
 
-    if (!proxyUrl) {
+    if (!currentProxyUrl) {
       useAuditState.getState().setError(t.errors.proxy);
       useAuditState.getState().setPhase('failed');
       return;
@@ -142,16 +152,16 @@ export default function Home() {
     try {
       const result = await runAuditPipeline(
         {
-          narrative: inputText,
+          narrative: currentInputText,
           mediaType,
           authorAnswers: authorAnswers ?? undefined,
           rpmLimit,
         },
         {
           provider,
-          apiKey,
+          apiKey: currentApiKey,
           model,
-          proxyUrl,
+          proxyUrl: currentProxyUrl,
         },
         (phase: AuditPhase, state: PipelineState) => {
           // Per-step progress callback — update Zustand store in real time
@@ -255,11 +265,15 @@ export default function Home() {
 
   // Resume audit from a blocked step
   const resumeAudit = async (fromStep: AuditPhase) => {
-    if (!apiKey) {
+    // apiKey and proxyUrl come from useSettings (not debounced), so closure values are fine
+    const currentApiKey = apiKey;
+    const currentProxyUrl = proxyUrl;
+
+    if (!currentApiKey) {
       useAuditState.getState().setError(t.errors.noApiKey);
       return;
     }
-    if (!proxyUrl) {
+    if (!currentProxyUrl) {
       useAuditState.getState().setError(t.errors.proxy);
       return;
     }
@@ -303,7 +317,7 @@ export default function Home() {
       const result = await resumeAuditFromStep(
         currentState,
         fromStep,
-        { provider, apiKey, model, proxyUrl },
+        { provider, apiKey: currentApiKey, model, proxyUrl: currentProxyUrl },
         (phase: AuditPhase, state: PipelineState) => {
           const s = useAuditState.getState();
           s.setPhase(phase);
