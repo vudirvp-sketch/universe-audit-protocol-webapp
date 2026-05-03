@@ -197,6 +197,91 @@ ${safeNarrative}
 }
 
 // ============================================================================
+// CHUNKING PROMPTS (Pass 1: Pre-skeleton, Pass 2: Synthesis)
+// ============================================================================
+
+/**
+ * Prompt for extracting a pre-skeleton from a single chunk of a long text.
+ * This is Pass 1 of the two-pass skeleton extraction strategy for chunked texts.
+ *
+ * @param chunkText - The text of this chunk (already prefixed with [ЧАСТЬ X из Y])
+ * @param chunkIndex - 0-based chunk index
+ * @param totalChunks - Total number of chunks
+ */
+export function getPreSkeletonExtractionPrompt(
+  chunkText: string,
+  chunkIndex: number,
+  totalChunks: number,
+  mediaType: MediaType,
+): string {
+  return `Извлеки базовые структурные элементы из этой части текста (${mediaType}, часть ${chunkIndex + 1} из ${totalChunks}).
+
+${chunkText}
+
+Извлеки следующие элементы, которые удалось обнаружить в этой части:
+- Тематический закон (если виден)
+- Корневая травма (если видна)
+- Столпы/циклы (если видны)
+- Любые другие ключевые структурные элементы
+
+Если элемент не присутствует в этой части — используй null.
+
+Верни ответ в формате JSON:
+{
+  "thematicLaw": "текст на русском или null",
+  "rootTrauma": "текст на русском или null",
+  "pillars": ["столп1 на русском или null", "столп2 на русском или null", "столп3 на русском или null"],
+  "emotionalEngine": "denial" | "anger" | "bargaining" | "depression" | "acceptance" | null,
+  "otherElements": {}
+}` + JSON_FORMAT_ENFORCEMENT;
+}
+
+/**
+ * Prompt for synthesizing a unified skeleton from multiple pre-skeletons.
+ * This is Pass 2 of the two-pass skeleton extraction strategy for chunked texts.
+ *
+ * @param preSkeletons - Array of pre-skeleton JSON strings from each chunk
+ * @param mediaType - The media type for context
+ */
+export function getSkeletonSynthesisPrompt(
+  preSkeletons: string[],
+  mediaType: MediaType,
+): string {
+  const combinedPreSkeletons = preSkeletons
+    .map((ps, i) => `--- Прекаркас из части ${i + 1} ---\n${ps}`)
+    .join('\n\n');
+
+  return `Синтезируй единый скелет нарратива (${mediaType}) из следующих прекаркасов, извлечённых из разных частей длинного текста.
+
+${combinedPreSkeletons}
+
+Объедини пересекающиеся элементы, разреши противоречия (предпочитай более конкретные/детальные описания), и заполни пропуски.
+
+Извлеки следующие 8 структурных элементов:
+
+1. **Тематический закон**: Один вопрос, выраженный как физический закон мира
+2. **Корневая травма**: Событие, разрушившее прежний порядок
+3. **Хамартия протагониста**: Черта персонажа, неотвратимо ведущая к финалу
+4. **3 Несокрушимых столпа**: Цикл A→B→C→A
+5. **Эмоциональный двигатель**: Доминантная стадия горя мира
+6. **Авторский запрет**: Что концепт явно избегает
+7. **Целевой опыт**: Что агент чувствует в финале
+8. **Центральный вопрос**: Один вопрос, который протагонист несёт через весь путь
+
+Верни ответ в формате JSON:
+{
+  "thematicLaw": "текст на русском или null",
+  "rootTrauma": "текст на русском или null",
+  "hamartia": "текст на русском или null",
+  "pillars": ["столп1 на русском", "столп2 на русском", "столп3 на русском"],
+  "emotionalEngine": "denial" | "anger" | "bargaining" | "depression" | "acceptance",
+  "authorProhibition": "текст на русском или null",
+  "targetExperience": "текст на русском или null",
+  "centralQuestion": "текст на русском или null"
+}` + JSON_FORMAT_ENFORCEMENT;
+}
+
+// ============================================================================
 // STEP 4: SCREENING PROMPT
 // ============================================================================
 

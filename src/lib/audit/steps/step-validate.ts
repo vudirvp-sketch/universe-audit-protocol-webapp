@@ -10,12 +10,17 @@
  * maxTokens: 0 — never calls LLM.
  *
  * DESIGN: For skipLLM steps, parseResponse('') is called first but has no
- * access to state. We use a module-level state cache that is set by gateCheck
- * and reduce (which DO receive state). The flow is:
+ * access to state. We use the gateData field on GateDecision to pass
+ * computed data from gateCheck() (which DOES receive state) to reduce().
+ * The flow is:
  *   1. parseResponse('') → empty shell
  *   2. validate(shell) → always valid (shell is just a marker)
- *   3. gateCheck(shell, state) → performs REAL validation, stores result in cache
- *   4. reduce(state, shell) → uses cached result to produce new state
+ *   3. gateCheck(shell, state) → performs REAL validation, returns gateData
+ *   4. reduce(state, shell, gateData) → uses gateData to produce new state
+ *
+ * This eliminates the previous module-level mutable cache (cachedValidation),
+ * which was NOT concurrency-safe across browser tabs and violated functional
+ * purity.
  */
 
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
@@ -32,16 +37,6 @@ export interface InputValidationOutput {
   wrapped: string;
   errors: string[];
 }
-
-// ---------------------------------------------------------------------------
-// Module-level cache for skipLLM state communication
-// WARNING: This is NOT concurrency-safe if two audits run in separate browser
-// tabs simultaneously. The risk is low (same-origin module scope is per-tab in
-// modern browsers since each tab gets its own module instance), but if shared
-// workers ever come into play this would need redesign.
-// ---------------------------------------------------------------------------
-
-let cachedValidation: InputValidationOutput | null = null;
 
 // ---------------------------------------------------------------------------
 // Core validation logic (shared between gateCheck and reduce)
@@ -75,7 +70,7 @@ export const stepValidate: AuditStep<InputValidationOutput> = {
   parseResponse: (_raw: string): InputValidationOutput => {
     // skipLLM step — return a marker shell. The real validation happens
     // in gateCheck() which has access to PipelineRunState.
-    // Results are cached in module-level variable for reduce() to use.
+    // Results are passed to reduce() via gateData (not module-level cache).
     return { valid: false, length: 0, sanitized: '', wrapped: '', errors: [] };
   },
 
@@ -89,24 +84,25 @@ export const stepValidate: AuditStep<InputValidationOutput> = {
     // Perform REAL validation from the current state
     const result = validateInputText(state.inputText);
 
-    // Cache the result for reduce() to use
-    cachedValidation = result;
-
     if (!result.valid) {
       return {
         passed: false,
         reason: result.errors.join('; '),
         fixes: [],
+        gateData: result, // Pass to reduce() — no module-level cache needed
       };
     }
 
-    return { passed: true };
+    return {
+      passed: true,
+      gateData: result, // Pass to reduce() — no module-level cache needed
+    };
   },
 
-  reduce: (state: PipelineRunState, _output: InputValidationOutput): PipelineRunState => {
-    // Use the cached validation result from gateCheck
-    const result = cachedValidation ?? validateInputText(state.inputText);
-    cachedValidation = null; // Clear cache after use
+  reduce: (state: PipelineRunState, _output: InputValidationOutput, gateData?: unknown): PipelineRunState => {
+    // Use gateData from gateCheck (passed through GateDecision)
+    // Fall back to re-computing from state if gateData is missing (defensive)
+    const result = (gateData as InputValidationOutput | undefined) ?? validateInputText(state.inputText);
 
     return {
       ...state,

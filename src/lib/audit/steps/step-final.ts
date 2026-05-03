@@ -7,9 +7,9 @@
  * - 3 priority actions from accumulated fix lists
  * maxTokens: 0
  *
- * DESIGN: Uses module-level cache for skipLLM state communication,
- * same pattern as step-validate.ts. gateCheck() computes the real result
- * from PipelineRunState and caches it; reduce() uses the cached result.
+ * DESIGN: Uses gateData on GateDecision to pass computed data from gateCheck()
+ * to reduce(), eliminating the previous module-level mutable cache (cachedOutput).
+ * This is concurrency-safe and functionally pure — no shared mutable state.
  */
 
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
@@ -30,18 +30,10 @@ export interface FinalOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Module-level cache for skipLLM state communication
-// WARNING: Same concurrency note as step-validate.ts — safe per-tab, not
-// across shared-worker scenarios.
-// ---------------------------------------------------------------------------
-
-let cachedOutput: FinalOutput | null = null;
-
-// ---------------------------------------------------------------------------
 // Core computation logic (shared between gateCheck and reduce)
 // ---------------------------------------------------------------------------
 
-function computeFinalOutput(state: PipelineRunState): FinalOutput {
+export function computeFinalOutput(state: PipelineRunState): FinalOutput {
   const by_level: Record<string, number> = {
     L1: state.gateResults.L1?.score || 0,
     L2: state.gateResults.L2?.score || 0,
@@ -146,16 +138,19 @@ export const stepFinal: AuditStep<FinalOutput> = {
   gateCheck: (_output: FinalOutput, state: PipelineRunState): GateDecision => {
     // Compute the real final output from the current state
     const result = computeFinalOutput(state);
-    cachedOutput = result;
 
     // Final step never blocks — it's the terminal computation
-    return { passed: true, score: result.finalScore.percentage };
+    return {
+      passed: true,
+      score: result.finalScore.percentage,
+      gateData: result, // Pass to reduce() — no module-level cache needed
+    };
   },
 
-  reduce: (state: PipelineRunState, _output: FinalOutput): PipelineRunState => {
-    // Use the cached result from gateCheck
-    const result = cachedOutput ?? computeFinalOutput(state);
-    cachedOutput = null; // Clear cache after use
+  reduce: (state: PipelineRunState, _output: FinalOutput, gateData?: unknown): PipelineRunState => {
+    // Use gateData from gateCheck (passed through GateDecision)
+    // Fall back to re-computing from state if gateData is missing (defensive)
+    const result = (gateData as FinalOutput | undefined) ?? computeFinalOutput(state);
 
     return {
       ...state,

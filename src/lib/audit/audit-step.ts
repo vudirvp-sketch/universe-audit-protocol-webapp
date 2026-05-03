@@ -100,6 +100,10 @@ export interface GateDecision {
   reason?: string;
   /** Suggested fixes the user can apply to pass this gate */
   fixes?: FixItem[];
+  /** Arbitrary data produced by gateCheck to be passed to reduce().
+   *  This eliminates the need for module-level mutable state (cached variables)
+   *  in skipLLM steps like step-validate and step-final. */
+  gateData?: unknown;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,8 +409,7 @@ export async function runStep<TOutput = unknown>(
     }
 
     const decision = step.gateCheck(computed, state);
-    const gateData = (decision as GateDecision & { gateData?: unknown }).gateData;
-    const newState = step.reduce(state, computed, gateData);
+    const newState = step.reduce(state, computed, decision.gateData);
 
     const elapsed = Date.now() - stepStart;
 
@@ -521,8 +524,7 @@ export async function runStep<TOutput = unknown>(
       if (validation.valid) {
         // Output is valid — run gate check and reduce
         const decision = step.gateCheck(parsed, state);
-        const gateData = (decision as GateDecision & { gateData?: unknown }).gateData;
-        const newState = step.reduce(state, parsed, gateData);
+        const newState = step.reduce(state, parsed, decision.gateData);
         const elapsed = Date.now() - stepStart;
 
         if (!decision.passed) {
