@@ -41,8 +41,13 @@ export function computeFinalOutput(state: PipelineRunState): FinalOutput {
     L4: state.gateResults.L4?.score || 0,
   };
 
+  // Only average over evaluated gates (non-zero means evaluated or deliberately scored)
+  const evaluatedLevels = (['L1', 'L2', 'L3', 'L4'] as const)
+    .filter(level => state.gateResults[level] !== null);
   const total = by_level.L1 + by_level.L2 + by_level.L3 + by_level.L4;
-  const percentage = Math.round(total / 4);
+  const percentage = evaluatedLevels.length > 0
+    ? Math.round(total / evaluatedLevels.length)
+    : 0;
 
   // Classification based on percentage (unified with scoring-algorithm.ts thresholds)
   let classification: FinalOutput['classification'];

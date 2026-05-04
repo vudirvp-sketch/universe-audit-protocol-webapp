@@ -80,7 +80,7 @@ export function AuditProgress() {
     const effectiveIndex = terminalStates.includes(phase)
       ? currentIndex > 0 ? currentIndex - 1 : 0
       : currentIndex;
-    return { current: effectiveIndex, total, percentage: Math.round((effectiveIndex / total) * 100) };
+    return { current: effectiveIndex, total, percentage: total > 0 ? Math.min(100, Math.round((effectiveIndex / total) * 100)) : 0 };
   }, [phase]);
 
   // Live timer for current step

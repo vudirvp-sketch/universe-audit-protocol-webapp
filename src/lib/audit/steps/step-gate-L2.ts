@@ -48,9 +48,10 @@ export const stepGateL2: AuditStep<GateL2Output> = {
     const l1Score = state.gateResults.L1?.score ?? 0;
     const narrativeText = state.narrativeDigest || state.inputText;
     const useDigest = !!state.narrativeDigest;
+    const skeleton = state.skeleton ?? { status: 'INCOMPLETE' as const, elements: [], fixes: [] };
     const userPrompt = getL2EvaluationPrompt(
       narrativeText,
-      state.skeleton!,
+      skeleton,
       l1Score,
       checklistText,
       useDigest,

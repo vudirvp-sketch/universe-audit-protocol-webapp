@@ -116,6 +116,14 @@ const PROVIDER_DEFAULT_CAPABILITIES: Partial<Record<LLMProvider, ModelCapabiliti
   groq:       { contextWindow: 128_000,   maxOutputTokens: 32768, supportsJSONMode: false, supportsSystemMessages: true },
   deepseek:   { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
   mistral:    { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  zai:        { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  qwen:       { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  kimi:       { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  openrouter: { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  huggingface:{ contextWindow: 128_000,   maxOutputTokens: 4096,  supportsJSONMode: false, supportsSystemMessages: false },
+  together:   { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  xai:        { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  custom:     { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
 };
 
 /** Conservative defaults for unknown providers/models — the absolute floor.
@@ -653,7 +661,26 @@ function normalizeProviderResponse(
 
     default: {
       // OpenAI-compatible response — return as-is
-      return responseData as ChatCompletionResponse;
+      // Validate response shape before casting — defensive against unexpected shapes
+      const r = responseData as Record<string, unknown>;
+      const choices = Array.isArray(r.choices) ? r.choices : [];
+      const firstChoice = choices[0] as Record<string, unknown> | undefined;
+      const message = firstChoice?.message as Record<string, unknown> | undefined;
+      return {
+        id: String(r.id || 'unknown'),
+        object: String(r.object || 'chat.completion'),
+        created: Number(r.created) || Date.now(),
+        model: String(r.model || 'unknown'),
+        choices: [{
+          index: 0,
+          message: {
+            role: String(message?.role || 'assistant'),
+            content: String(message?.content || ''),
+          },
+          finish_reason: String(firstChoice?.finish_reason || 'stop'),
+        }],
+        usage: r.usage as ChatCompletionResponse['usage'] | undefined,
+      };
     }
   }
 }
@@ -727,13 +754,20 @@ export function createLLMClient(config: LLMClientConfig) {
     // ── Single request attempt ──────────────────────────────────────────
     // The proxy already retries 429/503 server-side. We do NOT retry here
     // to avoid the exponential cascade (client_retry × proxy_retry).
+    // Client-side timeout: 60 seconds default if no signal provided
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, controller.signal])
+      : controller.signal;
+
     let response: Response;
     try {
       response = await fetch(proxyUrl, {
         method: 'POST',
         headers: fetchHeaders,
         body: JSON.stringify(proxyRequest),
-        signal: options.signal, // AbortSignal — enables real timeout cancellation
+        signal,
       });
     } catch (fetchError: unknown) {
       // Handle proxy-down / network errors with user-friendly messages
@@ -755,6 +789,8 @@ export function createLLMClient(config: LLMClientConfig) {
         `Ошибка сети при обращении к прокси: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
       );
     }
+
+    clearTimeout(timeoutId);
 
     // ── 504 Gateway Timeout (from proxy) ─────────────────────────────────
     // Proxy timed out waiting for the provider to respond.
@@ -885,6 +921,7 @@ export function createLLMClient(config: LLMClientConfig) {
     }
 
     // Execute streaming request
+    let streamFinishReason = 'stop';
     const fullText = await streamChatCompletion({
       provider: config.provider,
       proxyUrl,
@@ -893,6 +930,7 @@ export function createLLMClient(config: LLMClientConfig) {
       payload: streamingPayload,
       signal: options.signal,
       onChunk: (chunk) => {
+        if (chunk.finishReason) streamFinishReason = chunk.finishReason;
         onChunk(chunk.text, chunk.delta);
       },
     });
@@ -910,7 +948,7 @@ export function createLLMClient(config: LLMClientConfig) {
           role: 'assistant',
           content: fullText,
         },
-        finish_reason: 'stop',
+        finish_reason: streamFinishReason,
       }],
     };
   }

@@ -283,7 +283,7 @@ export const selectOverallProgress = (state: AuditState) => {
   return {
     current: effectiveIndex,
     total,
-    percentage: Math.round((effectiveIndex / total) * 100),
+    percentage: total > 0 ? Math.min(100, Math.round((effectiveIndex / total) * 100)) : 0,
   };
 };
 

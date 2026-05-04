@@ -57,9 +57,10 @@ export const stepGateL3: AuditStep<GateL3Output> = {
       : 'Архитектура горя ещё не проанализирована — проанализируй впервые';
     const narrativeText = state.narrativeDigest || state.inputText;
     const useDigest = !!state.narrativeDigest;
+    const skeleton = state.skeleton ?? { status: 'INCOMPLETE' as const, elements: [], fixes: [] };
     const userPrompt = getL3EvaluationPrompt(
       narrativeText,
-      state.skeleton!,
+      skeleton,
       l2Score,
       griefContext,
       useDigest,

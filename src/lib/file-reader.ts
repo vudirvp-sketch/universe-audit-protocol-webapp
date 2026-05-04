@@ -98,7 +98,7 @@ async function readDocx(file: File): Promise<string> {
     const mammoth = await import('mammoth').catch(() => null);
     if (!mammoth) {
       throw new Error(
-        'Библиотека mammoth не установлена. Выполните: npm install mammoth'
+        'Формат DOCX не поддерживается в данной версии приложения. Используйте формат TXT, MD или PDF.'
       );
     }
     const arrayBuffer = await file.arrayBuffer();
@@ -123,7 +123,7 @@ async function readPdf(file: File): Promise<string> {
     const pdfjsLib = await import('pdfjs-dist').catch(() => null);
     if (!pdfjsLib) {
       throw new Error(
-        'Библиотека pdfjs-dist не установлена. Выполните: npm install pdfjs-dist'
+        'Формат PDF не поддерживается в данной версии приложения. Используйте формат TXT или MD.'
       );
     }
     const arrayBuffer = await file.arrayBuffer();
@@ -145,7 +145,7 @@ async function readPdf(file: File): Promise<string> {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items
-        .map((item: any) => item.str || '')
+        .map((item: Record<string, unknown>) => (typeof item.str === 'string' ? item.str : '') as string)
         .join(' ');
       textParts.push(pageText);
     }

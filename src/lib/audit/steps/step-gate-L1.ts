@@ -49,9 +49,10 @@ export const stepGateL1: AuditStep<GateL1Output> = {
     const checklistText = buildL1Checklist(state.auditMode);
     const narrativeText = state.narrativeDigest || state.inputText;
     const useDigest = !!state.narrativeDigest;
+    const skeleton = state.skeleton ?? { status: 'INCOMPLETE' as const, elements: [], fixes: [] };
     const userPrompt = getL1EvaluationPrompt(
       narrativeText,
-      state.skeleton!,
+      skeleton,
       state.mediaType,
       checklistText,
       useDigest,

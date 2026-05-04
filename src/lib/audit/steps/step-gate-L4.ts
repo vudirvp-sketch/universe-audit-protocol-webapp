@@ -60,9 +60,10 @@ export const stepGateL4: AuditStep<GateL4Output> = {
     const l3Score = state.gateResults.L3?.score ?? 0;
     const narrativeText = state.narrativeDigest || state.inputText;
     const useDigest = !!state.narrativeDigest;
+    const skeleton = state.skeleton ?? { status: 'INCOMPLETE' as const, elements: [], fixes: [] };
     const userPrompt = getL4EvaluationPrompt(
       narrativeText,
-      state.skeleton!,
+      skeleton,
       l3Score,
       useDigest,
     );

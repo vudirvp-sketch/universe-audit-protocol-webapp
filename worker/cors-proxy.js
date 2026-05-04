@@ -141,6 +141,8 @@ function isTransient5xx(status) {
  * Check rate limit for a given IP. Returns true if the request is allowed.
  */
 function checkRateLimit(ip) {
+  // Periodic cleanup to prevent memory leak
+  if (ipRateLimitMap.size > 1000) pruneExpiredRateLimits();
   const now = Date.now();
   const entry = ipRateLimitMap.get(ip);
 
@@ -156,6 +158,16 @@ function checkRateLimit(ip) {
 
   entry.count++;
   return true;
+}
+
+// Prune expired entries to prevent memory leak
+function pruneExpiredRateLimits() {
+  const now = Date.now();
+  for (const [ip, entry] of ipRateLimitMap) {
+    if (now > entry.resetAt) {
+      ipRateLimitMap.delete(ip);
+    }
+  }
 }
 
 /**
@@ -200,7 +212,10 @@ async function fetchWithRetry(url, options, max429Retries = MAX_429_RETRIES, max
   let lastResponse = null;
   let retry5xxAttempt = 0;
 
-  for (let attempt429 = 0; ; attempt429++) {
+  let totalAttempts = 0;
+  const MAX_TOTAL_ATTEMPTS = max429Retries + max5xxRetries + 2;
+  for (let attempt429 = 0; totalAttempts < MAX_TOTAL_ATTEMPTS; attempt429++) {
+    totalAttempts++;
     lastResponse = await fetch(url, options);
 
     // --- Handle 5xx transient errors (503, 502) ---

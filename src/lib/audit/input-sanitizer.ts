@@ -31,7 +31,7 @@ export function wrapUserInput(narrative: string): string {
   // Strip any pre-existing user_input tags that might be in the text
   // to prevent nesting attacks
   const cleaned = narrative
-    .replace(/<\/?user_input>/gi, '')
+    .replace(/<\/?\s*user_input\s*>/gi, '')
     .trim();
 
   return `<user_input>\n${cleaned}\n</user_input>`;

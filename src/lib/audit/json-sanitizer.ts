@@ -213,26 +213,26 @@ function sanitizeLLMJSON(text: string): string {
  * or null if no balanced pair is found.
  */
 function extractBalancedBraces(text: string): string | null {
-  // Find the first opening brace
-  const firstOpen = text.indexOf('{');
-  if (firstOpen === -1) {
-    // Also try bracket arrays — some LLM responses are top-level arrays
-    const firstBracket = text.indexOf('[');
-    if (firstBracket !== -1) {
-      return extractBalanced(text, firstBracket, '[', ']');
-    }
-    return null;
-  }
-
-  const result = extractBalanced(text, firstOpen, '{', '}');
-  if (result !== null) {
-    return result;
-  }
-
-  // Fallback: try top-level array if brace extraction failed
+  // Find positions of first { and first [
+  const firstBrace = text.indexOf('{');
   const firstBracket = text.indexOf('[');
+
+  // If { comes before [, try brace extraction first (objects are the expected root)
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    const result = extractBalanced(text, firstBrace, '{', '}');
+    if (result !== null) return result;
+  }
+
+  // Try bracket (array) extraction — either [ comes first, or brace extraction failed
   if (firstBracket !== -1) {
-    return extractBalanced(text, firstBracket, '[', ']');
+    const result = extractBalanced(text, firstBracket, '[', ']');
+    if (result !== null) return result;
+  }
+
+  // If [ was tried first (because [ came before {), try brace as fallback
+  if (firstBrace !== -1 && firstBracket !== -1 && firstBracket < firstBrace) {
+    const result = extractBalanced(text, firstBrace, '{', '}');
+    if (result !== null) return result;
   }
 
   return null;

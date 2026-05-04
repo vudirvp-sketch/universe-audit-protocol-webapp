@@ -202,10 +202,17 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
   if (!response.ok) {
     let errorMessage = '';
     try {
-      const errData = await response.json() as { message?: string; error?: string; details?: string };
-      errorMessage = errData.message || errData.error || errData.details || '';
+      // Read body as text first, then try to parse as JSON — avoids
+      // "body already consumed" error if json() partially reads the stream
+      const errorBody = await response.text();
+      try {
+        const errData = JSON.parse(errorBody) as { message?: string; error?: string; details?: string };
+        errorMessage = errData.message || errData.error || errData.details || '';
+      } catch {
+        errorMessage = errorBody;
+      }
     } catch {
-      errorMessage = await response.text();
+      errorMessage = 'Unknown error';
     }
 
     switch (response.status) {

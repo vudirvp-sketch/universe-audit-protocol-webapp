@@ -106,7 +106,8 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
     } as AuthorProfileAnswers;
     
     // If all questions answered, classify profile
-    if (Object.keys(newAnswers).length === 7) {
+    const qKeys = ['Q1','Q2','Q3','Q4','Q5','Q6','Q7'] as const;
+    if (qKeys.every(k => k in newAnswers)) {
       const profile = classifyAuthorProfile(newAnswers);
       setAuthorProfile(profile);
     }
@@ -115,7 +116,7 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
   };
 
   // Check if all author questions are answered
-  const allAuthorQuestionsAnswered = authorAnswers && Object.keys(authorAnswers).length === 7;
+  const allAuthorQuestionsAnswered = authorAnswers && ['Q1','Q2','Q3','Q4','Q5','Q6','Q7'].every(k => k in authorAnswers);
 
   const handleStartAudit = () => {
     // Use localInput (always current) instead of inputText (may be stale

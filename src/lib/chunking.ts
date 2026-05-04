@@ -98,8 +98,15 @@ export function estimateTokens(text: string, providerHint?: string): number {
  * Estimate the maximum number of characters that fit within a given token budget.
  */
 export function estimateMaxChars(tokenBudget: number, providerHint?: string): number {
-  const isRussianHint = providerHint === undefined; // default to mixed
-  const charsPerToken = isRussianHint ? 3.7 : 3.7;
+  // Match the same provider-specific ratios used in estimateTokens
+  let charsPerToken: number;
+  if (providerHint === 'google') {
+    charsPerToken = 3.7 * 1.1; // ~4.07
+  } else if (providerHint === 'anthropic') {
+    charsPerToken = 3.7 * 0.95; // ~3.52
+  } else {
+    charsPerToken = 3.7;
+  }
   return Math.floor(tokenBudget * charsPerToken);
 }
 
@@ -307,9 +314,10 @@ export function canModelHandleInput(
   promptOverhead: number,
   providerHint?: string,
 ): boolean {
-  const inputTokens = estimateTokens(' '.repeat(inputChars), providerHint);
+  // Estimate tokens directly from character count without allocating a string
+  const charsPerToken = providerHint === 'google' ? 3.85 : providerHint === 'anthropic' ? 3.33 : 3.7;
+  const inputTokens = Math.ceil(inputChars / charsPerToken);
   const availableTokens = modelContextWindow - promptOverhead;
-  // Reserve 20% for output
   const maxInputTokens = Math.floor(availableTokens * 0.8);
   return inputTokens <= maxInputTokens;
 }
