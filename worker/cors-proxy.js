@@ -329,12 +329,12 @@ export default {
           { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
         );
       }
-      return new Response('Method not allowed', { status: 405 });
+      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
     }
 
     // Only allow POST
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
+      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
     }
 
     // ── Rate limiting by IP ──────────────────────────────────────────

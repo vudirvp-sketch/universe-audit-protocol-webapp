@@ -5,9 +5,12 @@ compatibility_date = "2024-01-01"
 # Deploy with: cd worker && npx wrangler deploy
 # Workers on *.workers.dev are automatically routed — no explicit routes needed.
 
-# Worker limits — increased for streaming and long requests
-[limits]
-cpu_ms = 50000
+# NOTE: [limits] cpu_ms is NOT supported on the Cloudflare Free plan.
+# The Free plan has a default CPU limit of 10ms per invocation, which is
+# sufficient for a pass-through proxy. If you upgrade to a paid plan,
+# you can uncomment the following to increase the CPU limit for streaming:
+# [limits]
+# cpu_ms = 50000
 
 # Environment variables (NOT secrets — just config)
 [vars]
