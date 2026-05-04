@@ -40,6 +40,7 @@ function createMockStateWithGates(auditMode: AuditMode = 'conflict'): PipelineRu
     issues: [],
     whatForChains: [],
     generativeOutput: null,
+    narrativeDigest: null,
     nextActions: [],
     finalScore: null,
     error: null,
@@ -232,7 +233,7 @@ describe('stepGenerative (Step 10: Generative Modules)', () => {
 
   describe('reduce', () => {
     test('Merges generative output with existing', () => {
-      const state = { ...createMockStateWithGates(), generativeOutput: { grief_mapping: { law: 'Old law', derived_stage: 'anger', justification_chain: [] } } };
+      const state = { ...createMockStateWithGates(), generativeOutput: { grief_mapping: { law: 'Old law', derived_stage: 'depression' as const, justification_chain: [] } } };
       const output = { dilemma: { value_A: 'A', value_B: 'B', criteria_met: { type_choice: true, irreversibility: false, identity: false, victory_price: false }, post_final_world: 'World' } };
       const newState = stepGenerative.reduce(state, output);
       expect(newState.generativeOutput!.grief_mapping).toBeDefined(); // Preserved

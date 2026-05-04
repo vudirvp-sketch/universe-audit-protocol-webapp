@@ -23,6 +23,8 @@ import { ChevronDown, ChevronUp, Sparkles, BookOpen, Film, Gamepad2, Tv, Dices, 
 import type { MediaType, AuditMode, AuthorProfileAnswers } from '@/lib/audit/types';
 import { t } from '@/lib/i18n/ru';
 import { readFileAsText, isFileSupported, type FileInfo } from '@/lib/file-reader';
+import { useSettings } from '@/hooks/useSettings';
+import { getModelCapabilities } from '@/lib/llm-client';
 
 const mediaIcons: Record<MediaType, React.ReactNode> = {
   game: <Gamepad2 className="h-4 w-4" />,
@@ -56,6 +58,12 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
   const [uploadedFileInfo, setUploadedFileInfo] = React.useState<FileInfo | null>(null);
   const [fileWarnings, setFileWarnings] = React.useState<string[]>([]);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Settings for model capabilities warnings (11.4)
+  const provider = useSettings((s) => s.provider);
+  const model = useSettings((s) => s.model);
+  const customContextWindow = useSettings((s) => s.customContextWindow);
+  const customMaxOutputTokens = useSettings((s) => s.customMaxOutputTokens);
 
   // Debounce text input to avoid excessive Zustand writes on every keystroke
   const [localInput, setLocalInput] = React.useState(inputText);
@@ -236,6 +244,31 @@ export function AuditForm({ onStartAudit }: AuditFormProps) {
             <p className="text-xs text-muted-foreground">
               {t.form.characterCount.replace('{count}', String(localInput.length))}
             </p>
+            {/* 11.4: Warnings about model limits based on capabilities */}
+            {(() => {
+              const effectiveModel = model || '';
+              const caps = getModelCapabilities(provider, effectiveModel);
+              const contextWindow = customContextWindow ?? caps.contextWindow;
+              const maxOutput = customMaxOutputTokens ?? caps.maxOutputTokens;
+              const warnings: React.ReactNode[] = [];
+              // If input text likely exceeds context window (~4 chars per token)
+              if (localInput.length > contextWindow * 3.5 && localInput.length > 0) {
+                warnings.push(
+                  <p key="ctx" className="text-xs text-amber-600 dark:text-amber-400">
+                    {t.settings.inputTooLongWarning}
+                  </p>
+                );
+              }
+              // If max output tokens is too low
+              if (maxOutput < 4096) {
+                warnings.push(
+                  <p key="out" className="text-xs text-amber-600 dark:text-amber-400">
+                    {t.settings.outputTokensLowWarning}
+                  </p>
+                );
+              }
+              return warnings;
+            })()}
             {fileWarnings.map((warning, i) => (
               <p key={i} className="text-xs text-amber-600 dark:text-amber-400">
                 {warning}

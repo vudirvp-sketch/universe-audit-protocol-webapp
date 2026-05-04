@@ -235,7 +235,7 @@ export const stepGateL4: AuditStep<GateL4Output> = {
       score: recalc.score, passed: recalc.score >= threshold,
       conditions, halt: recalc.score < threshold,
       fixes: recalc.score < threshold
-        ? output.evaluations.filter(e => e.status === 'FAIL').map((e, i) => `[L4] ${e.functionalRole || e.evidence || e.id}`)
+        ? output.evaluations.filter(e => e.status === 'FAIL').map((e, _i) => `[L4] ${e.functionalRole || e.evidence || e.id}`)
         : [],
       metadata: {
         breakdown, level: 'L4',

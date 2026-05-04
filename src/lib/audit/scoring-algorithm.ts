@@ -18,9 +18,9 @@ import { getGateThreshold } from './types';
  * Formula: (Passed_Applicable / Total_Applicable) × 100%
  */
 export function calculateLevelScore(
-  checklist: ChecklistItem[], 
+  checklist: ChecklistItem[],
   level: 'L1' | 'L2' | 'L3' | 'L4',
-  mediaType: MediaType
+  _mediaType: MediaType
 ): { score: number; passed: number; failed: number; insufficient: number; total: number } {
   // Precise level filtering
   const preciseLevelItems = checklist.filter(item => {
@@ -329,7 +329,7 @@ const CLASSIFICATION_THRESHOLDS = {
   living_weak_soul: 55,
 } as const;
 
-type ClassificationKey = 'cult_masterpiece' | 'powerful' | 'living_weak_soul' | 'decoration';
+export type ClassificationKey = 'cult_masterpiece' | 'powerful' | 'living_weak_soul' | 'decoration';
 
 /** Classification colors for UI display */
 export const CLASSIFICATION_COLORS: Record<ClassificationKey, string> = {

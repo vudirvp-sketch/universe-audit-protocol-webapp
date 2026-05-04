@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useAuditState, selectGateStatus, selectOverallProgress } from '@/hooks/useAuditState';
+import { useAuditState } from '@/hooks/useAuditState';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';

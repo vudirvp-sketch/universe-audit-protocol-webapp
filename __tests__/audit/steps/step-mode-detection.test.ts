@@ -23,6 +23,7 @@ function createMockState(inputText = 'Test narrative', auditMode: AuditMode | nu
     issues: [],
     whatForChains: [],
     generativeOutput: null,
+    narrativeDigest: null,
     nextActions: [],
     finalScore: null,
     error: null,

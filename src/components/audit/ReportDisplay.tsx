@@ -21,7 +21,7 @@ import ReactMarkdown from 'react-markdown';
 import rehypeSanitize from 'rehype-sanitize';
 import { t } from '@/lib/i18n/ru';
 import { Label } from '@/components/ui/label';
-import { getClassification, CLASSIFICATION_COLORS, CLASSIFICATION_LABELS } from '@/lib/audit/scoring-algorithm';
+import { getClassification, CLASSIFICATION_COLORS, CLASSIFICATION_LABELS, type ClassificationKey } from '@/lib/audit/scoring-algorithm';
 
 export function ReportDisplay() {
   const report = useAuditState((state) => state.report);
@@ -89,7 +89,7 @@ function HumanReadableReport({
   percentage,
 }: {
   report: AuditReport;
-  classification: string;
+  classification: ClassificationKey;
   percentage: number;
 }) {
   const [copied, setCopied] = React.useState(false);

@@ -19,7 +19,6 @@ import {
   XCircle,
   HelpCircle,
   Circle,
-  ChevronRight,
 } from 'lucide-react';
 import type { ChecklistItem, ChecklistItemStatus } from '@/lib/audit/types';
 import { getGateThreshold } from '@/lib/audit/types';
@@ -76,8 +75,6 @@ interface ChecklistItemRowProps {
 }
 
 function ChecklistItemRow({ item, onStatusChange, onEvidenceChange, onUpdateItem }: ChecklistItemRowProps) {
-  const [expanded, setExpanded] = React.useState(false);
-
   return (
     <div className={`rounded-md border p-3 ${STATUS_COLORS[item.status]}`}>
       <div className="flex items-start gap-3">

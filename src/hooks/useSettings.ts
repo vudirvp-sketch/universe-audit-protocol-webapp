@@ -31,6 +31,10 @@ export interface AppSettings {
   model: string | null;
   proxyUrl: string;
   rpmLimit: number;
+  // Custom model capabilities (user override, advanced settings)
+  customContextWindow: number | null;
+  customMaxOutputTokens: number | null;
+  customSupportsJSONMode: boolean | null;
 }
 
 interface SettingsState extends AppSettings {
@@ -42,6 +46,9 @@ interface SettingsState extends AppSettings {
   setModel: (model: string | null) => void;
   setProxyUrl: (url: string) => void;
   setRpmLimit: (limit: number) => void;
+  setCustomContextWindow: (value: number | null) => void;
+  setCustomMaxOutputTokens: (value: number | null) => void;
+  setCustomSupportsJSONMode: (value: boolean | null) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   clearSettings: () => void;
 }
@@ -62,6 +69,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   model: null,
   proxyUrl: PROXY_URL_DEFAULT,
   rpmLimit: PROVIDER_RPM_DEFAULTS.zai,
+  customContextWindow: null,
+  customMaxOutputTokens: null,
+  customSupportsJSONMode: null,
 };
 
 export const useSettings = create<SettingsState>()(
@@ -94,6 +104,18 @@ export const useSettings = create<SettingsState>()(
         set({ rpmLimit });
       },
 
+      setCustomContextWindow: (customContextWindow: number | null) => {
+        set({ customContextWindow });
+      },
+
+      setCustomMaxOutputTokens: (customMaxOutputTokens: number | null) => {
+        set({ customMaxOutputTokens });
+      },
+
+      setCustomSupportsJSONMode: (customSupportsJSONMode: boolean | null) => {
+        set({ customSupportsJSONMode });
+      },
+
       updateSettings: (settings: Partial<AppSettings>) => {
         set(settings);
       },
@@ -114,6 +136,9 @@ export const useSettings = create<SettingsState>()(
         model: state.model,
         proxyUrl: state.proxyUrl,
         rpmLimit: state.rpmLimit,
+        customContextWindow: state.customContextWindow,
+        customMaxOutputTokens: state.customMaxOutputTokens,
+        customSupportsJSONMode: state.customSupportsJSONMode,
       }),
       // After rehydration, mark as loaded and apply defaults for missing fields
       onRehydrateStorage: () => {

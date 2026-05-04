@@ -148,12 +148,6 @@ function GriefMatrixDesktop() {
     return { filled, total: 4 };
   };
 
-  const isDominantStageValid = (): boolean => {
-    if (!griefMatrix?.dominantStage) return false;
-    const { filled, total } = getStageScore(griefMatrix.dominantStage);
-    return filled === total;
-  };
-
   return (
     <>
       {/* Dominant Stage Selector */}

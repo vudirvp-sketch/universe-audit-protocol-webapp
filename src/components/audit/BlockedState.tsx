@@ -17,12 +17,11 @@ import {
   RotateCcw,
   Wrench,
   ShieldAlert,
-  ShieldX,
   Zap,
   Play,
 } from 'lucide-react';
 import { t } from '@/lib/i18n/ru';
-import type { GateResult, FixItem, AuditPhase } from '@/lib/audit/types';
+import type { GateResult, AuditPhase } from '@/lib/audit/types';
 
 // ---------------------------------------------------------------------------
 // Patch type labels in Russian

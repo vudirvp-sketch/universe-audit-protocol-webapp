@@ -37,12 +37,6 @@ export interface ReadResult {
 // ============================================================================
 
 const SUPPORTED_EXTENSIONS = ['.txt', '.md', '.docx', '.pdf'];
-const SUPPORTED_MIME_TYPES = [
-  'text/plain',
-  'text/markdown',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/pdf',
-];
 
 // Warning thresholds
 const WARNING_5MB = 5 * 1024 * 1024;
@@ -101,7 +95,6 @@ function readPlainText(file: File): Promise<string> {
  */
 async function readDocx(file: File): Promise<string> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mammoth = await import('mammoth').catch(() => null);
     if (!mammoth) {
       throw new Error(
@@ -137,7 +130,7 @@ async function readPdf(file: File): Promise<string> {
 
     // Try to set up the worker
     try {
-      const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.mjs').catch(() => null);
+      const pdfjsWorker: { default?: string } | null = await import('pdfjs-dist/build/pdf.worker.mjs').catch(() => null);
       if (pdfjsWorker?.default) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
       }
@@ -152,7 +145,6 @@ async function readPdf(file: File): Promise<string> {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((item: any) => item.str || '')
         .join(' ');
       textParts.push(pageText);

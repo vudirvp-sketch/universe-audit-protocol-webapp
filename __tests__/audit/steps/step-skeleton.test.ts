@@ -24,6 +24,7 @@ function createMockState(auditMode: AuditMode = 'conflict'): PipelineRunState {
     issues: [],
     whatForChains: [],
     generativeOutput: null,
+    narrativeDigest: null,
     nextActions: [],
     finalScore: null,
     error: null,

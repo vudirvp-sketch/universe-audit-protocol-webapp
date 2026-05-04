@@ -344,7 +344,7 @@ export function enableStreamingInPayload(
     }
     // Also need to add stream: true to the body for newer Gemini models
     try {
-      const body = JSON.parse(payload);
+      JSON.parse(payload);
       // Gemini doesn't use stream:true in body — alt=sse is sufficient
       return { payload, targetUrl: url.toString() };
     } catch {

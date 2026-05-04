@@ -14,7 +14,7 @@
  */
 
 import type { AuditPhase } from './types';
-import type { AuditStep, PipelineRunState } from './audit-step';
+import type { AuditStep } from './audit-step';
 
 // ============================================================================
 // PIPELINE STEP ORDER

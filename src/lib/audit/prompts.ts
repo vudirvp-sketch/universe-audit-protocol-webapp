@@ -7,7 +7,7 @@
 //   - Enum values in output: English
 //   - User narrative is wrapped in <user_input> tags per Section 2.3
 
-import type { MediaType, AuditMode, Skeleton } from './types';
+import type { MediaType, Skeleton } from './types';
 import { wrapUserInput, sanitizeNarrative } from './input-sanitizer';
 
 /**

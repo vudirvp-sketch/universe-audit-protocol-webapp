@@ -10,7 +10,7 @@
  */
 
 import type { AuditStep, PipelineRunState, StepValidationResult, GateDecision } from '../audit-step';
-import type { GenerativeOutput, GriefStage, GriefMappingResult, DilemmaResult } from '../types';
+import type { GenerativeOutput, GriefStage } from '../types';
 import { extractJSON } from '../json-sanitizer';
 import { wrapUserInput, sanitizeNarrative } from '../input-sanitizer';
 import type { ChatMessage } from '@/lib/llm-client';

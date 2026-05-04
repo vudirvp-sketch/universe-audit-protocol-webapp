@@ -63,7 +63,7 @@ const AUDIT_STATE_STORAGE_KEY = 'universe-audit-state';
 
 export const useAuditState = create<AuditState>()(
   persist(
-    (set, get) => ({
+    (set, _get) => ({
   ...initialState,
 
   // Setters

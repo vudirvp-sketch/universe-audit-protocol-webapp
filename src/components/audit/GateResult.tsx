@@ -63,10 +63,11 @@ const LEVEL_INFO: Record<string, { name: string; description: string; focus: str
   },
 };
 
-const SEVERITY_COLORS = {
+const SEVERITY_COLORS: Record<string, string> = {
   critical: 'bg-red-500/10 border-red-500/50 text-red-600',
   major: 'bg-orange-500/10 border-orange-500/50 text-orange-600',
   minor: 'bg-yellow-500/10 border-yellow-500/50 text-yellow-600',
+  cosmetic: 'bg-gray-500/10 border-gray-500/50 text-gray-600',
 };
 
 const APPROACH_COLORS = {

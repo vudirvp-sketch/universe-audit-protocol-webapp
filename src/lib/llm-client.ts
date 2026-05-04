@@ -899,7 +899,6 @@ export function createLLMClient(config: LLMClientConfig) {
 
     // Normalize the full text response into ChatCompletionResponse format
     // We already have the full text, so create a synthetic response
-    const providerConfig = LLM_PROVIDERS[config.provider];
     return {
       id: `${config.provider}-stream-${Date.now()}`,
       object: 'chat.completion',

@@ -18,8 +18,8 @@ import { createLLMClient, type LLMClient, type LLMProvider, getModelCapabilities
 import { runStep, type PipelineRunState } from './audit-step';
 import { getStep, getStepOrder, stepRegistry } from './step-registry';
 import { classifyLLMError } from './error-handler';
-import { shouldUseDigest, shouldUseDigestForModel, computeNarrativeDigest, extractSkeletonKeywords, computeMaxDigestChars } from './narrative-processor';
-import { splitIntoChunks, canModelHandleInput, estimateTokens, DEFAULT_CHUNKING_CONFIG, type ChunkingConfig } from '@/lib/chunking';
+import { shouldUseDigestForModel, computeNarrativeDigest, extractSkeletonKeywords } from './narrative-processor';
+import { splitIntoChunks, canModelHandleInput, type ChunkingConfig } from '@/lib/chunking';
 import { getPreSkeletonExtractionPrompt, getSkeletonSynthesisPrompt } from './prompts';
 import type {
   AuditPhase,
@@ -37,7 +37,7 @@ import type {
   NextAction,
 } from './types';
 import { MASTER_CHECKLIST } from './protocol-data';
-import { filterByMediaType, evaluateGate } from './scoring-algorithm';
+import { filterByMediaType } from './scoring-algorithm';
 
 // Step registration is handled by step-registry.ts auto-registration on import.
 // No need for side-effect imports here — stepRegistry.registerAllSteps() is

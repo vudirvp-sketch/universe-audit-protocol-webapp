@@ -122,7 +122,6 @@ function splitIntoSentences(text: string): string[] {
   }
 
   // Check if there's remaining text after the last match
-  const lastMatchEnd = (matches[matches.length - 1]?.length ?? 0);
   const remainingText = text.slice(
     matches.reduce((acc, m) => acc + m.length, 0)
   ).trim();

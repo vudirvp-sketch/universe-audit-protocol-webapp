@@ -16,7 +16,7 @@
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
 import { runAuditPipeline, resumeAuditFromStep, type PipelineState } from '../../src/lib/audit/pipeline';
-import type { ChatCompletionResponse } from '../../src/lib/llm-client';
+import type { ChatCompletionResponse, LLMClient, LLMProvider } from '../../src/lib/llm-client';
 import type { PipelineRunState } from '../../src/lib/audit/audit-step';
 import type { AuditPhase, AuditMode, MediaType } from '../../src/lib/audit/types';
 
@@ -54,7 +54,27 @@ function createMockLLMClient(responses: Partial<Record<AuditPhase, Array<ChatCom
     return defaultLLMResponse();
   });
 
-  return { chatCompletion, callLog };
+  const chatCompletionStream = vi.fn(async (options: { messages: unknown[]; max_tokens?: number }, onChunk: (text: string, delta: string) => void) => {
+    const response = await chatCompletion(options);
+    const content = response.choices?.[0]?.message?.content || '';
+    onChunk(content, content);
+    return response;
+  });
+
+  const client: LLMClient & { callLog: typeof callLog } = {
+    chatCompletion,
+    chatCompletionStream,
+    provider: 'deepseek' as LLMProvider,
+    model: 'test-model',
+    chat: {
+      completions: {
+        create: chatCompletion,
+      },
+    },
+    callLog,
+  };
+
+  return client;
 }
 
 /** Default valid LLM response with generic JSON content */
@@ -277,6 +297,11 @@ function fullPassResponses(): Array<ChatCompletionResponse> {
 describe('runAuditPipeline', () => {
   let mockClient: ReturnType<typeof createMockLLMClient>;
 
+  /** Cast chatCompletion to vi.Mock for access to mockImplementation etc. */
+  function getChatMock() {
+    return mockClient.chatCompletion as unknown as ReturnType<typeof vi.fn>;
+  }
+
   beforeEach(() => {
     mockClient = createMockLLMClient();
   });
@@ -285,7 +310,7 @@ describe('runAuditPipeline', () => {
     // Provide responses for each LLM-calling step
     const responses = fullPassResponses();
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -303,7 +328,7 @@ describe('runAuditPipeline', () => {
   test('Calls LLM client for each non-skipLLM step', async () => {
     const responses = fullPassResponses();
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -315,7 +340,7 @@ describe('runAuditPipeline', () => {
     );
 
     // 10 LLM-calling steps (steps 1-10; step 0 and step 11 are skipLLM)
-    expect(mockClient.chatCompletion).toHaveBeenCalled();
+    expect(getChatMock()).toHaveBeenCalled();
     // At least 10 calls — one per LLM step
     expect(mockClient.callLog.length).toBeGreaterThanOrEqual(10);
   });
@@ -329,7 +354,7 @@ describe('runAuditPipeline', () => {
       gateResponse(45, false), // L1 FAILS — below 60% conflict threshold
     ];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -354,7 +379,7 @@ describe('runAuditPipeline', () => {
       skeletonResponse(false), // thematicLaw = null → BLOCKED
     ];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -373,7 +398,7 @@ describe('runAuditPipeline', () => {
   test('Supports cancellation via AbortSignal', async () => {
     const responses = fullPassResponses();
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -393,7 +418,7 @@ describe('runAuditPipeline', () => {
 
     expect(result.phase).toBe('cancelled');
     // LLM should not have been called at all (abort before first step)
-    expect(mockClient.chatCompletion).not.toHaveBeenCalled();
+    expect(getChatMock()).not.toHaveBeenCalled();
   });
 
   test('Cancellation mid-pipeline stops further steps', async () => {
@@ -402,7 +427,7 @@ describe('runAuditPipeline', () => {
     let responseIndex = 0;
     let callCount = 0;
 
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       callCount++;
       // Abort after the 3rd LLM call (mode_detection, author_profile, skeleton)
       if (callCount >= 3) {
@@ -428,7 +453,7 @@ describe('runAuditPipeline', () => {
   test('Records per-step timings', async () => {
     const responses = fullPassResponses();
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       // Small delay to ensure measurable elapsed time
       await new Promise(resolve => setTimeout(resolve, 10));
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
@@ -453,7 +478,7 @@ describe('runAuditPipeline', () => {
   test('Calls onProgress callback for each step', async () => {
     const responses = fullPassResponses();
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -490,7 +515,7 @@ describe('runAuditPipeline', () => {
       generativeResponse(),
     ];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -513,7 +538,7 @@ describe('runAuditPipeline', () => {
       screeningResponse(5), // 5 NO answers → stop_return_to_skeleton → BLOCKED
     ];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -543,7 +568,7 @@ describe('runAuditPipeline', () => {
     const validResponse = modeDetectionResponse('conflict');
 
     let callCount = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       callCount++;
       if (callCount === 1) return truncatedResponse;
       return validResponse;
@@ -561,7 +586,7 @@ describe('runAuditPipeline', () => {
   });
 
   test('Returns failed state on LLM error after max retries', async () => {
-    mockClient.chatCompletion.mockRejectedValue(new TypeError('Failed to fetch'));
+    getChatMock().mockRejectedValue(new TypeError('Failed to fetch'));
 
     const result = await runAuditPipeline(
       { narrative: 'Тестовый нарратив о мире с тематическим законом и корневой травмой, достаточно длинный для валидации.', mediaType: 'novel' },
@@ -603,7 +628,7 @@ describe('runAuditPipeline', () => {
     let responseIndex = 0;
     const callTimestamps: number[] = [];
 
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       callTimestamps.push(Date.now());
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
@@ -620,7 +645,7 @@ describe('runAuditPipeline', () => {
 
     // With 60 RPM, minimum interval is ~1 second
     // Just verify that the LLM was called the expected number of times
-    expect(mockClient.chatCompletion).toHaveBeenCalled();
+    expect(getChatMock()).toHaveBeenCalled();
   });
 });
 
@@ -631,6 +656,11 @@ describe('runAuditPipeline', () => {
 describe('resumeAuditFromStep', () => {
   let mockClient: ReturnType<typeof createMockLLMClient>;
 
+  /** Cast chatCompletion to vi.Mock for access to mockImplementation etc. */
+  function getChatMock() {
+    return mockClient.chatCompletion as unknown as ReturnType<typeof vi.fn>;
+  }
+
   beforeEach(() => {
     mockClient = createMockLLMClient();
   });
@@ -638,6 +668,8 @@ describe('resumeAuditFromStep', () => {
   function createBlockedState(blockedAtStep: AuditPhase = 'L1_evaluation'): PipelineState {
     return {
       inputText: 'Тестовый нарратив о мире с тематическим законом и корневой травмой, достаточно длинный для валидации.',
+      narrativeDigest: null,
+      mediaType: 'novel' as MediaType,
       auditMode: 'conflict',
       authorProfile: {
         type: 'hybrid',
@@ -695,7 +727,7 @@ describe('resumeAuditFromStep', () => {
       generativeResponse(),
     ];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -718,7 +750,7 @@ describe('resumeAuditFromStep', () => {
   test('Preserves previously completed step results', async () => {
     const responses = [gateResponse(80, true), gateResponse(75, true), l3GateResponse(70, true), l4GateResponse(72), issuesResponse(), generativeResponse()];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -765,14 +797,14 @@ describe('resumeAuditFromStep', () => {
     );
 
     expect(result.phase).toBe('cancelled');
-    expect(mockClient.chatCompletion).not.toHaveBeenCalled();
+    expect(getChatMock()).not.toHaveBeenCalled();
   });
 
   test('Returns blocked state if resumed step still fails', async () => {
     // L1 still fails on resume
     const responses = [gateResponse(40, false)]; // Still below 60% threshold
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;
       return resp;
@@ -791,7 +823,7 @@ describe('resumeAuditFromStep', () => {
   test('Records new step timings during resume without overwriting old ones', async () => {
     const responses = [gateResponse(75, true), gateResponse(70, true), l3GateResponse(65, true), l4GateResponse(72), issuesResponse(), generativeResponse()];
     let responseIndex = 0;
-    mockClient.chatCompletion.mockImplementation(async () => {
+    getChatMock().mockImplementation(async () => {
       await new Promise(resolve => setTimeout(resolve, 5));
       const resp = responseIndex < responses.length ? responses[responseIndex] : defaultLLMResponse();
       responseIndex++;

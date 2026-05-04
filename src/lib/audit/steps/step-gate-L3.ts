@@ -282,7 +282,7 @@ export const stepGateL3: AuditStep<GateL3Output> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function defaultL3Output(reason: string): GateL3Output {
+function defaultL3Output(_reason: string): GateL3Output {
   return {
     evaluations: [],
     griefMatrix: { dominantStage: 'depression', cells: [] },

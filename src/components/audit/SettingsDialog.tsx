@@ -14,7 +14,6 @@ import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetFooter,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -39,6 +38,8 @@ import {
   AVAILABLE_PROVIDERS,
   type LLMProvider,
   createLLMClient,
+  PREFERRED_MODELS,
+  getModelCapabilities,
 } from '@/lib/llm-client';
 import { t } from '@/lib/i18n/ru';
 
@@ -57,6 +58,12 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const setModel = useSettings((s) => s.setModel);
   const setProxyUrl = useSettings((s) => s.setProxyUrl);
   const setRpmLimit = useSettings((s) => s.setRpmLimit);
+  const setCustomContextWindow = useSettings((s) => s.setCustomContextWindow);
+  const setCustomMaxOutputTokens = useSettings((s) => s.setCustomMaxOutputTokens);
+  const setCustomSupportsJSONMode = useSettings((s) => s.setCustomSupportsJSONMode);
+  const customContextWindow = useSettings((s) => s.customContextWindow);
+  const customMaxOutputTokens = useSettings((s) => s.customMaxOutputTokens);
+  const customSupportsJSONMode = useSettings((s) => s.customSupportsJSONMode);
   const clearSettings = useSettings((s) => s.clearSettings);
 
   const isMobile = useIsMobile();
@@ -68,6 +75,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [inputContextWindow, setInputContextWindow] = React.useState('');
+  const [inputMaxOutputTokens, setInputMaxOutputTokens] = React.useState('');
   const [testConnection, setTestConnection] = React.useState<{ loading: boolean; success: boolean; error: string | null }>({
     loading: false,
     success: false,
@@ -81,9 +90,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setInputModel(model || '');
       setInputProxyUrl(proxyUrl || '');
       setInputRpmLimit(String(rpmLimit));
+      setInputContextWindow(customContextWindow != null ? String(customContextWindow) : '');
+      setInputMaxOutputTokens(customMaxOutputTokens != null ? String(customMaxOutputTokens) : '');
       setSaved(false);
     }
-  }, [open, apiKey, model, proxyUrl, rpmLimit]);
+  }, [open, apiKey, model, proxyUrl, rpmLimit, customContextWindow, customMaxOutputTokens]);
 
   // Update model input when provider changes
   React.useEffect(() => {
@@ -98,6 +109,12 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     const defaultModel = LLM_PROVIDERS[newProvider]?.defaultModel || '';
     setInputModel(defaultModel);
     setModel(null);
+    // Clear custom capabilities when provider changes (will auto-detect from new provider)
+    setCustomContextWindow(null);
+    setCustomMaxOutputTokens(null);
+    setCustomSupportsJSONMode(null);
+    setInputContextWindow('');
+    setInputMaxOutputTokens('');
   };
 
   const handleSave = () => {
@@ -126,6 +143,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setRpmLimit(parsedRpm);
     }
 
+    // Save custom capabilities (empty = null = auto-detect)
+    const parsedContextWindow = parseInt(inputContextWindow, 10);
+    setCustomContextWindow(!isNaN(parsedContextWindow) && parsedContextWindow > 0 ? parsedContextWindow : null);
+
+    const parsedMaxOutputTokens = parseInt(inputMaxOutputTokens, 10);
+    setCustomMaxOutputTokens(!isNaN(parsedMaxOutputTokens) && parsedMaxOutputTokens > 0 ? parsedMaxOutputTokens : null);
+
     onSettingsChange?.({
       provider,
       apiKey: trimmedKey || null,
@@ -141,6 +165,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     setInputModel('');
     setInputProxyUrl('');
     setInputRpmLimit('');
+    setInputContextWindow('');
+    setInputMaxOutputTokens('');
     clearSettings();
     onSettingsChange?.({ provider: 'zai', apiKey: null, model: null });
     setSaved(false);
@@ -257,7 +283,16 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               placeholder={currentProvider?.defaultModel || 'model-name'}
               value={inputModel}
               onChange={(e) => setInputModel(e.target.value)}
+              list={`model-list-${provider}`}
             />
+            {/* Datalist with recommended models for auto-detection (11.3) */}
+            {PREFERRED_MODELS[provider] && PREFERRED_MODELS[provider].length > 0 && (
+              <datalist id={`model-list-${provider}`}>
+                {PREFERRED_MODELS[provider].map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+            )}
             <p className="text-xs text-muted-foreground">
               {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
             </p>
@@ -371,6 +406,62 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                   />
                   <p className="text-xs text-muted-foreground">
                     {t.settings.rpmLimitHint}
+                  </p>
+                </div>
+
+                {/* Model Capabilities Override (11.2) */}
+                <div className="space-y-3 pt-2 border-t">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {t.settings.capabilitiesHint}
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="context-window" className="text-xs">
+                      {t.settings.contextWindow}
+                    </Label>
+                    <Input
+                      id="context-window"
+                      type="number"
+                      min={0}
+                      placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').contextWindow)}
+                      value={inputContextWindow}
+                      onChange={(e) => setInputContextWindow(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t.settings.contextWindowHint}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="max-output-tokens" className="text-xs">
+                      {t.settings.maxOutputTokens}
+                    </Label>
+                    <Input
+                      id="max-output-tokens"
+                      type="number"
+                      min={0}
+                      placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').maxOutputTokens)}
+                      value={inputMaxOutputTokens}
+                      onChange={(e) => setInputMaxOutputTokens(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t.settings.maxOutputTokensHint}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="json-mode"
+                      type="checkbox"
+                      checked={customSupportsJSONMode ?? getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').supportsJSONMode}
+                      onChange={(e) => setCustomSupportsJSONMode(e.target.checked)}
+                      className="rounded border-gray-300"
+                    />
+                    <Label htmlFor="json-mode" className="text-xs">
+                      {t.settings.supportsJSONMode}
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t.settings.supportsJSONModeHint}
                   </p>
                 </div>
               </div>

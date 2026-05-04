@@ -23,6 +23,7 @@ function createMockState(inputText: string): PipelineRunState {
     issues: [],
     whatForChains: [],
     generativeOutput: null,
+    narrativeDigest: null,
     nextActions: [],
     finalScore: null,
     error: null,
