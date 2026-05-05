@@ -25,6 +25,8 @@ export interface LLMStreamingOptions {
   onChunk: (text: string) => void;
   maxTokens: number;
   abortSignal?: AbortSignal;
+  /** Response format — 'markdown' for V2 pipeline, 'json' for legacy */
+  responseFormat?: 'markdown' | 'json';
 }
 
 // ============================================================
@@ -79,6 +81,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         max_tokens: maxTokens,
         temperature: 0.7,
         signal: abortSignal,
+        responseFormat: options.responseFormat || 'markdown',
       },
       (text: string, _delta: string) => {
         // Only call onChunk with the delta (new text), not accumulated
@@ -97,6 +100,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
       max_tokens: maxTokens,
       temperature: 0.7,
       signal: abortSignal,
+      responseFormat: options.responseFormat || 'markdown',
     });
 
     const fullText = response.choices?.[0]?.message?.content || '';

@@ -65,6 +65,15 @@ export interface ChatCompletionOptions {
   signal?: AbortSignal;
   /** If true, tells the proxy to skip server-side 429 retries (for test connections). */
   skipProxyRetry?: boolean;
+  /**
+   * Desired response format from the LLM.
+   * - 'markdown' (default): No JSON mode forcing — model returns free-form text/markdown.
+   * - 'json': Forces JSON output mode (response_format: json_object / responseMimeType: application/json).
+   *
+   * Pipeline V2 uses markdown prompts — MUST set this to 'markdown' (or omit for default).
+   * Legacy V10 JSON pipelines should set 'json' explicitly.
+   */
+  responseFormat?: 'markdown' | 'json';
 }
 
 export interface ChatCompletionResponse {
@@ -495,8 +504,9 @@ function buildProviderRequestBody(
         maxOutputTokens: effectiveMaxTokens,
       };
 
-      // Only set responseMimeType to application/json if the model supports JSON mode
-      if (caps.supportsJSONMode) {
+      // Only set responseMimeType to application/json when JSON mode is explicitly requested
+      // (responseFormat === 'json'). Pipeline V2 uses markdown prompts — must NOT force JSON.
+      if (options.responseFormat === 'json' && caps.supportsJSONMode) {
         generationConfig.responseMimeType = 'application/json';
       }
 
@@ -537,8 +547,9 @@ function buildProviderRequestBody(
         stream: false,
       };
 
-      // Only add response_format: json_object if the model supports it
-      if (caps.supportsJSONMode) {
+      // Only add response_format: json_object when JSON mode is explicitly requested
+      // (responseFormat === 'json'). Pipeline V2 uses markdown prompts — must NOT force JSON.
+      if (options.responseFormat === 'json' && caps.supportsJSONMode) {
         body.response_format = { type: 'json_object' };
       }
 
@@ -1046,4 +1057,5 @@ export type LLMClient = ReturnType<typeof createLLMClient>;
 // TOKEN ESTIMATION (re-exported from chunking.ts for convenience)
 // ============================================================================
 
-export { estimateTokens, canModelHandleInput } from './chunking';
+// NOTE: chunking.ts was removed — chunking is not yet implemented in V2 pipeline.
+// If chunking is needed in the future, re-add the file and this re-export.
