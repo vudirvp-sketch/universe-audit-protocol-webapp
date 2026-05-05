@@ -159,6 +159,12 @@ export function extractDelta(provider: LLMProvider, eventData: string): { text: 
   }
 }
 
+/** Default timeout for streaming requests (milliseconds).
+ * 2 minutes — streaming requests should be long-lived, but we need a safety net
+ * to prevent infinite hangs if the proxy/provider stops sending data.
+ */
+const STREAMING_TIMEOUT_MS = 120_000;
+
 // ============================================================================
 // STREAMING CLIENT
 // ============================================================================
@@ -172,6 +178,11 @@ export function extractDelta(provider: LLMProvider, eventData: string): { text: 
  * 3. Parses SSE events and extracts text deltas
  * 4. Calls onChunk for each delta with accumulated text
  * 5. Returns the complete text when the stream finishes
+ *
+ * BUGFIX: Added default client-side timeout (120s) for streaming requests.
+ * Previously, if no signal was provided, the streaming request could hang
+ * indefinitely if the proxy/provider stopped sending data without closing
+ * the connection.
  *
  * @returns The complete text accumulated from all streaming chunks
  */
@@ -187,19 +198,47 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
     payload,
   });
 
+  // ── Client-side timeout for streaming requests ──────────────────────
+  // If the caller didn't provide a signal (or the signal has no timeout),
+  // we add our own safety timeout to prevent infinite hangs.
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), STREAMING_TIMEOUT_MS);
+
+  const combinedSignal = signal
+    ? AbortSignal.any([signal, timeoutController.signal])
+    : timeoutController.signal;
+
   // Make the streaming request
-  const response = await fetch(proxyUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Accept': 'text/event-stream',
-    },
-    body: proxyRequestBody,
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
+      },
+      body: proxyRequestBody,
+      signal: combinedSignal,
+    });
+  } catch (fetchError: unknown) {
+    clearTimeout(timeoutId);
+    // Handle timeout / abort errors with user-friendly messages
+    if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+      throw new Error(
+        'Запрос отменён по таймауту. Попробуйте более быструю модель или более короткий текст.'
+      );
+    }
+    if (fetchError instanceof TypeError) {
+      throw new Error(
+        'Не удалось подключиться к прокси для streaming-запроса. Проверьте интернет-соединение.'
+      );
+    }
+    throw fetchError;
+  }
 
   // Handle error responses — these come as regular JSON, not SSE
   if (!response.ok) {
+    clearTimeout(timeoutId);
     let errorMessage = '';
     try {
       // Read body as text first, then try to parse as JSON — avoids
@@ -242,6 +281,7 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
   const contentType = response.headers.get('content-type') || '';
   if (!contentType.includes('text/event-stream') && !contentType.includes('application/json')) {
     // Unknown content type — read as text and return
+    clearTimeout(timeoutId);
     const text = await response.text();
     onChunk({ text, delta: text, done: true });
     return text;
@@ -249,6 +289,7 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
 
   // If the proxy returned buffered JSON (not SSE), handle it directly
   if (contentType.includes('application/json') && !contentType.includes('text/event-stream')) {
+    clearTimeout(timeoutId);
     const data = await response.json();
     // Extract text from the buffered response based on provider format
     let text = '';
@@ -326,6 +367,7 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
   // Final chunk — signal completion
   onChunk({ text: accumulated, delta: '', done: true, finishReason: finishReason || 'stop' });
 
+  clearTimeout(timeoutId);
   return accumulated;
 }
 

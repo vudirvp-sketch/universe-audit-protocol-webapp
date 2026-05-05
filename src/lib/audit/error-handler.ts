@@ -53,7 +53,7 @@ export interface AuditError {
  *   5.  Response with status 502 / message with 'bad gateway' → provider_overloaded
  *   6.  Response with status 500           → provider
  *   7.  Error message with 'CORS'/'proxy'  → cors
- *   8.  Error message with 'timeout'       → timeout
+ *   8.  Error message with 'timeout'/'таймаут'/'abort' → transient_error
  *   9.  Error message with 'JSON'/'parse'  → parse_error
  *   10. Error message with 'truncated'/'finish_reason' → truncated
  *   11. Default                            → provider
@@ -144,8 +144,13 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 8. Timeout errors (transient)
-  if (messageLower.includes('timeout')) {
+  // 8. Timeout errors (transient) — match both English "timeout" and Russian "таймаут" / "отменён"
+  if (
+    messageLower.includes('timeout') ||
+    messageLower.includes('таймаут') ||
+    messageLower.includes('отменён по таймауту') ||
+    messageLower.includes('abort')
+  ) {
     return {
       type: 'transient_error',
       userMessage:

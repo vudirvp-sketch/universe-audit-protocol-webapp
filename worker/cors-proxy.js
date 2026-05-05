@@ -74,8 +74,12 @@ const ipRateLimitMap = new Map(); // IP → { count, resetAt }
 // Body size limit: 2MB
 const MAX_BODY_SIZE = 2 * 1024 * 1024;
 
-// Timeout for buffered (non-streaming) requests to provider
-const PROVIDER_TIMEOUT_MS = 25000; // 25 seconds (leave 5s for Worker overhead)
+// Timeout for buffered (non-streaming) requests to provider.
+// IMPORTANT: Cloudflare Workers (free plan) have a 30-second wall-clock limit.
+// If you're on the paid Workers Unbound plan, you can increase this to 90+ seconds.
+// Set the PROVIDER_TIMEOUT_MS environment variable to override.
+const DEFAULT_PROVIDER_TIMEOUT_MS = 55_000; // 55 seconds (leaves margin for Worker overhead)
+const PROVIDER_TIMEOUT_MS = parseInt(typeof PROVIDER_TIMEOUT_ENV !== 'undefined' ? PROVIDER_TIMEOUT_ENV : '', 10) || DEFAULT_PROVIDER_TIMEOUT_MS;
 
 // Known provider domains for targetUrl validation
 const KNOWN_PROVIDER_DOMAINS = [

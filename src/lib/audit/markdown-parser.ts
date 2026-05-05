@@ -484,7 +484,7 @@ export function parseGriefMatrix(section: string): GriefArchitectureMatrix | nul
 }
 
 /** Guess level from criterion ID prefix */
-function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
+export function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
   const block = id.charAt(0).toUpperCase();
   switch (block) {
     case 'A': case 'B': case 'E': case 'F': return 'L1';

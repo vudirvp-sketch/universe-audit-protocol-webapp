@@ -16,6 +16,9 @@ import type {
   Step2Result,
   Step3Result,
   MediaType,
+  ScreeningAnswer,
+  CriterionAssessment,
+  FixRecommendation,
 } from './types-v2';
 import type { ModelCapabilities } from '../llm-client';
 import type { LLMStreamingResult } from './llm-streaming';
@@ -26,6 +29,7 @@ import {
   parseStep2Response,
   parseStep3Response,
   ParseError,
+  guessLevelFromId,
 } from './markdown-parser';
 import { callLLMStreaming } from './llm-streaming';
 import { MASTER_CHECKLIST } from './protocol-data';
@@ -458,8 +462,6 @@ function filterByMediaType(
 // Best-effort fallback constructors (empty results for ParseError)
 // ============================================================
 
-import type { ScreeningAnswer, CriterionAssessment, FixRecommendation } from './types-v2';
-
 const SCREENING_QUESTIONS = [
   'Тематический закон работает как правило',
   'Мир существует без протагониста',
@@ -524,18 +526,6 @@ function makeEmptyStep3Result(): Step3Result {
     whatForChains: [],
     generative: null,
   };
-}
-
-/** Guess level from criterion ID prefix */
-function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
-  const block = id.charAt(0).toUpperCase();
-  switch (block) {
-    case 'A': case 'B': case 'E': case 'F': return 'L1';
-    case 'C': case 'D': case 'H': return 'L2';
-    case 'J': case 'I': return 'L3';
-    case 'G': case 'K': case 'M': return 'L4';
-    default: return 'L1';
-  }
 }
 
 /** Check if a tag is applicable to media type */

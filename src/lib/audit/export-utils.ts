@@ -10,16 +10,8 @@
 import type {
   AuditReportV2,
   ExportData,
-  Step1Result,
-  Step2Result,
-  Step3Result,
   Skeleton,
-  ScreeningAnswer,
-  CriterionAssessment,
   GriefArchitectureMatrix,
-  FixRecommendation,
-  ChainResult,
-  GenerativeOutput,
 } from './types-v2';
 
 // ============================================================

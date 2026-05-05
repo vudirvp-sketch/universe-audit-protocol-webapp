@@ -7,6 +7,9 @@
  * Стратегия: сначала пробуем streaming, если он вернул пустой текст —
  * фоллбэк на обычный buffered-запрос. Это гарантирует, что мы всегда
  * получаем ответ от LLM, даже если прокси не поддерживает SSE.
+ *
+ * ВАЖНО: Добавлен собственный таймаут (DEFAULT_TIMEOUT_MS = 120 сек),
+ * чтобы LLM-вызов не висел бесконечно, если abortSignal не предоставлен.
  */
 
 import type { LLMConfig, PromptSet } from './types-v2';
@@ -34,6 +37,13 @@ export interface LLMStreamingOptions {
 }
 
 // ============================================================
+// Константы
+// ============================================================
+
+/** Default timeout for LLM calls (streaming + buffered) in milliseconds */
+const DEFAULT_TIMEOUT_MS = 120_000; // 2 minutes
+
+// ============================================================
 // Основная функция
 // ============================================================
 
@@ -47,6 +57,10 @@ export interface LLMStreamingOptions {
  * 3. Если streaming выбросил ошибку — тоже фоллбэк на buffered
  *
  * Возвращает полный текст ответа.
+ *
+ * BUGFIX: Добавлен собственный таймаут (120 сек) через AbortController,
+ * объединяемый с внешним abortSignal через AbortSignal.any().
+ * Это гарантирует, что вызов не зависнет бесконечно.
  */
 export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LLMStreamingResult> {
   const { prompt, llmConfig, onChunk, maxTokens, abortSignal } = options;
@@ -77,80 +91,122 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
     return null;
   };
 
-  // Accumulate streaming text for fallback purposes
-  let streamingAccumulated = '';
+  // ── Create a combined AbortController with default timeout ────────
+  // This ensures the LLM call doesn't hang forever even if the caller
+  // doesn't provide an abortSignal with a timeout.
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS);
 
-  // Try streaming first
+  const combinedSignal = abortSignal
+    ? AbortSignal.any([abortSignal, timeoutController.signal])
+    : timeoutController.signal;
+
+  // Track whether buffered fallback was already tried
+  // (prevents double-timeout: streaming empty → buffered fails → catch retries buffered AGAIN)
+  let bufferedFallbackAttempted = false;
+
   try {
-    const response = await client.chatCompletionStream(
-      {
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.7,
-        signal: abortSignal,
-        responseFormat: options.responseFormat || 'markdown',
-      },
-      (text: string, _delta: string) => {
-        // Accumulate delta for potential fallback use
-        streamingAccumulated += _delta;
-        // Call onChunk with the delta (new text), not accumulated
-        onChunk(_delta);
+    // Accumulate streaming text for fallback purposes
+    let streamingAccumulated = '';
+
+    // Try streaming first
+    try {
+      const response = await client.chatCompletionStream(
+        {
+          messages,
+          max_tokens: maxTokens,
+          temperature: 0.7,
+          signal: combinedSignal,
+          responseFormat: options.responseFormat || 'markdown',
+        },
+        (text: string, _delta: string) => {
+          // Accumulate delta for potential fallback use
+          streamingAccumulated += _delta;
+          // Call onChunk with the delta (new text), not accumulated
+          onChunk(_delta);
+        }
+      );
+
+      const fullText = response.choices?.[0]?.message?.content || '';
+
+      // If streaming returned empty text but we accumulated text via callbacks,
+      // use the accumulated text (proxy might not populate choices[0].message.content)
+      if (fullText.trim() === '' && streamingAccumulated.trim().length > 0) {
+        console.warn('Streaming response had empty choices[0].message.content, using accumulated streaming text');
+        clearTimeout(timeoutId);
+        return { text: streamingAccumulated, usage: extractUsage(response) };
       }
-    );
 
-    const fullText = response.choices?.[0]?.message?.content || '';
+      // If streaming returned empty text AND no accumulated text,
+      // fall back to buffered request (proxy may not support SSE)
+      if (fullText.trim() === '' && streamingAccumulated.trim() === '') {
+        console.warn('Streaming returned empty text, falling back to buffered request');
+        bufferedFallbackAttempted = true;
 
-    // If streaming returned empty text but we accumulated text via callbacks,
-    // use the accumulated text (proxy might not populate choices[0].message.content)
-    if (fullText.trim() === '' && streamingAccumulated.trim().length > 0) {
-      console.warn('Streaming response had empty choices[0].message.content, using accumulated streaming text');
-      return { text: streamingAccumulated, usage: extractUsage(response) };
-    }
+        const bufferedResponse = await client.chatCompletion({
+          messages,
+          max_tokens: maxTokens,
+          temperature: 0.7,
+          signal: combinedSignal,
+          responseFormat: options.responseFormat || 'markdown',
+        });
 
-    // If streaming returned empty text AND no accumulated text,
-    // fall back to buffered request (proxy may not support SSE)
-    if (fullText.trim() === '' && streamingAccumulated.trim() === '') {
-      console.warn('Streaming returned empty text, falling back to buffered request');
-      const bufferedResponse = await client.chatCompletion({
+        const bufferedText = bufferedResponse.choices?.[0]?.message?.content || '';
+        if (bufferedText.trim().length > 0) {
+          // Emulate streaming by sending the whole text at once
+          onChunk(bufferedText);
+          clearTimeout(timeoutId);
+          return { text: bufferedText, usage: extractUsage(bufferedResponse) };
+        }
+        // Both streaming and buffered returned empty — return empty
+        clearTimeout(timeoutId);
+        return { text: '', usage: extractUsage(bufferedResponse) };
+      }
+
+      clearTimeout(timeoutId);
+      return { text: fullText, usage: extractUsage(response) };
+    } catch (streamError) {
+      // If streaming fails, fall back to buffered request
+      console.warn('Streaming failed, falling back to buffered request:', streamError);
+
+      // If we already tried buffered fallback above (streaming returned empty,
+      // buffered timed out), DON'T try buffered again — that causes double-timeout.
+      // Instead, check if we have any partially accumulated streaming text.
+      if (bufferedFallbackAttempted) {
+        console.warn('Buffered fallback was already attempted, not retrying');
+        if (streamingAccumulated.trim().length > 0) {
+          console.warn('Using partially accumulated streaming text');
+          clearTimeout(timeoutId);
+          return { text: streamingAccumulated, usage: null };
+        }
+        // No accumulated text and buffered already failed — throw the original error
+        clearTimeout(timeoutId);
+        throw streamError;
+      }
+
+      // If we accumulated some text via streaming before the error, try to use it
+      if (streamingAccumulated.trim().length > 0) {
+        console.warn('Using partially accumulated streaming text as fallback');
+        clearTimeout(timeoutId);
+        return { text: streamingAccumulated, usage: null };
+      }
+
+      const response = await client.chatCompletion({
         messages,
         max_tokens: maxTokens,
         temperature: 0.7,
-        signal: abortSignal,
+        signal: combinedSignal,
         responseFormat: options.responseFormat || 'markdown',
       });
 
-      const bufferedText = bufferedResponse.choices?.[0]?.message?.content || '';
-      if (bufferedText.trim().length > 0) {
-        // Emulate streaming by sending the whole text at once
-        onChunk(bufferedText);
-        return { text: bufferedText, usage: extractUsage(bufferedResponse) };
-      }
-      // Both streaming and buffered returned empty — return empty
-      return { text: '', usage: extractUsage(bufferedResponse) };
+      const fullText = response.choices?.[0]?.message?.content || '';
+      // Emulate streaming by sending the whole text at once
+      onChunk(fullText);
+      clearTimeout(timeoutId);
+      return { text: fullText, usage: extractUsage(response) };
     }
-
-    return { text: fullText, usage: extractUsage(response) };
-  } catch (streamError) {
-    // If streaming fails, fall back to buffered request
-    console.warn('Streaming failed, falling back to buffered request:', streamError);
-
-    // If we accumulated some text via streaming before the error, try to use it
-    if (streamingAccumulated.trim().length > 0) {
-      console.warn('Using partially accumulated streaming text as fallback');
-      return { text: streamingAccumulated, usage: null };
-    }
-
-    const response = await client.chatCompletion({
-      messages,
-      max_tokens: maxTokens,
-      temperature: 0.7,
-      signal: abortSignal,
-      responseFormat: options.responseFormat || 'markdown',
-    });
-
-    const fullText = response.choices?.[0]?.message?.content || '';
-    // Emulate streaming by sending the whole text at once
-    onChunk(fullText);
-    return { text: fullText, usage: extractUsage(response) };
+  } catch (outerError) {
+    clearTimeout(timeoutId);
+    throw outerError;
   }
 }
