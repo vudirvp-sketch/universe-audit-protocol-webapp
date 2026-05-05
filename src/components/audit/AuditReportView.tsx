@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Step1Result, Step2Result, Step3Result, Skeleton, ScreeningAnswer, CriterionAssessment, GriefArchitectureMatrix, FixRecommendation, ChainResult, GenerativeOutput, PipelineMeta } from '@/lib/audit/types-v2';
+import type { Step1Result, Step2Result, Step3Result, Skeleton, ScreeningAnswer, CriterionAssessment, GriefArchitectureMatrix, FixRecommendation, ChainResult, GenerativeOutput, PipelineMeta } from '@/lib/audit/types-v2';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

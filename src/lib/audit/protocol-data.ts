@@ -1,15 +1,35 @@
 // Universe Audit Protocol v10.0 - Protocol Data
-import type { 
-  LegacyChecklistItem, 
-  GlossaryTerm, 
-  GriefStage, 
-  AuthorQuestion,
-  VitalityCriteria,
-  MediaTag,
-  LegacyMediaType
-} from './types';
 
+// ============================================================
+// Legacy types — previously in types.ts, now defined locally
+// ============================================================
+
+/** Legacy media type — used by MASTER_CHECKLIST */
+type LegacyMediaType = 'game' | 'novel' | 'film' | 'anime' | 'series' | 'ttrpg';
+
+/** Legacy media tag — used by MASTER_CHECKLIST */
+type MediaTag = 'CORE' | 'GAME' | 'VISUAL' | 'AUDIO' | 'INTERACTIVE';
+
+/** Legacy checklist item status — used by MASTER_CHECKLIST */
+type ChecklistItemStatus = 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA' | 'PENDING';
+
+/** Legacy checklist item — used by MASTER_CHECKLIST */
+interface LegacyChecklistItem {
+  id: string;
+  block: string;
+  text: string;
+  tag: MediaTag | `${MediaTag}|${MediaTag}`;
+  level: string;
+  status: ChecklistItemStatus;
+  evidence?: string;
+  functionalRole?: string;
+  applicable: boolean;
+}
+
+// ============================================================
 // Master Checklist - 52 items with media tags
+// ============================================================
+
 export const MASTER_CHECKLIST: LegacyChecklistItem[] = [
   // Block A: Structure (7) - L1
   { id: 'A1', block: 'A', text: 'Тематический закон сформулирован как физическое правило, влияет на физику/экономику', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
@@ -91,253 +111,3 @@ export const MASTER_CHECKLIST: LegacyChecklistItem[] = [
   { id: 'M2', block: 'M', text: 'Авторский самоаудит пройден', tag: 'CORE', level: 'L4', status: 'PENDING', applicable: true },
   { id: 'M3', block: 'M', text: 'История знает свой финал и не продолжается ради продолжения', tag: 'CORE', level: 'L4', status: 'PENDING', applicable: true },
 ];
-
-// Glossary with key terms
-export const GLOSSARY: GlossaryTerm[] = [
-  {
-    termRu: 'Хамартия',
-    termEn: 'Hamartia',
-    definition: 'Роковой изъян, являющийся одновременно силой персонажа и причиной его падения',
-    operationalCheck: 'Позволяет ли изъян достичь успеха И приводит ли к финалу?'
-  },
-  {
-    termRu: 'Садовник',
-    termEn: 'Gardener',
-    definition: 'Профиль автора: персонажи ведут сюжет, письмо-открытие',
-    operationalCheck: 'Могут ли персонажи изменить концовку своими выборами?'
-  },
-  {
-    termRu: 'Архитектор',
-    termEn: 'Architect',
-    definition: 'Профиль автора: сюжет ведёт персонажей, структурированное планирование',
-    operationalCheck: 'Обслуживают ли персонажи заранее определённые сюжетные точки?'
-  },
-  {
-    termRu: 'Архитектура Горя',
-    termEn: 'Grief Architecture',
-    definition: '5 стадий горя как структурный каркас (Отрицание→Гнев→Торг→Депрессия→Принятие)',
-    operationalCheck: 'Материализована ли каждая стадия на 4 уровнях (Персонаж+Локация+Механика+Акт)?'
-  },
-  {
-    termRu: 'Тематический Закон',
-    termEn: 'Thematic Law',
-    definition: 'Тема, выраженная как физический закон мира',
-    operationalCheck: 'Нарушает ли удаление темы физику/экономику мира (а не только сюжет)?'
-  },
-  {
-    termRu: 'Корнелианская дилемма',
-    termEn: 'Cornelian Dilemma',
-    definition: 'Выбор между двумя ценностями, где оба варианта обоснованы и необратимы',
-    operationalCheck: 'Оба варианта логически обоснованы? Есть ли третий путь?'
-  },
-  {
-    termRu: 'Телесность',
-    termEn: 'Embodiment/Corporeality',
-    definition: 'Физические ощущения, ограничения, логистика, заземляющие нарратив',
-    operationalCheck: 'Есть ли усталость, боль, запах или деньги в ключевых сценах?'
-  },
-  {
-    termRu: 'Мэри Сью',
-    termEn: 'Mary Sue',
-    definition: 'Персонаж без значимых изъянов или последствий',
-    operationalCheck: 'Балл ≤3/8 по тесту Мэри Сью?'
-  },
-  {
-    termRu: 'Корневая Травма',
-    termEn: 'Root Trauma',
-    definition: 'Событие, разрушившее прежний порядок и создавшее текущее состояние мира',
-    operationalCheck: 'Объясняет ли травма все основные идеологии и конфликты?'
-  },
-  {
-    termRu: 'Зеркало агента',
-    termEn: 'Agent Mirror',
-    definition: 'Нарративный приём, заставляющий аудиторию задуматься о собственной жизни',
-    operationalCheck: 'Заставляет ли финал зрителя задавать себе вопрос через месяц?'
-  },
-  {
-    termRu: 'MDA+OT',
-    termEn: 'MDA+OT Framework',
-    definition: 'Механика, Динамика, Эстетика + Онтология, Телос (5 уровней нарратива)',
-    operationalCheck: 'Все ли 5 уровней присутствуют и согласованы друг с другом?'
-  },
-  {
-    termRu: 'Ripple Effect',
-    termEn: 'Ripple Effect',
-    definition: 'Сколько других элементов ломается при удалении одного элемента',
-    operationalCheck: 'Ломает ли удаление элемента ≥2 других элементов?'
-  },
-];
-
-// Grief Stage Definitions
-export const GRIEF_STAGES: Record<GriefStage, {
-  nameRu: string;
-  nameEn: string;
-  materialization: string;
-  fourLevels: string;
-  verificationQuestion: string;
-}> = {
-  denial: {
-    nameRu: 'Отрицание',
-    nameEn: 'Denial',
-    materialization: 'Альтернативная реальность / ложный рай',
-    fourLevels: 'Персонаж + Локация + Механика + Акт',
-    verificationQuestion: 'Есть ли «красота», которую агент изначально любит?'
-  },
-  anger: {
-    nameRu: 'Гнев',
-    nameEn: 'Anger',
-    materialization: 'Агрессивная система защиты / ярость как физика',
-    fourLevels: 'Персонаж + Локация + Механика + Акт',
-    verificationQuestion: 'Есть ли механика, где ярость меняет реальность?'
-  },
-  bargaining: {
-    nameRu: 'Торг',
-    nameEn: 'Bargaining',
-    materialization: 'Жертвенные ритуалы / контракты',
-    fourLevels: 'Персонаж + Локация + Механика + Акт',
-    verificationQuestion: 'Есть ли «сделка», которую агент заключает с собой?'
-  },
-  depression: {
-    nameRu: 'Депрессия',
-    nameEn: 'Depression',
-    materialization: 'Паралич / мёртвые циклы / застывшее время',
-    fourLevels: 'Персонаж + Локация + Механика + Акт',
-    verificationQuestion: 'Есть ли место, где время буквально останавливается?'
-  },
-  acceptance: {
-    nameRu: 'Принятие',
-    nameEn: 'Acceptance',
-    materialization: 'Финальный выбор без победы — только трансформация',
-    fourLevels: 'Персонаж + Локация + Механика + Акт',
-    verificationQuestion: 'Меняет ли выбор не мир, а то, кем остаётся агент?'
-  }
-};
-
-// Logic Hole Types (7 types)
-export const LOGIC_HOLE_TYPES = [
-  { type: 'motivation', nameRu: 'Дыра мотивации', nameEn: 'Motivation Hole', symptom: 'Антагонист не сделал очевидного раньше', quickFix: 'Он не знал / ждал условий' },
-  { type: 'competence', nameRu: 'Дыра компетентности', nameEn: 'Competence Hole', symptom: 'Умный персонаж глупеет ради сюжета', quickFix: 'Информационный барьер' },
-  { type: 'scale', nameRu: 'Дыра масштаба', nameEn: 'Scale Hole', symptom: 'Малое событие → несоразмерные последствия', quickFix: 'Промежуточные звенья' },
-  { type: 'resources', nameRu: 'Дыра ресурсов', nameEn: 'Resources Hole', symptom: 'Армия без снабжения', quickFix: 'Логистическая проблема' },
-  { type: 'memory', nameRu: 'Дыра памяти', nameEn: 'Memory Hole', symptom: 'Мир забыл ключевое событие', quickFix: 'Механизм умалчивания' },
-  { type: 'ideology', nameRu: 'Идеологическая дыра', nameEn: 'Ideology Hole', symptom: 'Фракция противоречит своей идеологии', quickFix: 'Внутренний раскол' },
-  { type: 'time', nameRu: 'Дыра времени', nameEn: 'Time Hole', symptom: 'Хронология не сходится', quickFix: 'Пересмотреть темп' },
-] as const;
-
-// Vitality Criteria (17 criteria)
-export const VITALITY_CRITERIA: VitalityCriteria[] = [
-  { id: 1, name: 'Взаимозависимость', test: 'Удалить → ломается ≥2 других', passed: null },
-  { id: 2, name: 'Живые NPC', test: 'Защищают позицию, не пересказывают лор', passed: null },
-  { id: 3, name: 'Обязательный выбор', test: 'Молчание тоже выбор с ценой', passed: null },
-  { id: 4, name: 'Запрещённая стратегия', test: 'Агент может «сломать» систему по логике', passed: null },
-  { id: 5, name: 'Бесплатного не бывает', test: 'Каждая сила имеет болезненную цену', passed: null },
-  { id: 6, name: 'Мир без агента', test: 'Существовал до и продолжает после', passed: null },
-  { id: 7, name: 'Сопротивление мира', test: 'Сопротивляется даже правильным выборам', passed: null },
-  { id: 8, name: 'Память мира', test: 'Последствия видны позже в другом контексте', passed: null },
-  { id: 9, name: 'Новостной цикл', test: 'Уйти на год — войны без героя', passed: null },
-  { id: 10, name: 'Случайный прохожий', test: 'NPC имеют жизнь вне протагониста', passed: null },
-  { id: 11, name: 'Иммунитет короля', test: 'Сильнейшая структура имеет уязвимость', passed: null },
-  { id: 12, name: 'Бритва Оккама', test: 'Объяснено, почему люди пользуются лопатами', passed: null },
-  { id: 13, name: 'Эквивалентный обмен', test: 'Победа без цены невозможна', passed: null },
-  { id: 14, name: 'Трагедия без злодея', test: 'Несовместимые истины, а не злой умысел', passed: null },
-  { id: 15, name: 'Телесность', test: 'Тело: усталость, пот, болезнь', passed: null },
-  { id: 16, name: 'Время вне сюжета', test: 'Вчера и завтра без героя', passed: null },
-  { id: 17, name: 'Необъяснённая деталь', test: 'Элементы без объяснения работают на атмосферу', passed: null },
-];
-
-// Author Profile Questions (7 questions with weights)
-export const AUTHOR_QUESTIONS: AuthorQuestion[] = [
-  { id: 'Q1', text: 'Когда персонаж «должен» сделать что-то глупое ради сюжета — вы ищете способ сделать это органичным, а не просто пишете сцену?', weight: 1.0, isKeySignal: false },
-  { id: 'Q2', text: 'Знаете ли вы, как персонажи ведут себя в ситуациях, не описанных в нарративе?', weight: 1.0, isKeySignal: false },
-  { id: 'Q3', text: 'Возникали ли сюжетные повороты потому, что персонажи к ним пришли, а не потому что вы запланировали их заранее?', weight: 1.5, isKeySignal: true },
-  { id: 'Q4', text: 'Был ли вы когда-нибудь удивлены действием собственного персонажа?', weight: 1.0, isKeySignal: false },
-  { id: 'Q5', text: 'Могла ли финальная сцена измениться, если бы один ключевой персонаж принял другое решение в середине?', weight: 1.5, isKeySignal: true },
-  { id: 'Q6', text: 'Делает ли антагонист правильные вещи в ваших глазах — по собственной логике?', weight: 1.0, isKeySignal: false },
-  { id: 'Q7', text: 'Выросла ли трагедия из природы персонажа, а не из сюжетной необходимости?', weight: 1.5, isKeySignal: true },
-];
-
-// Cult Status Criteria (11 criteria)
-export const CULT_CRITERIA = [
-  { id: 1, name: 'Лор-айсберг', description: 'Поверхность + 3-4 скрытых слоя', weight: 'required' },
-  { id: 2, name: 'Сопротивление пониманию', description: 'Всегда остаётся «дно»', weight: 'required' },
-  { id: 3, name: 'Провокация интерпретации', description: 'Разные люди — разные смыслы', weight: 'high' },
-  { id: 4, name: 'Эстетическая уникальность', description: 'Узнаваем по фрагменту', weight: 'high' },
-  { id: 5, name: 'Антагонист/Фракция, за которую хочется играть', description: 'Игроки хотят пережить другую сторону', weight: 'high' },
-  { id: 6, name: 'Финал переосмысляет начало', description: 'Начало обретает новый смысл', weight: 'medium' },
-  { id: 7, name: 'Неудобная правда', description: 'Без моральной снисходительности', weight: 'medium' },
-  { id: 8, name: 'Мир расширяется логично', description: 'Новый контент вписывается естественно', weight: 'medium' },
-  { id: 9, name: 'Запоминающийся символ', description: 'Артефакт/место запоминается без объяснения', weight: 'medium' },
-  { id: 10, name: 'Тема остаётся актуальной', description: 'Тема значима вне нарратива', weight: 'low' },
-  { id: 11, name: 'Необъяснённая глубина усиливает', description: 'Тайна помогает, а не раздражает', weight: 'medium' },
-] as const;
-
-// Screening Questions (7 questions)
-export const SCREENING_QUESTIONS = [
-  { id: 1, question: 'Можно ли сформулировать тему мира как правило («В этом мире [X] всегда ведёт к [Y]»)?', flagOnNo: 'Полный аудит §0, §1.4' },
-  { id: 2, question: 'Если убрать протагониста — мир продолжает жить (рутина, история, конфликты без героя)?', flagOnNo: 'Критично §3, §4' },
-  { id: 3, question: 'Есть ли хотя бы одна сцена, где персонаж устал, платил деньги или чувствовал запах?', flagOnNo: 'Обязательно §1.5, §5' },
-  { id: 4, question: 'Несёт ли ключевой персонаж черту, которая одновременно является его силой и его гибелью?', flagOnNo: 'Критично §6' },
-  { id: 5, question: 'Есть ли момент, где «правильный» выбор тоже имеет болезненную цену?', flagOnNo: 'Обязательно §2, §16' },
-  { id: 6, question: 'Действует ли антагонист (или главная угроза) по логике, которую можно понять и даже принять?', flagOnNo: '§6, §8' },
-  { id: 7, question: 'Невозможно ли переписать финал на «счастливый конец» без разрушения смысла всей истории?', flagOnNo: 'Критично §16' },
-] as const;
-
-// Media type display names
-export const MEDIA_TYPE_LABELS: Record<LegacyMediaType, string> = {
-  game: 'Игра (RPG/Нарративная)',
-  novel: 'Роман/Литература',
-  film: 'Фильм',
-  anime: 'Аниме',
-  series: 'Сериал',
-  ttrpg: 'TTRPG/Настольная'
-};
-
-// Audit mode descriptions
-export const AUDIT_MODE_DESCRIPTIONS = {
-  conflict: {
-    name: 'Режим Конфликта',
-    nameRu: 'Режим Конфликта',
-    description: 'Западная структура, Путешествие героя, конфликт как драйвер. Антагонист существует, история движется к победе/поражению.',
-    questions: 'Преимущественно ДА: внешний антагонист?, траектория победы/поражения?, внешний конфликт?'
-  },
-  kishō: {
-    name: 'Режим Кишō',
-    nameRu: 'Режим Кишō',
-    description: 'Структура без конфликта, сдвиг перспективы как драйвер. Ки: погружение в состояние. Сё: углубление через детали. Тэн: когнитивный сдвиг. Кэцу: резонанс, а не развязка.',
-    questions: 'Преимущественно НЕТ: антагонист?, траектория победы?, внешний конфликт?'
-  },
-  hybrid: {
-    name: 'Гибридный Режим',
-    nameRu: 'Гибридный Режим',
-    description: 'Архитектура Горя как основа, антагонист как симптом, а не причина. Смешивает внешний и внутренний конфликт.',
-    questions: 'Смешанные ответы: есть элементы конфликта, есть фокус на внутреннем.'
-  }
-};
-
-// Thresholds
-// GATE_THRESHOLD removed — use getGateThreshold() from types.ts for mode-specific thresholds
-export const VITALITY_THRESHOLD = 13; // 13/17 = living world
-export const CULT_THRESHOLD = 8; // 8/11 = cult potential
-export const MARY_SUE_THRESHOLD = 3; // ≤3/8 = acceptable
-
-// Helper to check if tag is applicable to media type
-// NOTE: Prefer checkMediaApplicability() from scoring-algorithm.ts — this is
-// kept only for backward compatibility with any external consumers.
-export function isTagApplicable(tag: MediaTag | `${MediaTag}|${MediaTag}`, mediaType: LegacyMediaType): boolean {
-  if (tag === 'CORE') return true;
-  
-  if (tag.includes('|')) {
-    const tags = tag.split('|') as MediaTag[];
-    return tags.includes('CORE') || isTagInMediaType(tags, mediaType);
-  }
-  
-  return isTagInMediaType([tag as MediaTag], mediaType);
-}
-
-function isTagInMediaType(tags: MediaTag[], mediaType: LegacyMediaType): boolean {
-  if (tags.includes('GAME') && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
-  if (tags.includes('VISUAL') && ['film', 'anime', 'series'].includes(mediaType)) return true;
-  if (tags.includes('AUDIO') && ['film', 'anime', 'series'].includes(mediaType)) return true;
-  if (tags.includes('INTERACTIVE') && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
-  return false;
-}

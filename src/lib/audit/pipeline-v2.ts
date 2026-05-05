@@ -25,6 +25,7 @@ import {
   parseStep1Response,
   parseStep2Response,
   parseStep3Response,
+  ParseError,
 } from './markdown-parser';
 import { callLLMStreaming } from './llm-streaming';
 import { MASTER_CHECKLIST } from './protocol-data';
@@ -135,7 +136,25 @@ export async function runAuditPipelineV2(
       state.meta.tokensUsed.total += usage1.total;
     }
 
-    state.step1 = parseStep1Response(raw1);
+    // Best-effort parsing: if ParseError, use accumulated streaming text as fallback
+    try {
+      state.step1 = parseStep1Response(raw1);
+    } catch (parseErr) {
+      if (parseErr instanceof ParseError && accumulatedText1.trim().length > 0) {
+        console.warn('Step 1: ParseError on raw response, retrying with accumulated streaming text');
+        try {
+          state.step1 = parseStep1Response(accumulatedText1);
+        } catch {
+          console.warn('Step 1: Fallback parse also failed, using empty Step1Result');
+          state.step1 = makeEmptyStep1Result();
+        }
+      } else if (parseErr instanceof ParseError) {
+        console.warn('Step 1: Empty LLM response, using empty Step1Result');
+        state.step1 = makeEmptyStep1Result();
+      } else {
+        throw parseErr;
+      }
+    }
     state.meta.stepTimings.step1 = Date.now() - step1Start;
     callbacks.onStepComplete(1, state.step1);
 
@@ -204,7 +223,25 @@ export async function runAuditPipelineV2(
       state.meta.tokensUsed.total += usage2.total;
     }
 
-    state.step2 = parseStep2Response(raw2, criteria.map(c => c.id));
+    // Best-effort parsing for Step 2
+    try {
+      state.step2 = parseStep2Response(raw2, criteria.map(c => c.id));
+    } catch (parseErr) {
+      if (parseErr instanceof ParseError && accumulatedText2.trim().length > 0) {
+        console.warn('Step 2: ParseError on raw response, retrying with accumulated streaming text');
+        try {
+          state.step2 = parseStep2Response(accumulatedText2, criteria.map(c => c.id));
+        } catch {
+          console.warn('Step 2: Fallback parse also failed, using empty Step2Result');
+          state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
+        }
+      } else if (parseErr instanceof ParseError) {
+        console.warn('Step 2: Empty LLM response, using empty Step2Result');
+        state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
+      } else {
+        throw parseErr;
+      }
+    }
     state.meta.stepTimings.step2 = Date.now() - step2Start;
     callbacks.onStepComplete(2, state.step2);
 
@@ -249,7 +286,25 @@ export async function runAuditPipelineV2(
       state.meta.tokensUsed.total += usage3.total;
     }
 
-    state.step3 = parseStep3Response(raw3);
+    // Best-effort parsing for Step 3
+    try {
+      state.step3 = parseStep3Response(raw3);
+    } catch (parseErr) {
+      if (parseErr instanceof ParseError && accumulatedText3.trim().length > 0) {
+        console.warn('Step 3: ParseError on raw response, retrying with accumulated streaming text');
+        try {
+          state.step3 = parseStep3Response(accumulatedText3);
+        } catch {
+          console.warn('Step 3: Fallback parse also failed, using empty Step3Result');
+          state.step3 = makeEmptyStep3Result();
+        }
+      } else if (parseErr instanceof ParseError) {
+        console.warn('Step 3: Empty LLM response, using empty Step3Result');
+        state.step3 = makeEmptyStep3Result();
+      } else {
+        throw parseErr;
+      }
+    }
     state.meta.stepTimings.step3 = Date.now() - step3Start;
     callbacks.onStepComplete(3, state.step3);
 
@@ -397,6 +452,90 @@ function filterByMediaType(
     const applicable = checkMediaApplicability(item.tag, mediaType);
     return { ...item, applicable };
   });
+}
+
+// ============================================================
+// Best-effort fallback constructors (empty results for ParseError)
+// ============================================================
+
+import type { ScreeningAnswer, CriterionAssessment, FixRecommendation } from './types-v2';
+
+const SCREENING_QUESTIONS = [
+  'Тематический закон работает как правило',
+  'Мир существует без протагониста',
+  'Воплощённость (мир ощущается телесно)',
+  'Хамартия (фатальный изъян)',
+  'Болезненный выбор',
+  'Логика антагониста',
+  'Необратимость финала',
+];
+
+/** Create an empty Step1Result when parsing fails */
+function makeEmptyStep1Result(): Step1Result {
+  const screeningAnswers: ScreeningAnswer[] = SCREENING_QUESTIONS.map((q) => ({
+    question: q,
+    passed: false,
+    explanation: 'Не удалось распарсить ответ LLM',
+  }));
+  return {
+    auditMode: 'conflict',
+    modeRationale: 'Автоматический выбор (LLM не ответила)',
+    authorProfile: {
+      type: 'hybrid',
+      percentage: 50,
+      confidence: 0,
+      risks: [],
+      auditPriorities: [],
+    },
+    skeleton: {
+      thematicLaw: null,
+      rootTrauma: null,
+      hamartia: null,
+      pillars: [],
+      emotionalEngine: null,
+      authorProhibition: null,
+      targetExperience: null,
+      centralQuestion: null,
+    },
+    screeningAnswers,
+    screeningFlags: screeningAnswers.filter(a => !a.passed).map(a => a.question),
+  };
+}
+
+/** Create an empty Step2Result when parsing fails */
+function makeEmptyStep2Result(criteriaIds: string[]): Step2Result {
+  const assessments: CriterionAssessment[] = criteriaIds.map((id) => ({
+    id,
+    level: guessLevelFromId(id),
+    verdict: 'insufficient_data' as const,
+    evidence: '',
+    explanation: 'Не удалось распарсить ответ LLM',
+  }));
+  return {
+    assessments,
+    griefMatrix: null,
+  };
+}
+
+/** Create an empty Step3Result when parsing fails */
+function makeEmptyStep3Result(): Step3Result {
+  return {
+    fixList: [],
+    whatForChains: [],
+    generative: null,
+  };
+}
+
+/** Guess level from criterion ID prefix */
+function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
+  const block = id.charAt(0).toUpperCase();
+  switch (block) {
+    case 'A': case 'B': case 'E': case 'F': return 'L1';
+    case 'C': case 'D': case 'H': return 'L2';
+    case 'J': case 'I': return 'L3';
+    case 'G': case 'K': case 'M': return 'L4';
+    default: return 'L1';
+  }
 }
 
 /** Check if a tag is applicable to media type */
