@@ -16,10 +16,11 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { runAuditPipelineV2 } from '@/lib/audit/pipeline-v2';
+import { exportToMarkdown, exportToJSON } from '@/lib/audit/export-utils';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import type { MediaTypeV2 } from '@/lib/audit/types-v2';
+import type { MediaTypeV2, AuditReportV2 } from '@/lib/audit/types-v2';
 
 export default function Home() {
   // =========================================================================
@@ -179,6 +180,19 @@ export default function Home() {
       abortController.abort();
       setAbortController(null);
     }
+  };
+
+  // Download helper for export
+  const downloadFile = (content: string, filename: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // =========================================================================
@@ -361,16 +375,24 @@ export default function Home() {
                   isStreaming={phase === 'running'}
                   onNewAudit={() => useAuditStateV2.getState().reset()}
                   onExportMD={() => {
-                    // TODO: Phase 6 — implement MD export
-                    alert('Экспорт MD будет реализован в следующей фазе');
+                    if (!step1 || !step2 || !step3 || !meta) return;
+                    const report: AuditReportV2 = { step1, step2, step3, meta };
+                    const md = exportToMarkdown(report);
+                    downloadFile(md, 'audit-report.md', 'text/markdown');
                   }}
                   onExportJSON={() => {
-                    // TODO: Phase 6 — implement JSON export
-                    alert('Экспорт JSON будет реализован в следующей фазе');
+                    if (!step1 || !step2 || !step3 || !meta) return;
+                    const report: AuditReportV2 = { step1, step2, step3, meta };
+                    const json = exportToJSON(report, meta);
+                    downloadFile(json, 'audit-report.json', 'application/json');
                   }}
                   onCopy={() => {
-                    // TODO: Phase 6 — implement copy
-                    alert('Копирование будет реализовано в следующей фазе');
+                    if (!step1 || !step2 || !step3 || !meta) return;
+                    const report: AuditReportV2 = { step1, step2, step3, meta };
+                    const md = exportToMarkdown(report);
+                    navigator.clipboard.writeText(md).catch(() => {
+                      // Fallback for environments where clipboard API is not available
+                    });
                   }}
                 />
               </div>

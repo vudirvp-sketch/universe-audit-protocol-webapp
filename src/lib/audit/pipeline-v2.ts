@@ -27,7 +27,7 @@ import {
 } from './markdown-parser';
 import { callLLMStreaming } from './llm-streaming';
 import { MASTER_CHECKLIST } from './protocol-data';
-import { getAdaptiveDigestThreshold } from './narrative-processor-v2';
+import { getAdaptiveDigestThreshold, computeDigestForV2 } from './narrative-processor-v2';
 import { classifyLLMError } from './error-handler';
 
 // ============================================================
@@ -109,7 +109,7 @@ export async function runAuditPipelineV2(
     let accumulatedText1 = '';
     const maxTokens1 = resolveStepMaxTokens(1, modelCaps);
 
-    const raw1 = await callWithRetry(
+    const result1 = await callWithRetry(
       () => callLLMStreaming({
         prompt: buildStep1Prompt(textForStep1, input.mediaType),
         llmConfig,
@@ -120,6 +120,14 @@ export async function runAuditPipelineV2(
       () => accumulatedText1,
       1
     );
+
+    const raw1 = typeof result1 === 'string' ? result1 : result1.text;
+    const usage1 = typeof result1 === 'string' ? null : result1.usage;
+    if (usage1) {
+      state.meta.tokensUsed.prompt += usage1.prompt;
+      state.meta.tokensUsed.completion += usage1.completion;
+      state.meta.tokensUsed.total += usage1.total;
+    }
 
     state.step1 = parseStep1Response(raw1);
     state.meta.stepTimings.step1 = Date.now() - step1Start;
@@ -136,7 +144,7 @@ export async function runAuditPipelineV2(
     // Определить текст для Запроса 2
     // ============================================================
     const textForStep2 = needsDigest
-      ? input.text  // TODO: computeNarrativeDigest(input.text, skeletonKeywords)
+      ? computeDigestForV2(input.text, state.step1!.skeleton)
       : input.text;
 
     // ============================================================
@@ -162,7 +170,7 @@ export async function runAuditPipelineV2(
     let accumulatedText2 = '';
     const maxTokens2 = resolveStepMaxTokens(2, modelCaps);
 
-    const raw2 = await callWithRetry(
+    const result2 = await callWithRetry(
       () => callLLMStreaming({
         prompt: buildStep2Prompt(
           state.step1!.skeleton,
@@ -179,6 +187,14 @@ export async function runAuditPipelineV2(
       () => accumulatedText2,
       2
     );
+
+    const raw2 = typeof result2 === 'string' ? result2 : result2.text;
+    const usage2 = typeof result2 === 'string' ? null : result2.usage;
+    if (usage2) {
+      state.meta.tokensUsed.prompt += usage2.prompt;
+      state.meta.tokensUsed.completion += usage2.completion;
+      state.meta.tokensUsed.total += usage2.total;
+    }
 
     state.step2 = parseStep2Response(raw2, criteria.map(c => c.id));
     state.meta.stepTimings.step2 = Date.now() - step2Start;
@@ -203,7 +219,7 @@ export async function runAuditPipelineV2(
     let accumulatedText3 = '';
     const maxTokens3 = resolveStepMaxTokens(3, modelCaps);
 
-    const raw3 = await callWithRetry(
+    const result3 = await callWithRetry(
       () => callLLMStreaming({
         prompt: buildStep3Prompt(weakAssessments, state.step1!.skeleton, compressedMode3),
         llmConfig,
@@ -214,6 +230,14 @@ export async function runAuditPipelineV2(
       () => accumulatedText3,
       3
     );
+
+    const raw3 = typeof result3 === 'string' ? result3 : result3.text;
+    const usage3 = typeof result3 === 'string' ? null : result3.usage;
+    if (usage3) {
+      state.meta.tokensUsed.prompt += usage3.prompt;
+      state.meta.tokensUsed.completion += usage3.completion;
+      state.meta.tokensUsed.total += usage3.total;
+    }
 
     state.step3 = parseStep3Response(raw3);
     state.meta.stepTimings.step3 = Date.now() - step3Start;
@@ -239,18 +263,20 @@ export async function runAuditPipelineV2(
 // Retry logic
 // ============================================================
 
+import type { LLMStreamingResult } from './llm-streaming';
+
 /**
  * Вызвать LLM с ретраем.
  *
- * @param fn — функция вызова LLM, возвращает полный текст
+ * @param fn — функция вызова LLM, возвращает LLMStreamingResult
  * @param getAccumulatedText — возвращает уже полученный streaming-текст
  * @param step — номер шага (для логирования)
  */
 async function callWithRetry(
-  fn: () => Promise<string>,
+  fn: () => Promise<LLMStreamingResult>,
   getAccumulatedText: () => string,
   step: number
-): Promise<string> {
+): Promise<LLMStreamingResult> {
   try {
     return await fn();
   } catch (error: unknown) {
@@ -265,7 +291,7 @@ async function callWithRetry(
         const partial = getAccumulatedText();
         if (partial.trim().length > 0) {
           console.warn(`Step ${step}: transient error after retry, using partial text (${partial.length} chars)`);
-          return partial;
+          return { text: partial, usage: null };
         }
         // Нет даже partial текста — это фатально
         throw new Error(`LLM не ответил на шаге ${step} после повторной попытки`);

@@ -12,6 +12,13 @@ import { createLLMClient, type LLMProvider } from '../llm-client';
 // Типы
 // ============================================================
 
+export interface LLMStreamingResult {
+  /** Full text of the LLM response */
+  text: string;
+  /** Token usage from the LLM response (if available) */
+  usage: { prompt: number; completion: number; total: number } | null;
+}
+
 export interface LLMStreamingOptions {
   prompt: PromptSet;
   llmConfig: LLMConfig;
@@ -35,7 +42,7 @@ export interface LLMStreamingOptions {
  *
  * Возвращает полный текст ответа.
  */
-export async function callLLMStreaming(options: LLMStreamingOptions): Promise<string> {
+export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LLMStreamingResult> {
   const { prompt, llmConfig, onChunk, maxTokens, abortSignal } = options;
 
   const provider = llmConfig.provider as LLMProvider;
@@ -51,6 +58,18 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<st
     { role: 'system' as const, content: prompt.system },
     { role: 'user' as const, content: prompt.user },
   ];
+
+  // Helper to extract usage from response
+  const extractUsage = (response: { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } } | undefined): { prompt: number; completion: number; total: number } | null => {
+    if (response?.usage) {
+      return {
+        prompt: response.usage.prompt_tokens || 0,
+        completion: response.usage.completion_tokens || 0,
+        total: response.usage.total_tokens || 0,
+      };
+    }
+    return null;
+  };
 
   // Try streaming first
   try {
@@ -68,7 +87,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<st
     );
 
     const fullText = response.choices?.[0]?.message?.content || '';
-    return fullText;
+    return { text: fullText, usage: extractUsage(response) };
   } catch (streamError) {
     // If streaming fails, fall back to buffered request
     console.warn('Streaming failed, falling back to buffered request:', streamError);
@@ -83,6 +102,6 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<st
     const fullText = response.choices?.[0]?.message?.content || '';
     // Emulate streaming by sending the whole text at once
     onChunk(fullText);
-    return fullText;
+    return { text: fullText, usage: extractUsage(response) };
   }
 }

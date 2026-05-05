@@ -7,7 +7,7 @@
  */
 
 // TIER 0 — Foundation (types and data)
-export * from './types-v2';
+export * from './types';
 export * from './protocol-data';
 export * from './error-handler';
 export * from './narrative-processor';
@@ -18,6 +18,7 @@ export * from './llm-streaming';
 export * from './markdown-parser';
 export * from './prompts-v2';
 export * from './narrative-processor-v2';
+export * from './export-utils';
 
 // TIER 2 — Supporting utilities
 export { estimateTokens, canModelHandleInput, splitIntoChunks, getRecommendedChunkCount, DEFAULT_CHUNKING_CONFIG, type ChunkingConfig, type ChunkResult } from '../chunking';

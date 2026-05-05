@@ -24,7 +24,22 @@
  *  └──────────────────────────┘
  */
 
-import type { Skeleton } from './types';
+/**
+ * Legacy skeleton interface for extractSkeletonKeywords.
+ * Kept as a local type to avoid breaking changes with narrative-processor-v2.ts
+ * which wraps SkeletonV2 into this format before calling extractSkeletonKeywords.
+ */
+interface LegacySkeletonElement {
+  id: string;
+  name: string;
+  value: string | null;
+  status: string;
+  extracted?: string;
+}
+
+interface LegacySkeleton {
+  elements: LegacySkeletonElement[];
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -165,7 +180,7 @@ export function shouldUseDigestForModel(text: string, contextWindowTokens: numbe
  * @param skeleton - The parsed Skeleton (from the skeleton extraction step)
  * @returns An array of unique lowercase keywords
  */
-export function extractSkeletonKeywords(skeleton: Skeleton): string[] {
+export function extractSkeletonKeywords(skeleton: LegacySkeleton): string[] {
   const keywordSet = new Set<string>();
 
   for (const element of skeleton.elements) {

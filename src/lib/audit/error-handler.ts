@@ -22,7 +22,7 @@ export type AuditErrorType =
   | 'provider_overloaded'
   | 'provider'
   | 'timeout'
-  | 'invalid_json'
+  | 'parse_error'
   | 'truncated';
 
 // ---------------------------------------------------------------------------
@@ -156,12 +156,12 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 9. JSON parse errors — LLM returned malformed output
-  if (messageLower.includes('json') || messageLower.includes('parse')) {
+  // 9. Parse errors — LLM returned unparseable markdown or empty response
+  if (messageLower.includes('parse') || messageLower.includes('пустой ответ') || messageLower.includes('empty response')) {
     return {
-      type: 'invalid_json',
+      type: 'parse_error',
       userMessage:
-        'LLM вернул невалидный JSON. Система автоматически повторит запрос.',
+        'Не удалось распарсить ответ LLM. Система обработает лучший результат.',
       retryable: true,
     };
   }
