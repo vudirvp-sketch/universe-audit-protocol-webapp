@@ -14,11 +14,11 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sparkles, BookOpen, Gamepad2, Eye, Dices } from 'lucide-react';
-import type { MediaTypeV2 } from '@/lib/audit/types-v2';
+import type { MediaType } from '@/lib/audit/types-v2';
 
 // ─── Media type labels & icons ────────────────────────────────────────
 
-const MEDIA_TYPE_OPTIONS: { value: MediaTypeV2; label: string; icon: React.ReactNode }[] = [
+const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string; icon: React.ReactNode }[] = [
   { value: 'narrative', label: 'Нарратив', icon: <BookOpen className="h-4 w-4" /> },
   { value: 'game', label: 'Игра', icon: <Gamepad2 className="h-4 w-4" /> },
   { value: 'visual', label: 'Визуальное', icon: <Eye className="h-4 w-4" /> },
@@ -28,7 +28,7 @@ const MEDIA_TYPE_OPTIONS: { value: MediaTypeV2; label: string; icon: React.React
 // ─── Props ────────────────────────────────────────────────────────────
 
 interface AuditFormV2Props {
-  onSubmit: (input: { text: string; mediaType: MediaTypeV2 }) => void;
+  onSubmit: (input: { text: string; mediaType: MediaType }) => void;
   isLoading?: boolean;
 }
 
@@ -130,7 +130,7 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
             <Label>Тип медиа</Label>
             <Select
               value={mediaType}
-              onValueChange={(v) => setMediaType(v as MediaTypeV2)}
+              onValueChange={(v) => setMediaType(v as MediaType)}
               disabled={isLoading}
             >
               <SelectTrigger>

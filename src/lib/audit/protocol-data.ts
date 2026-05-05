@@ -1,16 +1,16 @@
 // Universe Audit Protocol v10.0 - Protocol Data
 import type { 
-  ChecklistItem, 
+  LegacyChecklistItem, 
   GlossaryTerm, 
   GriefStage, 
   AuthorQuestion,
   VitalityCriteria,
   MediaTag,
-  MediaType
+  LegacyMediaType
 } from './types';
 
 // Master Checklist - 52 items with media tags
-export const MASTER_CHECKLIST: ChecklistItem[] = [
+export const MASTER_CHECKLIST: LegacyChecklistItem[] = [
   // Block A: Structure (7) - L1
   { id: 'A1', block: 'A', text: 'Тематический закон сформулирован как физическое правило, влияет на физику/экономику', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
   { id: 'A2', block: 'A', text: 'Корневая травма определена и объясняет все идеологии', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true },
@@ -283,7 +283,7 @@ export const SCREENING_QUESTIONS = [
 ] as const;
 
 // Media type display names
-export const MEDIA_TYPE_LABELS: Record<MediaType, string> = {
+export const MEDIA_TYPE_LABELS: Record<LegacyMediaType, string> = {
   game: 'Игра (RPG/Нарративная)',
   novel: 'Роман/Литература',
   film: 'Фильм',
@@ -323,7 +323,7 @@ export const MARY_SUE_THRESHOLD = 3; // ≤3/8 = acceptable
 // Helper to check if tag is applicable to media type
 // NOTE: Prefer checkMediaApplicability() from scoring-algorithm.ts — this is
 // kept only for backward compatibility with any external consumers.
-export function isTagApplicable(tag: MediaTag | `${MediaTag}|${MediaTag}`, mediaType: MediaType): boolean {
+export function isTagApplicable(tag: MediaTag | `${MediaTag}|${MediaTag}`, mediaType: LegacyMediaType): boolean {
   if (tag === 'CORE') return true;
   
   if (tag.includes('|')) {
@@ -334,7 +334,7 @@ export function isTagApplicable(tag: MediaTag | `${MediaTag}|${MediaTag}`, media
   return isTagInMediaType([tag as MediaTag], mediaType);
 }
 
-function isTagInMediaType(tags: MediaTag[], mediaType: MediaType): boolean {
+function isTagInMediaType(tags: MediaTag[], mediaType: LegacyMediaType): boolean {
   if (tags.includes('GAME') && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
   if (tags.includes('VISUAL') && ['film', 'anime', 'series'].includes(mediaType)) return true;
   if (tags.includes('AUDIO') && ['film', 'anime', 'series'].includes(mediaType)) return true;

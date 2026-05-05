@@ -16,6 +16,9 @@
 
 export type AuditErrorType =
   | 'network'
+  | 'transient_error'
+  | 'fatal_auth_error'
+  | 'fatal_cors_error'
   | 'cors'
   | 'auth'
   | 'rate_limit'
@@ -56,7 +59,7 @@ export interface AuditError {
  *   6.  Response with status 500           → provider
  *   7.  Error message with 'CORS'/'proxy'  → cors
  *   8.  Error message with 'timeout'       → timeout
- *   9.  Error message with 'JSON'/'parse'  → invalid_json
+ *   9.  Error message with 'JSON'/'parse'  → parse_error
  *   10. Error message with 'truncated'/'finish_reason' → truncated
  *   11. Default                            → provider
  */
@@ -81,21 +84,21 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 2. Response with status 401 — authentication failure
-  if (isResponseWithStatus(error, 401)) {
+  // 2. Response with status 401/403 — authentication failure
+  if (isResponseWithStatus(error, 401) || isResponseWithStatus(error, 403)) {
     return {
-      type: 'auth',
+      type: 'fatal_auth_error',
       userMessage:
         'Ошибка аутентификации: неверный или просроченный API-ключ. Проверьте ключ в настройках.',
       retryable: false,
-      status: 401,
+      status: isResponseWithStatus(error, 401) ? 401 : 403,
     };
   }
 
-  // 3. Response with status 429 — rate limiting
+  // 3. Response with status 429 — rate limiting (transient)
   if (isResponseWithStatus(error, 429)) {
     return {
-      type: 'rate_limit',
+      type: 'transient_error',
       userMessage:
         'Превышен лимит запросов к LLM-провайдеру. Подождите немного и попробуйте снова.',
       retryable: true,
@@ -103,10 +106,10 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 4. Response with status 503 — service unavailable (model overloaded)
+  // 4. Response with status 503 — service unavailable (model overloaded, transient)
   if (isResponseWithStatus(error, 503) || messageLower.includes('503') || messageLower.includes('overloaded') || messageLower.includes('high demand') || messageLower.includes('unavailable')) {
     return {
-      type: 'provider_overloaded',
+      type: 'transient_error',
       userMessage:
         'Модель LLM-провайдера перегружена (503). Это временная проблема — система автоматически повторит запрос через несколько секунд.',
       retryable: true,
@@ -114,10 +117,10 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 5. Response with status 502 — bad gateway (upstream timeout)
+  // 5. Response with status 502 — bad gateway (upstream timeout, transient)
   if (isResponseWithStatus(error, 502) || messageLower.includes('502') || messageLower.includes('bad gateway')) {
     return {
-      type: 'provider_overloaded',
+      type: 'transient_error',
       userMessage:
         'Шлюз LLM-провайдера временно недоступен (502). Это временная проблема — система автоматически повторит запрос.',
       retryable: true,
@@ -139,17 +142,17 @@ export function classifyLLMError(error: unknown): AuditError {
   // 7. CORS / proxy errors — typically from the Cloudflare Worker
   if (messageLower.includes('cors') || messageLower.includes('proxy')) {
     return {
-      type: 'cors',
+      type: 'fatal_cors_error',
       userMessage:
         'Ошибка CORS-прокси. Убедитесь, что URL прокси указан верно в настройках, и что Worker развёрнут.',
       retryable: false,
     };
   }
 
-  // 8. Timeout errors
+  // 8. Timeout errors (transient)
   if (messageLower.includes('timeout')) {
     return {
-      type: 'timeout',
+      type: 'transient_error',
       userMessage:
         'Превышено время ожидания ответа от LLM. Попробуйте снова или используйте более быструю модель.',
       retryable: true,

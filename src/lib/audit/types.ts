@@ -12,15 +12,15 @@
 // ============================================================
 
 /** Тип медиа — определяет фильтрацию критериев из MASTER_CHECKLIST */
-export type MediaTypeV2 = 'narrative' | 'game' | 'visual' | 'ttrpg';
+export type MediaType = 'narrative' | 'game' | 'visual' | 'ttrpg';
 
 /** Режим аудита */
-export type AuditModeV2 = 'conflict' | 'kishō' | 'hybrid';
+export type AuditMode = 'conflict' | 'kishō' | 'hybrid';
 
 /** Входные данные пайплайна */
 export interface AuditInput {
   text: string;
-  mediaType: MediaTypeV2;
+  mediaType: MediaType;
 }
 
 /** Конфигурация LLM-клиента */
@@ -35,7 +35,7 @@ export interface LLMConfig {
 }
 
 /** Элемент чеклиста — минимальный контракт для промптов */
-export interface ChecklistItemV2 {
+export interface ChecklistItem {
   id: string;
   name: string;
   description: string;
@@ -48,10 +48,10 @@ export interface ChecklistItemV2 {
 
 /** Результат Запроса 1: Знакомство + Скелет */
 export interface Step1Result {
-  auditMode: AuditModeV2;
+  auditMode: AuditMode;
   modeRationale: string;
-  authorProfile: AuthorProfileV2;
-  skeleton: SkeletonV2;
+  authorProfile: AuthorProfile;
+  skeleton: Skeleton;
   screeningAnswers: ScreeningAnswer[];
   screeningFlags: string[];
 }
@@ -64,7 +64,7 @@ export interface ScreeningAnswer {
 }
 
 /** Скелет концепта (8 элементов) */
-export interface SkeletonV2 {
+export interface Skeleton {
   thematicLaw: string | null;
   rootTrauma: string | null;
   hamartia: string | null;
@@ -76,7 +76,7 @@ export interface SkeletonV2 {
 }
 
 /** Профиль автора */
-export interface AuthorProfileV2 {
+export interface AuthorProfile {
   type: 'gardener' | 'hybrid' | 'architect';
   percentage: number;
   confidence: number;
@@ -91,7 +91,7 @@ export interface AuthorProfileV2 {
 /** Результат Запроса 2: Оценка */
 export interface Step2Result {
   assessments: CriterionAssessment[];
-  griefMatrix: GriefArchitectureMatrixV2 | null;
+  griefMatrix: GriefArchitectureMatrix | null;
 }
 
 /** Оценка одного критерия */
@@ -108,7 +108,7 @@ export interface CriterionAssessment {
  * 5 стадий × 4 уровня материализации:
  * Персонаж + Локация + Механика/Действие + Акт
  */
-export interface GriefArchitectureMatrixV2 {
+export interface GriefArchitectureMatrix {
   stages: GriefStageEntry[];
   dominantStage: string | null;
   acrossLevels: number;    // На скольких уровнях доминирующая стадия проявлена
@@ -132,8 +132,8 @@ export interface GriefStageEntry {
 /** Результат Запроса 3: Рекомендации */
 export interface Step3Result {
   fixList: FixRecommendation[];
-  whatForChains: ChainResultV2[];
-  generative: GenerativeOutputV2 | null;
+  whatForChains: ChainResult[];
+  generative: GenerativeOutput | null;
 }
 
 /** Рекомендация по исправлению */
@@ -148,14 +148,14 @@ export interface FixRecommendation {
 }
 
 /** Цепочка «А чтобы что?» */
-export interface ChainResultV2 {
+export interface ChainResult {
   criterionId: string;
   chain: string[];         // 3-5 итераций «А чтобы что?»
   rootCause: string;       // Финальный вывод цепочки
 }
 
 /** Генеративные модули */
-export interface GenerativeOutputV2 {
+export interface GenerativeOutput {
   griefMapping: string | null;   // Карта горя: как связать стадии с персонажами
   dilemma: string | null;        // Корнелианская дилемма для концепта
 }
@@ -178,7 +178,7 @@ export interface PipelineStateV2 {
 /** Мета-информация пайплайна */
 export interface PipelineMeta {
   inputText: string;
-  mediaType: MediaTypeV2;
+  mediaType: MediaType;
   narrativeDigest: string | null;
   elapsedMs: number;
   stepTimings: Record<string, number>;
@@ -193,7 +193,7 @@ export interface PipelineMeta {
 export interface ExportData {
   report: AuditReportV2;
   exportedAt: string;      // ISO 8601
-  protocolVersion: string; // '11.0'
+  protocolVersion: '11.0';
 }
 
 /** Композитный отчёт для UI (только для рендера) */
@@ -202,25 +202,6 @@ export interface AuditReportV2 {
   step2: Step2Result;
   step3: Step3Result;
   meta: PipelineMeta;
-}
-
-// ============================================================
-// Streaming-коллбеки
-// ============================================================
-
-/** Коллбеки для streaming-пайплайна */
-export interface StreamingCallbacks {
-  /** Вызывается при смене шага (1→2→3) */
-  onStepStart: (step: 1 | 2 | 3) => void;
-
-  /** Вызывается при получении каждого чанка текста от LLM (streaming) */
-  onChunk: (step: 1 | 2 | 3, text: string) => void;
-
-  /** Вызывается при завершении шага с распарсенным результатом */
-  onStepComplete: (step: 1 | 2 | 3, result: Step1Result | Step2Result | Step3Result) => void;
-
-  /** Вызывается при фатальной ошибке */
-  onError: (message: string) => void;
 }
 
 // ============================================================
@@ -240,7 +221,7 @@ export interface PromptSet {
 // ============================================================
 
 /** Legacy media type — used by protocol-data.ts MASTER_CHECKLIST */
-export type MediaType = 'game' | 'novel' | 'film' | 'anime' | 'series' | 'ttrpg';
+export type LegacyMediaType = 'game' | 'novel' | 'film' | 'anime' | 'series' | 'ttrpg';
 
 /** Legacy media tag — used by protocol-data.ts MASTER_CHECKLIST */
 export type MediaTag = 'CORE' | 'GAME' | 'VISUAL' | 'AUDIO' | 'INTERACTIVE';
@@ -252,7 +233,7 @@ export type ChecklistItemStatus = 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA' | 'PENDI
 export type GriefStage = 'denial' | 'anger' | 'bargaining' | 'depression' | 'acceptance';
 
 /** Legacy checklist item — used by protocol-data.ts MASTER_CHECKLIST */
-export interface ChecklistItem {
+export interface LegacyChecklistItem {
   id: string;
   block: string;
   text: string;

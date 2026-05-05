@@ -14,13 +14,13 @@ import type {
   Step2Result,
   Step3Result,
   PipelineMeta,
-  SkeletonV2,
+  Skeleton,
   ScreeningAnswer,
   CriterionAssessment,
-  GriefArchitectureMatrixV2,
+  GriefArchitectureMatrix,
   FixRecommendation,
-  ChainResultV2,
-  GenerativeOutputV2,
+  ChainResult,
+  GenerativeOutput,
 } from './types-v2';
 
 // ============================================================
@@ -170,7 +170,7 @@ export function exportToJSON(report: AuditReportV2, meta: PipelineMeta): string 
 // Helpers
 // ============================================================
 
-function formatSkeletonMD(skeleton: SkeletonV2): string {
+function formatSkeletonMD(skeleton: Skeleton): string {
   const items = [
     { label: 'Тематический закон', value: skeleton.thematicLaw },
     { label: 'Корневая травма', value: skeleton.rootTrauma },
@@ -187,7 +187,7 @@ function formatSkeletonMD(skeleton: SkeletonV2): string {
     .join('\n');
 }
 
-function formatGriefMatrixMD(matrix: GriefArchitectureMatrixV2): string {
+function formatGriefMatrixMD(matrix: GriefArchitectureMatrix): string {
   const lines: string[] = [];
   lines.push('| Стадия | Персонаж | Локация | Механика | Акт |');
   lines.push('|--------|----------|---------|----------|-----|');

@@ -13,12 +13,12 @@
 export const t = {
   app: {
     title: 'Протокол Аудита Вселенной',
-    version: 'v10.0',
+    version: 'v11.0',
     subtitle: 'Анализ вымышленных миров через 4 иерархических уровня',
     description:
       'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Каждый уровень требует порогового балла для прохождения (60% для конфликтного режима, 50% для кирё, 55% для гибридного).',
     footer:
-      'Протокол Аудита Вселенной v10.0 — На основе протокола \u00ABАУДИТ_ВСЕЛЕННОЙ_v10.0.md\u00BB',
+      'Протокол Аудита Вселенной v11.0 — На основе протокола \u00ABАУДИТ_ВСЕЛЕННОЙ_v11.0.md\u00BB',
     footerStats: '4 уровня \u2022 52 критерия \u2022 Порог зависит от режима',
     newAudit: 'Новый аудит',
     cancelAudit: 'Отменить аудит',
@@ -29,6 +29,18 @@ export const t = {
     saved: 'Сохранено!',
     settings: 'Настройки',
     criteriaCount: '52 критерия',
+    step1Label: 'Знакомство + Скелет',
+    step2Label: 'Оценка по критериям',
+    step3Label: 'Рекомендации',
+    exportMD: 'Скачать MD',
+    exportJSON: 'Скачать JSON',
+    copyToClipboard: 'Копировать',
+    streamingInProgress: 'Генерация ответа...',
+    verdictStrong: 'Сильный',
+    verdictWeak: 'Слабый',
+    verdictInsufficientData: 'Недостаточно данных',
+    apiKeyInvalid: 'API-ключ не прошёл валидацию',
+    inputHint: 'Введите концепт — от пары предложений до целого рассказа. Длинные тексты обрабатываются автоматически.',
   },
 
   form: {
@@ -78,7 +90,6 @@ export const t = {
     final_output: 'Диагностика и итог',
     complete: 'Завершено',
     failed: 'Ошибка',
-    blocked: 'Заблокировано',
     cancelled: 'Отменено',
   },
 
@@ -98,65 +109,7 @@ export const t = {
     final_output: 'Финальная диагностика',
     complete: 'Аудит завершён',
     failed: 'Гейт не пройден — требуется исправление',
-    blocked: 'Аудит остановлен',
     cancelled: 'Аудит отменён пользователем',
-  },
-
-  gates: {
-    blockedTitle: 'Аудит остановлен на уровне {level}',
-    blockedDescription:
-      'Концепт не прошёл порог {threshold}% на уровне {level}',
-    fixAndContinue: 'Исправить и продолжить',
-    status: 'Статус гейтов',
-    requirement: 'Порог зависит от режима аудита',
-    score: 'Балл',
-    // GateResult.tsx
-    title: 'Результаты гейтов',
-    pending: 'Ожидание',
-    notEvaluated: 'Этот уровень ещё не оценивался.',
-    passed: 'ПРОЙДЕН',
-    failed: 'НЕ ПРОЙДЕН',
-    scoreLabel: 'Балл',
-    threshold: 'порог: {value}%',
-    total: 'Всего',
-    passedItems: 'Пройдено',
-    failedItems: 'Не пройдено',
-    noData: 'Нет данных',
-    blockBreakdown: 'Разбивка по блокам',
-    conditions: 'Условия',
-    moreConditions: '+{count} условий...',
-    fixList: 'Список исправлений ({count} пунктов)',
-    fixRecommended: 'Рекомендуемый подход: {approach}',
-    proceedTo: 'Перейти к {target}',
-    proceedL2: 'L2 (Тело)',
-    proceedL3: 'L3 (Психика)',
-    proceedL4: 'L4 (Мета)',
-    proceedFinal: 'Итоговому отчёту',
-    gatesFailed: '{count} гейт(а) не пройдено',
-    auditStopped: 'Аудит остановлен',
-    auditStoppedDesc:
-      'Аудит остановлен из-за непройденных гейтов. Исправьте указанные проблемы перед переходом на следующий уровень.',
-    unreliableResult: 'Недостоверный результат',
-    unreliableResultDesc: 'Более 50% пунктов получили статус «Недостаточно данных». Оценка может быть неточной.',
-    gateFailureDetected: 'Обнаружен непройденный гейт',
-    gateFailureDesc:
-      'Гейт <strong>{level}</strong> не пройден с баллом <strong>{score}%</strong>.<br/><br/>Согласно Протоколу Аудита Вселенной v10.0, каждый уровень требует прохождения порога для продолжения. Аудит остановлен, чтобы предотвратить анализ на нестабильной основе.<br/><br/>Ознакомьтесь со списком исправлений и устраните выявленные проблемы перед продолжением.',
-    viewFixList: 'Смотреть список исправлений',
-    // Gate executor output strings
-    gateFailedHeading: '## ГЕЙТ НЕ ПРОЙДЕН: {name}',
-    statusLabel: 'Статус',
-    scoreLabelShort: 'Балл',
-    conditionBreakdown: '### Разбивка по условиям:',
-    requiredFixes: '### Необходимые исправления:',
-    executionHalted: '**ВЫПОЛНЕНИЕ ОСТАНОВЛЕНО** — Устраните проблемы выше перед продолжением',
-    // Fix type labels (Russian per Language Contract)
-    fixTypeMotivation: 'Мотивация',
-    fixTypeCompetence: 'Компетентность',
-    fixTypeScale: 'Масштаб',
-    fixTypeResources: 'Ресурсы',
-    fixTypeMemory: 'Память',
-    fixTypeIdeology: 'Идеология',
-    fixTypeTime: 'Время',
   },
 
   levels: {
@@ -186,29 +139,8 @@ export const t = {
     },
   },
 
-  blocked: {
-    failedCriteria: 'Проваленные критерии:',
-    noDescription: 'Нет описания',
-    impact: 'Влияние:',
-    whyImportant: 'Почему это важно:',
-    whyImportantExplanation:
-      'Каждый гейт — это иерархический фильтр. Если уровень не пройден, исправление более глубоких уровней бессмысленно — их результаты будут ненадёжными. Сначала устраните проблемы текущего уровня, затем перезапустите аудит с этого этапа.',
-    editAndRestart: 'Редактировать концепт и перезапустить',
-    downloadResults: 'Скачать текущие результаты (JSON)',
-    copyRecommendations: 'Скопировать рекомендации',
-    copied: 'Скопировано!',
-    patchConservative: 'Осторожный',
-    patchCompromise: 'Компромиссный',
-    patchRadical: 'Радикальный',
-    // Resume from blocked stage (Phase 3.3 / 4.5)
-    resumeFromStep: 'Возобновить с этого этапа',
-    resuming: 'Возобновление...',
-    resumeHint: 'Исправьте текст нарратива, затем нажмите эту кнопку, чтобы перезапустить аудит с заблокированного этапа, сохранив результаты предыдущих шагов.',
-  },
-
   errors: {
     timeout: 'LLM не ответила за 30 секунд. Попробуйте ещё раз.',
-    invalid_json: 'LLM вернула невалидный JSON. Перезапускаем шаг...',
     rate_limit:
       'Превышен лимит запросов. Подождите минуту и попробуйте снова.',
     truncated:
@@ -544,7 +476,7 @@ export const t = {
   // ─── ReportDisplay.tsx ────────────────────────────────────────────
   report: {
     title: 'Отчёт аудита',
-    protocolVersion: 'Протокол Аудита Вселенной v10.0',
+    protocolVersion: 'Протокол Аудита Вселенной v11.0',
     notGenerated: 'Отчёт ещё не сгенерирован',
     notGeneratedHint: 'Завершите аудит для просмотра полного отчёта',
     humanReadable: 'Читаемый отчёт',

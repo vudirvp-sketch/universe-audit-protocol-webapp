@@ -6,9 +6,9 @@
  */
 
 import type {
-  MediaTypeV2,
-  SkeletonV2,
-  ChecklistItemV2,
+  MediaType,
+  Skeleton,
+  ChecklistItem,
   CriterionAssessment,
   PromptSet,
 } from './types-v2';
@@ -17,7 +17,7 @@ import type {
 // Запрос 1: Знакомство + Скелет
 // ============================================================
 
-export function buildStep1Prompt(inputText: string, mediaType: MediaTypeV2): PromptSet {
+export function buildStep1Prompt(inputText: string, mediaType: MediaType): PromptSet {
   const mediaLabel = getMediaLabel(mediaType);
 
   const system = `Ты — эксперт-аудитор нарративов по Протоколу Аудита Вселенной v11.0. Ты анализируешь концепты вымышленных миров и определяешь их структурную целостность.`;
@@ -80,9 +80,9 @@ ${inputText}`;
 // ============================================================
 
 export function buildStep2Prompt(
-  skeleton: SkeletonV2,
+  skeleton: Skeleton,
   narrativeOrDigest: string,
-  criteria: ChecklistItemV2[],
+  criteria: ChecklistItem[],
   griefMatrixHint: boolean,
   compressedMode: boolean
 ): PromptSet {
@@ -104,7 +104,7 @@ export function buildStep2Prompt(
   const l3Criteria = criteria.filter(c => c.level === 'L3' || c.level.startsWith('L3/'));
   const l4Criteria = criteria.filter(c => c.level === 'L4' || c.level.startsWith('L4/'));
 
-  const formatCriteria = (items: ChecklistItemV2[]) =>
+  const formatCriteria = (items: ChecklistItem[]) =>
     items.map(c => `${c.id}: ${c.name} — ${c.description}`).join('\n');
 
   let user = `СКЕЛЕТ:
@@ -163,7 +163,7 @@ ${formatCriteria(l4Criteria)}`;
 
 export function buildStep3Prompt(
   weakAssessments: CriterionAssessment[],
-  skeleton: SkeletonV2,
+  skeleton: Skeleton,
   compressedMode: boolean
 ): PromptSet {
   const system = `Ты — эксперт-аудитор. На основе результатов аудита составь приоритизированный список рекомендаций.${compressedMode ? '\n\nОТВЕЧАЙ КРАТКО: для каждой рекомендации — диагноз 1 предложение, исправление 1 предложение. Цепочки — минимум 3 итерации.' : ''}`;
@@ -228,7 +228,7 @@ ${weakList || 'Нет слабых критериев — все сильные.
 // Helpers
 // ============================================================
 
-function getMediaLabel(mediaType: MediaTypeV2): string {
+function getMediaLabel(mediaType: MediaType): string {
   switch (mediaType) {
     case 'narrative': return 'Нарратив (роман/литература)';
     case 'game': return 'Игра (RPG/Нарративная)';

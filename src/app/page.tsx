@@ -20,7 +20,7 @@ import { exportToMarkdown, exportToJSON } from '@/lib/audit/export-utils';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import type { MediaTypeV2, AuditReportV2 } from '@/lib/audit/types-v2';
+import type { MediaType, AuditReportV2 } from '@/lib/audit/types-v2';
 
 export default function Home() {
   // =========================================================================
@@ -95,7 +95,7 @@ export default function Home() {
   // =========================================================================
   // Audit pipeline runner
   // =========================================================================
-  const startAudit = async (input: { text: string; mediaType: MediaTypeV2 }) => {
+  const startAudit = async (input: { text: string; mediaType: MediaType }) => {
     const currentApiKey = useSettings.getState().apiKey;
     const currentProxyUrl = useSettings.getState().proxyUrl;
     const currentModel = useSettings.getState().model || undefined;
@@ -154,9 +154,10 @@ export default function Home() {
       // Handle final state
       if (result.error) {
         useAuditStateV2.getState().setError(result.error);
+      } else if (result.meta) {
+        // Store pipeline meta (tokens, timings, etc.) so UI and export can use it
+        useAuditStateV2.getState().setMeta(result.meta);
       }
-      // If phase is 'done', all step results are already stored via onStepComplete
-      // The store's setStepResult for step 3 transitions phase to 'done' automatically
     } catch (err) {
       if (controller.signal.aborted) {
         // User cancelled — reset to idle
@@ -317,8 +318,8 @@ export default function Home() {
                 </Button>
               </div>
             </div>
-          ) : (
-            /* ===== Running / Done ===== */
+          ) : phase === 'running' ? (
+            /* ===== Running — Progress + Progressive Report ===== */
             <div className="max-w-5xl mx-auto">
               <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
                 {/* Left sidebar — progress + controls */}
@@ -351,18 +352,6 @@ export default function Home() {
                       )}
                     </CardContent>
                   </Card>
-
-                  {/* New Audit button */}
-                  {phase === 'done' && (
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => useAuditStateV2.getState().reset()}
-                    >
-                      <RotateCcw className="h-4 w-4 mr-2" />
-                      Новый аудит
-                    </Button>
-                  )}
                 </div>
 
                 {/* Right panel — progressive report */}
@@ -396,6 +385,39 @@ export default function Home() {
                   }}
                 />
               </div>
+            </div>
+          ) : (
+            /* ===== Done — Full Report Only ===== */
+            <div className="max-w-5xl mx-auto">
+              <AuditReportView
+                step1={step1}
+                step2={step2}
+                step3={step3}
+                meta={meta}
+                streamingText=""
+                isStreaming={false}
+                onNewAudit={() => useAuditStateV2.getState().reset()}
+                onExportMD={() => {
+                  if (!step1 || !step2 || !step3 || !meta) return;
+                  const report: AuditReportV2 = { step1, step2, step3, meta };
+                  const md = exportToMarkdown(report);
+                  downloadFile(md, 'audit-report.md', 'text/markdown');
+                }}
+                onExportJSON={() => {
+                  if (!step1 || !step2 || !step3 || !meta) return;
+                  const report: AuditReportV2 = { step1, step2, step3, meta };
+                  const json = exportToJSON(report, meta);
+                  downloadFile(json, 'audit-report.json', 'application/json');
+                }}
+                onCopy={() => {
+                  if (!step1 || !step2 || !step3 || !meta) return;
+                  const report: AuditReportV2 = { step1, step2, step3, meta };
+                  const md = exportToMarkdown(report);
+                  navigator.clipboard.writeText(md).catch(() => {
+                    // Fallback for environments where clipboard API is not available
+                  });
+                }}
+              />
             </div>
           )}
         </main>

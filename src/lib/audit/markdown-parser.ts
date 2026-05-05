@@ -13,16 +13,16 @@ import type {
   Step1Result,
   Step2Result,
   Step3Result,
-  AuditModeV2,
-  AuthorProfileV2,
-  SkeletonV2,
+  AuditMode,
+  AuthorProfile,
+  Skeleton,
   ScreeningAnswer,
   CriterionAssessment,
-  GriefArchitectureMatrixV2,
+  GriefArchitectureMatrix,
   GriefStageEntry,
   FixRecommendation,
-  ChainResultV2,
-  GenerativeOutputV2,
+  ChainResult,
+  GenerativeOutput,
 } from './types-v2';
 
 // ============================================================
@@ -134,7 +134,7 @@ export function parseStep1Response(markdown: string): Step1Result {
 }
 
 /** Распарсить секцию AUDIT_MODE */
-export function parseAuditMode(section: string): AuditModeV2 {
+export function parseAuditMode(section: string): AuditMode {
   const lower = section.toLowerCase();
   if (lower.includes('kishō') || lower.includes('kisho') || lower.includes('ки-сё') || lower.includes('кишо')) {
     return 'kishō';
@@ -157,7 +157,7 @@ function extractModeRationale(section: string): string {
 }
 
 /** Распарсить секцию AUTHOR_PROFILE */
-export function parseAuthorProfile(section: string): AuthorProfileV2 {
+export function parseAuthorProfile(section: string): AuthorProfile {
   const lines = extractLines(section);
   if (lines.length === 0) {
     return {
@@ -204,7 +204,7 @@ export function parseAuthorProfile(section: string): AuthorProfileV2 {
 }
 
 /** Распарсить секцию SKELETON */
-export function parseSkeleton(section: string): SkeletonV2 {
+export function parseSkeleton(section: string): Skeleton {
   const extractSub = (name: string): string | null => {
     const sub = extractSubsection(section, name);
     if (!sub) return null;
@@ -433,7 +433,7 @@ export function parseSingleCriterion(
 }
 
 /** Распарсить grief matrix из подсекции L3 */
-export function parseGriefMatrix(section: string): GriefArchitectureMatrixV2 | null {
+export function parseGriefMatrix(section: string): GriefArchitectureMatrix | null {
   if (!section.trim()) return null;
 
   const lines = extractLines(section);
@@ -579,10 +579,10 @@ export function parseFixList(section: string): FixRecommendation[] {
 }
 
 /** Распарсить цепочки «А чтобы что?» */
-export function parseChains(section: string): ChainResultV2[] {
+export function parseChains(section: string): ChainResult[] {
   if (!section.trim()) return [];
 
-  const chains: ChainResultV2[] = [];
+  const chains: ChainResult[] = [];
   // Split by ### subsections (each chain starts with ### criterionId)
   const subsectionRegex = /###\s+([A-Z]\d+)/gi;
   let match: RegExpExecArray | null;
@@ -629,7 +629,7 @@ export function parseChains(section: string): ChainResultV2[] {
 }
 
 /** Распарсить генеративные модули */
-export function parseGenerative(section: string): GenerativeOutputV2 {
+export function parseGenerative(section: string): GenerativeOutput {
   const griefMappingSub = extractSubsection(section, 'grief_mapping');
   const dilemmaSub = extractSubsection(section, 'dilemma');
 

@@ -7,7 +7,7 @@ import type {
   Step3Result,
   PipelineMeta,
   LLMConfig,
-  MediaTypeV2,
+  MediaType,
 } from '../lib/audit/types-v2';
 
 // ============================================================
@@ -25,17 +25,18 @@ export interface AuditStateV2 {
   error: string | null;
   llmConfig: LLMConfig | null;
   inputText: string;
-  mediaType: MediaTypeV2;
+  mediaType: MediaType;
 
   // Actions
   startAudit: () => void;
   setStepResult: (step: 1 | 2 | 3, result: Step1Result | Step2Result | Step3Result) => void;
+  setMeta: (meta: PipelineMeta) => void;
   appendStreamingText: (text: string) => void;
   clearStreamingText: () => void;
   setError: (message: string) => void;
   setLlmConfig: (config: LLMConfig) => void;
   setInputText: (text: string) => void;
-  setMediaType: (type: MediaTypeV2) => void;
+  setMediaType: (type: MediaType) => void;
   reset: () => void;
 }
 
@@ -54,7 +55,7 @@ const initialState = {
   error: null as string | null,
   llmConfig: null as LLMConfig | null,
   inputText: '',
-  mediaType: 'narrative' as MediaTypeV2,
+  mediaType: 'narrative' as MediaType,
 };
 
 const AUDIT_STATE_V2_STORAGE_KEY = 'audit-state-v2';
@@ -103,6 +104,9 @@ export const useAuditStateV2 = create<AuditStateV2>()(
           };
         }),
 
+      // Set pipeline meta information (tokens, timings, etc.)
+      setMeta: (meta: PipelineMeta) => set({ meta }),
+
       // Append a chunk of streaming text from the LLM
       appendStreamingText: (text: string) =>
         set((state) => ({ streamingText: state.streamingText + text })),
@@ -125,7 +129,7 @@ export const useAuditStateV2 = create<AuditStateV2>()(
       setInputText: (text: string) => set({ inputText: text }),
 
       // Set the media type
-      setMediaType: (type: MediaTypeV2) => set({ mediaType: type }),
+      setMediaType: (type: MediaType) => set({ mediaType: type }),
 
       // Full reset to initial state
       reset: () =>

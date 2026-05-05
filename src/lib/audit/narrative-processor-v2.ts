@@ -7,7 +7,7 @@
 
 import type { ModelCapabilities } from '../llm-client';
 import { computeNarrativeDigest, extractSkeletonKeywords, shouldUseDigestForModel } from './narrative-processor';
-import type { SkeletonV2 } from './types-v2';
+import type { Skeleton } from './types-v2';
 
 // Re-export for convenience
 export { computeNarrativeDigest, shouldUseDigestForModel };
@@ -27,13 +27,13 @@ export function getAdaptiveDigestThreshold(modelCaps: ModelCapabilities): number
 
 /**
  * Вычислить digest для пайплайна V2.
- * Конвертирует SkeletonV2 в формат, совместимый с narrative-processor.
+ * Конвертирует Skeleton в формат, совместимый с narrative-processor.
  */
 export function computeDigestForV2(
   text: string,
-  skeleton: SkeletonV2
+  skeleton: Skeleton
 ): string {
-  // Convert SkeletonV2 to legacy format for extractSkeletonKeywords
+  // Convert Skeleton to legacy format for extractSkeletonKeywords
   const legacySkeleton = {
     status: 'COMPLETE' as const,
     elements: [

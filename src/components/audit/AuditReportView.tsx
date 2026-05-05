@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Step1Result, Step2Result, Step3Result, SkeletonV2, ScreeningAnswer, CriterionAssessment, GriefArchitectureMatrixV2, FixRecommendation, ChainResultV2, GenerativeOutputV2, PipelineMeta } from '@/lib/audit/types-v2';
+import { Step1Result, Step2Result, Step3Result, Skeleton, ScreeningAnswer, CriterionAssessment, GriefArchitectureMatrix, FixRecommendation, ChainResult, GenerativeOutput, PipelineMeta } from '@/lib/audit/types-v2';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -142,7 +142,7 @@ function SummarySection({ step1 }: { step1: Step1Result }) {
   );
 }
 
-function SkeletonSection({ skeleton }: { skeleton: SkeletonV2 }) {
+function SkeletonSection({ skeleton }: { skeleton: Skeleton }) {
   const items = [
     { label: 'Тематический закон', value: skeleton.thematicLaw },
     { label: 'Корневая травма', value: skeleton.rootTrauma },
@@ -265,7 +265,7 @@ function CriterionCard({ assessment }: { assessment: CriterionAssessment }) {
   );
 }
 
-function GriefMatrixCard({ matrix }: { matrix: GriefArchitectureMatrixV2 }) {
+function GriefMatrixCard({ matrix }: { matrix: GriefArchitectureMatrix }) {
   return (
     <div>
       <h4 className="font-semibold mb-2">Матрица архитектуры горя</h4>
@@ -386,7 +386,7 @@ function FixCard({ fix }: { fix: FixRecommendation }) {
   );
 }
 
-function ChainCard({ chain }: { chain: ChainResultV2 }) {
+function ChainCard({ chain }: { chain: ChainResult }) {
   return (
     <div className="border-l-2 border-primary/30 pl-4">
       <h5 className="font-medium mb-1">{chain.criterionId}</h5>

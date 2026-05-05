@@ -15,9 +15,10 @@ import type {
   Step1Result,
   Step2Result,
   Step3Result,
-  MediaTypeV2,
+  MediaType,
 } from './types-v2';
 import type { ModelCapabilities } from '../llm-client';
+import type { LLMStreamingResult } from './llm-streaming';
 import { getModelCapabilities } from '../llm-client';
 import { buildStep1Prompt, buildStep2Prompt, buildStep3Prompt } from './prompts-v2';
 import {
@@ -29,6 +30,9 @@ import { callLLMStreaming } from './llm-streaming';
 import { MASTER_CHECKLIST } from './protocol-data';
 import { getAdaptiveDigestThreshold, computeDigestForV2 } from './narrative-processor-v2';
 import { classifyLLMError } from './error-handler';
+
+// Re-export StreamingCallbacks for consumers
+export type { StreamingCallbacks } from './types-v2';
 
 // ============================================================
 // Токен-менеджмент
@@ -118,7 +122,8 @@ export async function runAuditPipelineV2(
         abortSignal,
       }),
       () => accumulatedText1,
-      1
+      1,
+      abortSignal,
     );
 
     const raw1 = typeof result1 === 'string' ? result1 : result1.text;
@@ -156,9 +161,9 @@ export async function runAuditPipelineV2(
 
     const criteria = filterByMediaType(
       MASTER_CHECKLIST,
-      mapMediaTypeV2ToLegacy(input.mediaType)
+      mapMediaTypeToLegacy(input.mediaType)
     );
-    // Map to ChecklistItemV2 format
+    // Map to ChecklistItem format
     const criteriaV2 = criteria.map(c => ({
       id: c.id,
       name: c.text.split('—')[0]?.trim() || c.text,
@@ -166,9 +171,9 @@ export async function runAuditPipelineV2(
       level: normalizeLevel(c.level),
     }));
 
-    const compressedMode2 = maxTokens1 < 8192;
-    let accumulatedText2 = '';
     const maxTokens2 = resolveStepMaxTokens(2, modelCaps);
+    const compressedMode2 = maxTokens2 < 8192;
+    let accumulatedText2 = '';
 
     const result2 = await callWithRetry(
       () => callLLMStreaming({
@@ -185,7 +190,8 @@ export async function runAuditPipelineV2(
         abortSignal,
       }),
       () => accumulatedText2,
-      2
+      2,
+      abortSignal,
     );
 
     const raw2 = typeof result2 === 'string' ? result2 : result2.text;
@@ -215,9 +221,9 @@ export async function runAuditPipelineV2(
     const step3Start = Date.now();
 
     const weakAssessments = state.step2.assessments.filter(a => a.verdict === 'weak');
-    const compressedMode3 = maxTokens1 < 8192;
-    let accumulatedText3 = '';
     const maxTokens3 = resolveStepMaxTokens(3, modelCaps);
+    const compressedMode3 = maxTokens3 < 8192;
+    let accumulatedText3 = '';
 
     const result3 = await callWithRetry(
       () => callLLMStreaming({
@@ -228,7 +234,8 @@ export async function runAuditPipelineV2(
         abortSignal,
       }),
       () => accumulatedText3,
-      3
+      3,
+      abortSignal,
     );
 
     const raw3 = typeof result3 === 'string' ? result3 : result3.text;
@@ -263,8 +270,6 @@ export async function runAuditPipelineV2(
 // Retry logic
 // ============================================================
 
-import type { LLMStreamingResult } from './llm-streaming';
-
 /**
  * Вызвать LLM с ретраем.
  *
@@ -275,14 +280,15 @@ import type { LLMStreamingResult } from './llm-streaming';
 async function callWithRetry(
   fn: () => Promise<LLMStreamingResult>,
   getAccumulatedText: () => string,
-  step: number
+  step: number,
+  abortSignal?: AbortSignal,
 ): Promise<LLMStreamingResult> {
   try {
     return await fn();
   } catch (error: unknown) {
     if (isTransientError(error)) {
       // 429, 503, 502 — один повтор через 10 секунд
-      await sleep(10_000);
+      await abortAwareSleep(10_000, abortSignal);
       try {
         return await fn();
       } catch {
@@ -308,23 +314,29 @@ async function callWithRetry(
 
 function isTransientError(error: unknown): boolean {
   const classified = classifyLLMError(error);
-  return classified.retryable && (
-    classified.type === 'rate_limit' ||
-    classified.type === 'provider_overloaded' ||
-    classified.type === 'timeout'
-  );
+  return classified.retryable && classified.type === 'transient_error';
 }
 
 function isFatalError(error: unknown): boolean {
   const classified = classifyLLMError(error);
   return !classified.retryable && (
-    classified.type === 'auth' ||
-    classified.type === 'cors'
+    classified.type === 'fatal_auth_error' ||
+    classified.type === 'fatal_cors_error'
   );
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function abortAwareSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(timer);
+      reject(new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+  });
 }
 
 // ============================================================
@@ -343,10 +355,10 @@ function initMeta(input: AuditInput): PipelineMeta {
 }
 
 /**
- * Map MediaTypeV2 to legacy MediaType for getFilteredCriteria.
+ * Map MediaType to legacy MediaType for getFilteredCriteria.
  * V2 uses 'narrative' and 'visual' instead of 'novel'/'film'/'anime'/'series'.
  */
-function mapMediaTypeV2ToLegacy(mediaType: MediaTypeV2): LegacyMediaType {
+function mapMediaTypeToLegacy(mediaType: MediaType): LegacyMediaType {
   switch (mediaType) {
     case 'narrative': return 'novel';
     case 'visual': return 'film';

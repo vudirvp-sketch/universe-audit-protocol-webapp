@@ -160,27 +160,27 @@ describe('classifyLLMError', () => {
   });
 
   // =========================================================================
-  // 7. Invalid JSON errors
+  // 7. Parse errors (formerly invalid_json)
   // =========================================================================
 
-  test('Classifies error with "JSON" in message as invalid_json error', () => {
+  test('Classifies error with "JSON" in message as parse_error', () => {
     const error = new Error('Unexpected token in JSON at position 5');
     const result = classifyLLMError(error);
-    expect(result.type).toBe('invalid_json');
+    expect(result.type).toBe('parse_error');
     expect(result.retryable).toBe(true);
     expect(result.userMessage).toContain('невалидный JSON');
   });
 
-  test('Classifies error with "parse" in message as invalid_json error', () => {
+  test('Classifies error with "parse" in message as parse_error', () => {
     const error = new Error('Failed to parse response body');
     const result = classifyLLMError(error);
-    expect(result.type).toBe('invalid_json');
+    expect(result.type).toBe('parse_error');
   });
 
-  test('Classifies error with "Parse" (capitalized) as invalid_json error', () => {
+  test('Classifies error with "Parse" (capitalized) as parse_error', () => {
     const error = new Error('Parse error: unexpected token');
     const result = classifyLLMError(error);
-    expect(result.type).toBe('invalid_json');
+    expect(result.type).toBe('parse_error');
   });
 
   // =========================================================================
@@ -270,7 +270,7 @@ describe('classifyLLMError', () => {
       { error: { status: 500 }, expectedType: 'provider' },
       { error: new Error('CORS error'), expectedType: 'cors' },
       { error: new Error('timeout exceeded'), expectedType: 'timeout' },
-      { error: new Error('JSON parse error'), expectedType: 'invalid_json' },
+      { error: new Error('JSON parse error'), expectedType: 'parse_error' },
       { error: new Error('truncated response'), expectedType: 'truncated' },
       { error: new Error('unknown issue'), expectedType: 'provider' },
     ];
@@ -316,7 +316,7 @@ describe('classifyLLMError', () => {
   });
 
   test('retryable is true only for expected error types', () => {
-    const retryableTypes: AuditErrorType[] = ['network', 'rate_limit', 'timeout', 'invalid_json', 'truncated'];
+    const retryableTypes: AuditErrorType[] = ['network', 'rate_limit', 'timeout', 'parse_error', 'truncated'];
     const nonRetryableTypes: AuditErrorType[] = ['auth', 'cors'];
 
     // Verify retryable types
@@ -352,7 +352,7 @@ function createErrorForType(type: AuditErrorType): unknown {
       return new Error('CORS policy blocked');
     case 'timeout':
       return new Error('timeout exceeded');
-    case 'invalid_json':
+    case 'parse_error':
       return new Error('JSON parse error');
     case 'truncated':
       return new Error('truncated response');
