@@ -504,9 +504,12 @@ export interface VitalityCriteria {
   passed: boolean | null;
 }
 
-// StepValidationResult is defined in audit-step.ts (canonical location).
-// It is re-exported from here for backward compatibility with existing imports.
-export type { StepValidationResult } from './audit-step';
+// StepValidationResult was defined in audit-step.ts (now removed in v11.0).
+// Kept as a placeholder type for backward compatibility.
+export interface StepValidationResult {
+  valid: boolean;
+  errors?: string[];
+}
 
 // ============================================================================
 // SCREENING RECOMMENDATION TYPE

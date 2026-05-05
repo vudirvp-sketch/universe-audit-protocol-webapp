@@ -27,7 +27,6 @@ import {
 } from './markdown-parser';
 import { callLLMStreaming } from './llm-streaming';
 import { MASTER_CHECKLIST } from './protocol-data';
-import { filterByMediaType } from './scoring-algorithm';
 import { getAdaptiveDigestThreshold } from './narrative-processor-v2';
 import { classifyLLMError } from './error-handler';
 
@@ -149,7 +148,7 @@ export async function runAuditPipelineV2(
 
     const criteria = filterByMediaType(
       MASTER_CHECKLIST,
-      mapMediaTypeV2ToLegacy(input.mediaType) as Parameters<typeof filterByMediaType>[1]
+      mapMediaTypeV2ToLegacy(input.mediaType)
     );
     // Map to ChecklistItemV2 format
     const criteriaV2 = criteria.map(c => ({
@@ -321,7 +320,7 @@ function initMeta(input: AuditInput): PipelineMeta {
  * Map MediaTypeV2 to legacy MediaType for getFilteredCriteria.
  * V2 uses 'narrative' and 'visual' instead of 'novel'/'film'/'anime'/'series'.
  */
-function mapMediaTypeV2ToLegacy(mediaType: MediaTypeV2): string {
+function mapMediaTypeV2ToLegacy(mediaType: MediaTypeV2): LegacyMediaType {
   switch (mediaType) {
     case 'narrative': return 'novel';
     case 'visual': return 'film';
@@ -340,4 +339,34 @@ function normalizeLevel(level: string): 'L1' | 'L2' | 'L3' | 'L4' {
   if (level.startsWith('L3')) return 'L3';
   if (level.startsWith('L2')) return 'L2';
   return 'L1';
+}
+
+// ============================================================
+// Media type filtering (inlined from scoring-algorithm.ts)
+// ============================================================
+
+type LegacyMediaType = 'novel' | 'film' | 'anime' | 'series' | 'game' | 'ttrpg';
+
+/** Filter checklist items by media type — marks applicable items */
+function filterByMediaType(
+  checklist: typeof MASTER_CHECKLIST,
+  mediaType: LegacyMediaType
+): (typeof MASTER_CHECKLIST[number] & { applicable: boolean })[] {
+  return checklist.map(item => {
+    const applicable = checkMediaApplicability(item.tag, mediaType);
+    return { ...item, applicable };
+  });
+}
+
+/** Check if a tag is applicable to media type */
+function checkMediaApplicability(tag: string, mediaType: LegacyMediaType): boolean {
+  if (tag === 'CORE') return true;
+  if (tag.includes('|')) {
+    return tag.split('|').some(t => checkMediaApplicability(t, mediaType));
+  }
+  if (tag === 'GAME' && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
+  if (tag === 'VISUAL' && ['film', 'anime', 'series'].includes(mediaType)) return true;
+  if (tag === 'AUDIO' && ['film', 'anime', 'series'].includes(mediaType)) return true;
+  if (tag === 'INTERACTIVE' && (mediaType === 'game' || mediaType === 'ttrpg')) return true;
+  return false;
 }

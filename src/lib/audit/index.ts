@@ -1,54 +1,25 @@
 /**
- * Universe Audit Protocol v10.0
+ * Universe Audit Protocol v11.0
  * Audit Module Index
  *
  * Central export for all audit modules.
- * The pipeline entry point is pipeline.ts (uses AuditStepRunner + step registry).
- * The old keyword-based orchestrator.ts has been removed.
- *
- * Dead modules removed (their logic is now in step files):
- * - cult-potential.ts → step-gate-L4.ts (cult potential merged into L4)
- * - grief-validation.ts → step-gate-L3.ts (grief check is part of L3)
- * - modes.ts → step-mode-detection.ts (mode detection via LLM)
- * - gate-executor.ts → gateCheck in each step (CVA-based)
- * - input-validator.ts → step-validate.ts (pure client-side validation)
- * - author-profile.ts → step-author-profile.ts + scoring-algorithm.ts
- * - skeleton-extraction.ts → step-skeleton.ts (LLM-based extraction)
- * - what-for-chain.ts → step-issues-chains.ts (chain analysis via LLM)
- * - media-transformation.ts → handled per-step in buildPrompt
- * - generative-templates.ts → step-generative.ts (generative modules via LLM)
- * - diagnostics.ts → step-final.ts (diagnostics as part of final step)
- * - level-assignment.ts → step-final.ts (classification in final step)
+ * The pipeline entry point is pipeline-v2.ts (3-step LLM pipeline).
  */
 
 // TIER 0 — Foundation (types and data)
-export * from './types';
+export * from './types-v2';
 export * from './protocol-data';
-// issue-schema re-exports some types already in types.ts (Axes, Issue, Severity, PatchType)
-// Selectively re-export only the unique exports from issue-schema
-export {
-  createIssue,
-  validateIssue,
-  generatePatchTemplates,
-  calculateIssueScore,
-  sortIssuesByPriority,
-  filterIssuesBySeverity,
-  SEVERITY_LEVELS,
-  PATCH_TYPES,
-} from './issue-schema';
-export * from './scoring-algorithm';
-export * from './prompts';
-
-// TIER 1 — Client Pipeline Infrastructure
-export * from './audit-step';
-export * from './step-registry';
-export * from './pipeline';
-export * from './json-sanitizer';
-export * from './input-sanitizer';
 export * from './error-handler';
 export * from './narrative-processor';
 
-// New modules — streaming and chunking support
+// TIER 1 — Pipeline V2 Infrastructure
+export * from './pipeline-v2';
+export * from './llm-streaming';
+export * from './markdown-parser';
+export * from './prompts-v2';
+export * from './narrative-processor-v2';
+
+// TIER 2 — Supporting utilities
 export { estimateTokens, canModelHandleInput, splitIntoChunks, getRecommendedChunkCount, DEFAULT_CHUNKING_CONFIG, type ChunkingConfig, type ChunkResult } from '../chunking';
 export { streamChatCompletion, enableStreamingInPayload, parseSSELines, extractDelta, type StreamingChunk, type OnChunkCallback, type StreamingConfig } from '../streaming';
 export { readFileAsText, isFileSupported, getSupportedFormatsDescription, type FileInfo, type ReadResult } from '../file-reader';
