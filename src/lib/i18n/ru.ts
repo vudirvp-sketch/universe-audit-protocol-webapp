@@ -1,13 +1,14 @@
 /**
- * Centralized Russian strings for the Universe Audit Protocol.
+ * Centralized Russian strings for the Universe Audit Protocol v11.0.
  * All user-facing text is defined here as a flat const object.
- * Based on COMPLETION_PLAN Section 3.1 (expanded).
  *
  * Language Contract (Section 0.5):
  * - UI text: Russian
  * - JSON keys in LLM output: English
  * - JSON values in LLM output: Russian
  * - Enum values: English (displayed as-is in badges)
+ *
+ * v11.0: Все ключи от v10.0 (гейты, 12 шагов, старые компоненты) удалены.
  */
 
 export const t = {
@@ -16,10 +17,10 @@ export const t = {
     version: 'v11.0',
     subtitle: 'Анализ вымышленных миров через 4 иерархических уровня',
     description:
-      'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Каждый уровень требует порогового балла для прохождения (60% для конфликтного режима, 50% для кирё, 55% для гибридного).',
+      'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Введите описание вашего мира — и протокол выявит слабости, предложит исправления и оценит культовый потенциал.',
     footer:
       'Протокол Аудита Вселенной v11.0 — На основе протокола \u00ABАУДИТ_ВСЕЛЕННОЙ_v11.0.md\u00BB',
-    footerStats: '4 уровня \u2022 52 критерия \u2022 Порог зависит от режима',
+    footerStats: '4 уровня \u2022 52 критерия \u2022 3 LLM-запроса',
     newAudit: 'Новый аудит',
     cancelAudit: 'Отменить аудит',
     startAudit: 'Начать аудит',
@@ -53,20 +54,6 @@ export const t = {
     characterCount: '{count} символов | Минимум 100 символов рекомендуется',
     mediaType: 'Тип медиа',
     mediaTypeSelect: 'Выберите тип медиа',
-    auditMode: 'Режим аудита',
-    auditModeDescription:
-      'Выберите режим структуры нарратива, который лучше всего подходит вашей истории',
-    detection: 'Определение: {questions}',
-    authorProfileTitle: 'Опрос профиля автора',
-    authorProfileDescription:
-      'Опционально: ответьте на 7 вопросов для определения вашего авторского профиля',
-    authorProfileHint:
-      'Эти вопросы помогают определить, кто вы: \u00ABСадовник\u00BB (писатель-исследователь) или \u00ABАрхитектор\u00BB (планировщик). Это влияет на типы проблем, которые аудит будет приоритизировать.',
-    keySignal: 'Ключевой сигнал (\u00D7{weight})',
-    weight: 'Вес: {weight}',
-    profileDetermined: 'Профиль определён!',
-    profileDeterminedHint:
-      'Ваш авторский профиль будет рассчитан при запуске аудита.',
     minCharsWarning: 'Минимум 50 символов для запуска аудита',
     uploadFile: 'Загрузить файл',
     supportedFormats: 'Поддерживаемые форматы: .txt, .md, .docx, .pdf',
@@ -74,20 +61,12 @@ export const t = {
     fileReadError: 'Ошибка чтения файла',
   },
 
+  // v11.0: 3-шаговый пайплайн (вместо 12 шагов v10.0)
   phases: {
     idle: 'Готов',
-    input_validation: 'Валидация ввода',
-    mode_detection: 'Определение режима',
-    author_profile: 'Профиль автора',
-    skeleton_extraction: 'Извлечение скелета',
-    screening: 'Быстрый скрининг',
-    L1_evaluation: 'Гейт L1: Механизм',
-    L2_evaluation: 'Гейт L2: Тело',
-    L3_evaluation: 'Гейт L3: Психика',
-    L4_evaluation: 'Гейт L4: Мета',
-    issue_generation: 'Проблемы и цепочки',
-    generative_modules: 'Генеративные модули',
-    final_output: 'Диагностика и итог',
+    step1: 'Знакомство + Скелет',
+    step2: 'Оценка по критериям',
+    step3: 'Рекомендации',
     complete: 'Завершено',
     failed: 'Ошибка',
     cancelled: 'Отменено',
@@ -95,20 +74,11 @@ export const t = {
 
   phaseDescriptions: {
     idle: 'Введите нарратив для начала',
-    input_validation: 'Проверка ввода',
-    mode_detection: 'Определение режима аудита',
-    author_profile: 'Анализ профиля автора',
-    skeleton_extraction: 'Извлечение скелета нарратива',
-    screening: 'Быстрый 7-вопросный скрининг',
-    L1_evaluation: 'Проверка системной связности',
-    L2_evaluation: 'Воплощённость и последствия',
-    L3_evaluation: 'Проверка психологической глубины',
-    L4_evaluation: 'Мета-нарративный уровень',
-    issue_generation: 'Генерация проблем и цепочек',
-    generative_modules: 'Генеративные модули',
-    final_output: 'Финальная диагностика',
+    step1: 'Определение режима аудита, профиля автора, скелета и скрининга',
+    step2: 'Оценка всех критериев по 4 уровням (Механизм, Тело, Психика, Мета)',
+    step3: 'Приоритизированные рекомендации, цепочки «А чтобы что?», генеративные модули',
     complete: 'Аудит завершён',
-    failed: 'Гейт не пройден — требуется исправление',
+    failed: 'Ошибка при выполнении аудита',
     cancelled: 'Аудит отменён пользователем',
   },
 
@@ -144,7 +114,7 @@ export const t = {
     rate_limit:
       'Превышен лимит запросов. Подождите минуту и попробуйте снова.',
     truncated:
-      'Ответ LLM был обрезан. Перезапускаем с увеличенным лимитом токенов...',
+      'Ответ LLM был обрезан. Система обработает лучший результат.',
     network: 'Нет подключения к интернету',
     auth: 'Неверный API ключ. Проверьте ключ в настройках.',
     cors: 'Ошибка прокси. Проверьте URL прокси в настройках.',
@@ -165,7 +135,6 @@ export const t = {
     progress: 'Прогресс',
     auditStopped: 'Аудит остановлен',
     streamingResponse: 'Ответ модели (streaming):',
-    chunkPart: 'Часть {current} из {total}',
   },
 
   settings: {
@@ -278,242 +247,25 @@ export const t = {
     },
   },
 
-  tabs: {
-    report: 'Отчёт',
-    gates: 'Гейты',
-    issues: 'Проблемы',
-    chains: 'Цепочки',
-    generative: 'Генерация',
-    checklist: 'Чеклист',
-    grief: 'Горе-матрица',
-  },
-
-  config: {
-    title: 'Конфигурация',
-    media: 'Медиа',
-    mode: 'Режим',
-    input: 'Ввод',
-    characters: '{count} символов',
-    modeDetecting: 'определение...',
-  },
-
-  // ─── IssueList.tsx ────────────────────────────────────────────────
-  issues: {
-    title: 'Проблемы',
-    noIssues: 'Проблем не обнаружено',
-    noIssuesDesc: 'Аудит не выявил проблем, требующих внимания.',
-    countIssues: '{count} проблем',
-    criticalCount: '{count} критических',
-    majorCount: '{count} значительных',
-    minorCount: '{count} мелких',
-    criticalIssues: 'Критические проблемы',
-    majorIssues: 'Значительные проблемы',
-    minorIssues: 'Мелкие проблемы',
-    // Axes
-    criticality: 'Критичность',
-    risk: 'Риск',
-    timeCost: 'Затраты времени',
-    // Patch types
-    conservative: 'Осторожный',
-    compromise: 'Компромиссный',
-    radical: 'Радикальный',
-    recommendedApproach: 'Рекомендуемый подход',
-    impact: 'Влияние:',
-    risks: 'Риски:',
-    verificationTests: 'Проверки:',
-    sideEffects: 'Побочные эффекты:',
-    // Severity labels (Russian per Language Contract)
-    severityCritical: 'Критический',
-    severityMajor: 'Значительный',
-    severityMinor: 'Мелкий',
-    severityCosmetic: 'Косметический',
-  },
-
-  // ─── WhatForChains.tsx ────────────────────────────────────────────
-  chains: {
-    chainTitle: 'Цепочка {index}',
-    validChain: 'Валидная цепочка',
-    unclassifiedTerminal: 'Неклассифицированный терминал — требуется повтор',
-    terminatedAtStep: 'Завершена на шаге {step}',
-    iterations: 'Итерации',
-    recommendedAction: 'Рекомендуемое действие',
-    bindToLaw: 'Привязать этот элемент к тематическому закону мира',
-    keepElement: 'Элемент создаёт осмысленную дилемму — оставить как есть',
-    removeElement: 'Рассмотрите возможность удаления этого элемента',
-    bindOrRemove: 'Либо привязать к закону, либо полностью удалить',
-    retryAnalysis: 'Цепочка не достигла чёткого терминала — повторный анализ',
-    noChains: 'Анализ цепочек отсутствует',
-    noChainsDesc: 'Цепочки \u00ABА чтобы что?\u00BB не были сгенерированы для этого нарратива.',
-    countChains: '{count} цепочек',
-    criticalBreakChains: 'Критические цепочки BREAK (\u22644 шага)',
-    otherBreakChains: 'Прочие цепочки BREAK',
-    dilemmaChains: 'Цепочки DILEMMA',
-    unclassifiedChains: 'Неклассифицированные цепочки (нужен повтор)',
-    criticalBreak: 'Критическое: BREAK на шаге {step}',
-    criticalBreakDesc:
-      'Элемент нарушает логику нарратива на раннем этапе цепочки. Рассмотрите привязку к закону мира или удаление.',
-    // Badge labels (Russian per Language Contract)
-    breakCount: '{count} РАЗРЫВ',
-    dilemmaCount: '{count} ДИЛЕММА',
-    unclassifiedCount: '{count} Неклассиф.',
-    criticalCount: '{count} Критич.',
-    // Action badge labels (Russian per Language Contract)
-    actionLabels: {
-      bind_to_law: 'Привязать к закону',
-      keep: 'Оставить',
-      remove: 'Удалить',
-      bind_to_law_or_remove: 'Закон или удаление',
-      retry_analysis: 'Повтор анализа',
-    } as const,
-  },
-
-  // ─── GenerativeOutput.tsx ─────────────────────────────────────────
-  generative: {
-    title: 'Генеративный вывод',
-    noOutput: 'Генеративный вывод отсутствует',
-    noOutputDesc:
-      'Генеративные модули активируются автоматически, когда обязательные входные данные отсутствуют.',
-    noOutputHint9: '\u00A79 активируется, когда dominant_stage не предоставлен.',
-    noOutputHint12: '\u00A712 активируется, когда final_dilemma не предоставлен.',
-    griefMapping: 'Отображение горя',
-    dilemma: 'Дилемма',
-    autoGenerated: 'Автоматически сгенерированные значения',
-    autoGeneratedDesc:
-      'Эти значения были автоматически выведены, так как соответствующие входные данные не были предоставлены. Вы можете переопределить их, указав явные значения во входных данных аудита.',
-    // GriefMappingCard
-    lawGriefTitle: '\u00A79 — Вывод стадии горя из закона',
-    lawGriefDesc: 'Автоматически выведено из тематического закона, когда dominant_stage не предоставлен',
-    sourceLaw: 'Исходный закон',
-    derivedStage: 'Выведенная стадия:',
-    justificationChain: 'Цепочка обоснования',
-    // DilemmaCard
-    themeDilemmaTitle: '\u00A712 — Вывод дилеммы из темы',
-    themeDilemmaDesc: 'Автоматически выведено из тематического закона, когда final_dilemma не предоставлен',
-    valueA: 'Ценность А',
-    valueB: 'Ценность Б',
-    conflict: 'Конфликт',
-    dilemmaCriteria: 'Критерии дилеммы',
-    allMet: 'Все выполнены',
-    incomplete: 'Не все выполнены',
-    typeChoice: 'Выбор типа',
-    irreversibility: 'Необратимость',
-    identityImpact: 'Влияние на идентичность',
-    victoryPrice: 'Цена победы',
-    postFinalWorld: 'Постфинальный мир',
-    // Grief stage descriptions
-    denial: 'Отказ принять реальность',
-    anger: 'Фрустрация и эмоциональный взрыв',
-    bargaining: 'Попытка договориться или отсрочить',
-    depression: 'Глубокая грусть и замкнутость',
-    acceptance: 'Примирение с реальностью',
-  },
-
-  // ─── ChecklistDisplay.tsx ─────────────────────────────────────────
-  checklist: {
-    title: 'Чеклист',
-    description: '52 пункта в 13 блоках',
-    passedCount: '{passed} / {total} пройдено',
-    blockNames: {
-      A: 'Структура',
-      B: 'Связность',
-      C: 'Живость',
-      D: 'Персонажи',
-      E: 'Системы и логика',
-      F: 'Новые элементы',
-      G: 'Культовый статус',
-      H: 'Сцены',
-      I: 'Тематическая физика',
-      J: 'Архитектура горя',
-      K: 'Мета-интеграция',
-      L: 'Нарративная инфраструктура',
-      M: 'Финал и авторство',
-    },
-    fail: 'провал',
-    evidence: 'Обоснование',
-    evidenceRequired: 'Обоснование (обязательно)',
-    evidencePlaceholder: 'Укажите конкретный текст или опишите обоснование...',
-    functionalRole: 'Функциональная роль',
-    functionalRolePlaceholder: 'Объясните, как это служит критерию функционально...',
-    insufficientDataMsg: 'Невозможно определить по доступному тексту. Требуется дополнительная информация.',
-    // Status labels (Russian per Language Contract)
-    statusPass: 'ПРОЙДЕН',
-    statusFail: 'НЕ ПРОЙДЕН',
-    statusInsufficient: 'НЕДОСТАТОЧНО ДАННЫХ',
-    statusPending: 'ОЖИДАНИЕ',
-  },
-
-  // ─── GriefArchitectureMatrix.tsx ──────────────────────────────────
-  grief: {
-    title: 'Матрица архитектуры горя',
-    description: '5 стадий \u00D7 4 уровня материализации',
-    dominantStage: 'Доминантная стадия горя',
-    dominantStagePlaceholder: 'Выберите доминантную стадию...',
-    dominantStageHint: 'Доминантная стадия должна быть заполнена на всех 4 уровнях',
-    dominant: 'ДОМИНАНТНАЯ',
-    materialization: 'Материализация:',
-    verification: 'Проверка:',
-    levelLabels: {
-      character: 'Персонаж',
-      location: 'Локация',
-      mechanic: 'Механика/Действие',
-      act: 'Нарративный акт',
-      world: 'Мир',
-      society: 'Общество',
-      scene: 'Сцена',
-    },
-    cellPlaceholder: 'Кто/что воплощает {stage} на этом уровне?',
-    evidencePlaceholder: 'Доказательства из нарратива...',
-    confidence: 'Уверенность:',
-    // Confidence level labels (Russian)
-    confidenceLabels: {
-      high: 'высокая',
-      medium: 'средняя',
-      low: 'низкая',
-      absent: 'отсутствует',
-    },
-  },
-
-  // ─── ReportDisplay.tsx ────────────────────────────────────────────
+  // v11.0: Ключи для AuditReportView (единый компонент отчёта)
   report: {
     title: 'Отчёт аудита',
     protocolVersion: 'Протокол Аудита Вселенной v11.0',
-    notGenerated: 'Отчёт ещё не сгенерирован',
-    notGeneratedHint: 'Завершите аудит для просмотра полного отчёта',
-    humanReadable: 'Читаемый отчёт',
-    jsonView: 'JSON',
     // Classifications
     cult_masterpiece: 'Культовый шедевр',
     powerful: 'Мощный нарратив',
     living_weak_soul: 'Живой мир, слабая душа',
     decoration: 'Декорация',
     // Report sections
-    auditMode: '1. Режим аудита',
-    authorProfile: '2. Профиль автора',
-    skeleton: '3. Извлечённый скелет',
-    screening: '4. Быстрый скрининг',
-    gateResults: '5. Результаты гейтов',
-    scores: '6. Оценки по измерениям',
-    criticalHoles: '7. Критические проблемы',
-    characters: '8. Персонажи и хамартия',
-    griefArchitecture: '9. Архитектура горя',
-    finale: '10. Финал и дилемма',
-    fixes: '11. Исправления',
-    cultPotential: '12. Культовый потенциал',
-    contrastive: '13. Контрастивный анализ',
-    finalScore: '14. Итоговый балл',
-    priorityActions: '15. Приоритетные действия',
-    // Audit mode descriptions
-    conflictModeDesc: 'Западная структура, Путешествие Героя, конфликт как драйвер',
-    kishoModeDesc: 'Структура без конфликта, смена перспективы как драйвер',
-    hybridModeDesc: 'Архитектура Горя как основа, антагонист как симптом',
-    // Author profile
-    confidenceHigh: 'высокая',
-    confidenceMedium: 'средняя',
-    confidenceLow: 'низкая',
-    confidenceLabel: 'уверенность',
-    mainRisks: 'Главные риски:',
-    // Skeleton
-    notExtracted: 'Не извлечено',
+    summary: 'Сводка',
+    skeleton: 'Скелет концепта',
+    screening: 'Скрининг',
+    assessment: 'Оценка по критериям',
+    recommendations: 'Рекомендации',
+    chains: 'Цепочки «А чтобы что?»',
+    generative: 'Генеративные модули',
+    meta: 'Мета',
+    // Skeleton labels
     skeletonLabels: {
       thematicLaw: 'Тематический закон',
       rootTrauma: 'Корневая травма',
@@ -534,16 +286,51 @@ export const t = {
       q6: 'Логика антагониста?',
       q7: 'Финал необратим?',
     },
-    // JSON report
+    notFound: 'НЕ НАЙДЕНО',
+    // Approach labels
+    approachConservative: 'Консервативный',
+    approachCompromise: 'Компромиссный',
+    approachRadical: 'Радикальный',
+    // Effort labels
+    effortHours: 'часы',
+    effortDays: 'дни',
+    effortWeeks: 'недели',
+    // Copy/Download
     copy: 'Копировать',
     copied: 'Скопировано!',
     downloadJson: 'Скачать JSON',
     downloadMarkdown: 'Скачать Markdown',
-    copyPrompt: 'Скопировать промпт',
-    copyPromptHint: 'Скопируйте итоговый промпт для продолжения в чате с LLM',
   },
 
-  // Home page description — referenced in page.tsx as t.homeDescription
+  // Grief architecture (used in AuditReportView)
+  grief: {
+    title: 'Матрица архитектуры горя',
+    description: '5 стадий \u00D7 4 уровня материализации',
+    dominantStage: 'Доминирующая стадия',
+    dominant: 'ДОМИНАНТНАЯ',
+    levelLabels: {
+      character: 'Персонаж',
+      location: 'Локация',
+      mechanic: 'Механика/Действие',
+      act: 'Нарративный акт',
+    },
+    // Grief stage descriptions
+    denial: 'Отказ принять реальность',
+    anger: 'Фрустрация и эмоциональный взрыв',
+    bargaining: 'Попытка договориться или отсрочить',
+    depression: 'Глубокая грусть и замкнутость',
+    acceptance: 'Примирение с реальностью',
+  },
+
+  // Generative modules (used in AuditReportView)
+  generative: {
+    title: 'Генеративные модули',
+    griefMapping: 'Карта горя',
+    dilemma: 'Корнелианская дилемма',
+    notApplicable: 'Не применимо',
+  },
+
+  // Home page description
   homeDescription:
-    'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Каждый уровень требует порогового балла для прохождения (60% для конфликтного режима, 50% для кирё, 55% для гибридного). Введите описание вашего мира — и протокол выявит слабости, предложит исправления и оценит культовый потенциал.',
+    'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Введите описание вашего мира — и протокол выявит слабости, предложит исправления и оценит культовый потенциал. Три LLM-запроса, streaming-отчёт, без гейтов и блокировок.',
 } as const;

@@ -13,7 +13,6 @@ import type {
   Step1Result,
   Step2Result,
   Step3Result,
-  PipelineMeta,
   Skeleton,
   ScreeningAnswer,
   CriterionAssessment,
@@ -157,7 +156,7 @@ export function exportToMarkdown(report: AuditReportV2): string {
 // ============================================================
 
 /** Сериализует отчёт в JSON-формат ExportData */
-export function exportToJSON(report: AuditReportV2, meta: PipelineMeta): string {
+export function exportToJSON(report: AuditReportV2): string {
   const data: ExportData = {
     report,
     exportedAt: new Date().toISOString(),

@@ -372,7 +372,7 @@ export default function Home() {
                   onExportJSON={() => {
                     if (!step1 || !step2 || !step3 || !meta) return;
                     const report: AuditReportV2 = { step1, step2, step3, meta };
-                    const json = exportToJSON(report, meta);
+                    const json = exportToJSON(report);
                     downloadFile(json, 'audit-report.json', 'application/json');
                   }}
                   onCopy={() => {
@@ -406,7 +406,7 @@ export default function Home() {
                 onExportJSON={() => {
                   if (!step1 || !step2 || !step3 || !meta) return;
                   const report: AuditReportV2 = { step1, step2, step3, meta };
-                  const json = exportToJSON(report, meta);
+                  const json = exportToJSON(report);
                   downloadFile(json, 'audit-report.json', 'application/json');
                 }}
                 onCopy={() => {

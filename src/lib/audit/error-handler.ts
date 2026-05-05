@@ -19,8 +19,6 @@ export type AuditErrorType =
   | 'transient_error'
   | 'fatal_auth_error'
   | 'fatal_cors_error'
-  | 'cors'
-  | 'auth'
   | 'rate_limit'
   | 'provider_overloaded'
   | 'provider'
