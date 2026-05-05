@@ -135,12 +135,26 @@ export function classifyLLMError(error: unknown): AuditError {
   }
 
   // 7. CORS / proxy errors — typically from the Cloudflare Worker
-  if (messageLower.includes('cors') || messageLower.includes('proxy')) {
+  // BUGFIX: Слово «прокси» появляется во многих сообщениях (таймаут прокси,
+  // ошибка прокси 502, и т.д.), что приводило к ложной классификации как
+  // fatal_cors_error (retryable: false). Теперь проверяем более точно:
+  // «cors» — всегда CORS-ошибка; «proxy_error» или «Внутренняя ошибка прокси»
+  // — только внутренние ошибки прокси, не 502/503/429 (которые уже обработаны выше).
+  if (messageLower.includes('cors')) {
     return {
       type: 'fatal_cors_error',
       userMessage:
-        'Ошибка CORS-прокси. Убедитесь, что URL прокси указан верно в настройках, и что Worker развёрнут.',
+        'Ошибка CORS. Убедитесь, что URL прокси указан верно в настройках, и что Worker развёрнут.',
       retryable: false,
+    };
+  }
+  // «Внутренняя ошибка прокси» — 500 от самого Worker'а (не провайдера)
+  if (messageLower.includes('proxy_error') || messageLower.includes('внутренняя ошибка прокси')) {
+    return {
+      type: 'transient_error',
+      userMessage:
+        'Прокси временно недоступен. Подождите минуту и попробуйте снова.',
+      retryable: true,
     };
   }
 

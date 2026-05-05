@@ -8,8 +8,18 @@
  * фоллбэк на обычный buffered-запрос. Это гарантирует, что мы всегда
  * получаем ответ от LLM, даже если прокси не поддерживает SSE.
  *
- * ВАЖНО: Добавлен собственный таймаут (DEFAULT_TIMEOUT_MS = 120 сек),
- * чтобы LLM-вызов не висел бесконечно, если abortSignal не предоставлен.
+ * BUGFIX (v2): Убран двойной таймаут. Раньше callLLMStreaming добавлял
+ * свой AbortController с 120с таймаутом, а внутри chatCompletionStream
+ * и chatCompletion тоже создавали свои. Теперь мы НЕ создаём свой
+ * таймаут здесь — нижние уровни (streaming.ts и llm-client.ts) уже
+ * имеют свои собственные таймауты. Дополнительный таймаут тут только
+ * мешал: при fallback streaming→buffered, сигнал уже мог быть aborted,
+ * и buffered-запрос мгновенно падал.
+ *
+ * Также: при таймауте streaming-запроса, если мы уже получили часть
+ * текста через onChunk — используем его вместо фоллбэка на buffered.
+ * Это критично для длинных Step 2 (50+ критериев), где модель может
+ * отвечать 90-120 секунд.
  */
 
 import type { LLMConfig, PromptSet } from './types-v2';
@@ -37,13 +47,6 @@ export interface LLMStreamingOptions {
 }
 
 // ============================================================
-// Константы
-// ============================================================
-
-/** Default timeout for LLM calls (streaming + buffered) in milliseconds */
-const DEFAULT_TIMEOUT_MS = 120_000; // 2 minutes
-
-// ============================================================
 // Основная функция
 // ============================================================
 
@@ -52,15 +55,19 @@ const DEFAULT_TIMEOUT_MS = 120_000; // 2 minutes
  *
  * Стратегия:
  * 1. Пробуем streaming через chatCompletionStream
- * 2. Если streaming вернул пустой текст (прокси не поддерживает SSE и т.п.) —
+ * 2. Если streaming вернул непустой текст — используем его
+ * 3. Если streaming упал с ошибкой, но мы получили часть текста —
+ *    используем partial текст (лучшая стратегия для таймаутов)
+ * 4. Если streaming вернул пустой текст (прокси не SSE) —
  *    фоллбэк на buffered chatCompletion
- * 3. Если streaming выбросил ошибку — тоже фоллбэк на buffered
+ * 5. Если buffered тоже упал — пробуем buffered с НОВЫМ сигналом
+ *    (старый мог уже сработать по таймауту)
  *
- * Возвращает полный текст ответа.
- *
- * BUGFIX: Добавлен собственный таймаут (120 сек) через AbortController,
- * объединяемый с внешним abortSignal через AbortSignal.any().
- * Это гарантирует, что вызов не зависнет бесконечно.
+ * ВАЖНО: Мы НЕ добавляем свой таймаут поверх нижних уровней.
+ * streaming.ts и llm-client.ts уже имеют свои 120с таймауты.
+ * Дополнительный таймаут здесь приводил к каскаду:
+ *   streaming timeout (120s) → fallback to buffered →
+ *   buffered timeout (120s) BUT signal already aborted → instant fail
  */
 export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LLMStreamingResult> {
   const { prompt, llmConfig, onChunk, maxTokens, abortSignal } = options;
@@ -91,32 +98,22 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
     return null;
   };
 
-  // ── Create a combined AbortController with default timeout ────────
-  // This ensures the LLM call doesn't hang forever even if the caller
-  // doesn't provide an abortSignal with a timeout.
-  const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), DEFAULT_TIMEOUT_MS);
-
-  const combinedSignal = abortSignal
-    ? AbortSignal.any([abortSignal, timeoutController.signal])
-    : timeoutController.signal;
-
   // Track whether buffered fallback was already tried
-  // (prevents double-timeout: streaming empty → buffered fails → catch retries buffered AGAIN)
   let bufferedFallbackAttempted = false;
 
   try {
-    // Accumulate streaming text for fallback purposes
+    // Accumulate streaming text for fallback / partial-text recovery
     let streamingAccumulated = '';
 
-    // Try streaming first
+    // Try streaming first — pass through the abortSignal directly.
+    // streaming.ts already creates its own 120s timeout internally.
     try {
       const response = await client.chatCompletionStream(
         {
           messages,
           max_tokens: maxTokens,
           temperature: 0.7,
-          signal: combinedSignal,
+          signal: abortSignal,
           responseFormat: options.responseFormat || 'markdown',
         },
         (text: string, _delta: string) => {
@@ -133,7 +130,6 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
       // use the accumulated text (proxy might not populate choices[0].message.content)
       if (fullText.trim() === '' && streamingAccumulated.trim().length > 0) {
         console.warn('Streaming response had empty choices[0].message.content, using accumulated streaming text');
-        clearTimeout(timeoutId);
         return { text: streamingAccumulated, usage: extractUsage(response) };
       }
 
@@ -143,11 +139,14 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         console.warn('Streaming returned empty text, falling back to buffered request');
         bufferedFallbackAttempted = true;
 
+        // Use a FRESH signal for buffered fallback — the streaming signal
+        // may have been consumed/aborted during the streaming attempt.
+        // llm-client.ts creates its own 120s timeout internally.
         const bufferedResponse = await client.chatCompletion({
           messages,
           max_tokens: maxTokens,
           temperature: 0.7,
-          signal: combinedSignal,
+          signal: abortSignal,
           responseFormat: options.responseFormat || 'markdown',
         });
 
@@ -155,58 +154,56 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         if (bufferedText.trim().length > 0) {
           // Emulate streaming by sending the whole text at once
           onChunk(bufferedText);
-          clearTimeout(timeoutId);
           return { text: bufferedText, usage: extractUsage(bufferedResponse) };
         }
         // Both streaming and buffered returned empty — return empty
-        clearTimeout(timeoutId);
         return { text: '', usage: extractUsage(bufferedResponse) };
       }
 
-      clearTimeout(timeoutId);
       return { text: fullText, usage: extractUsage(response) };
     } catch (streamError) {
-      // If streaming fails, fall back to buffered request
+      // Streaming failed. Before trying buffered fallback, check if we
+      // already received partial text — if yes, USE IT instead of
+      // retrying. This is the critical fix for the timeout issue:
+      // when LLM takes 90-120s, the streaming connection may time out,
+      // but we've already received most of the response through onChunk.
+      if (streamingAccumulated.trim().length > 0) {
+        console.warn(
+          'Streaming failed but partial text received (' + streamingAccumulated.length +
+          ' chars), using partial text instead of retrying buffered request'
+        );
+        return { text: streamingAccumulated, usage: null };
+      }
+
+      // No partial text — try buffered fallback
       console.warn('Streaming failed, falling back to buffered request:', streamError);
 
       // If we already tried buffered fallback above (streaming returned empty,
       // buffered timed out), DON'T try buffered again — that causes double-timeout.
-      // Instead, check if we have any partially accumulated streaming text.
       if (bufferedFallbackAttempted) {
         console.warn('Buffered fallback was already attempted, not retrying');
-        if (streamingAccumulated.trim().length > 0) {
-          console.warn('Using partially accumulated streaming text');
-          clearTimeout(timeoutId);
-          return { text: streamingAccumulated, usage: null };
-        }
-        // No accumulated text and buffered already failed — throw the original error
-        clearTimeout(timeoutId);
         throw streamError;
-      }
-
-      // If we accumulated some text via streaming before the error, try to use it
-      if (streamingAccumulated.trim().length > 0) {
-        console.warn('Using partially accumulated streaming text as fallback');
-        clearTimeout(timeoutId);
-        return { text: streamingAccumulated, usage: null };
       }
 
       const response = await client.chatCompletion({
         messages,
         max_tokens: maxTokens,
         temperature: 0.7,
-        signal: combinedSignal,
+        signal: abortSignal,
         responseFormat: options.responseFormat || 'markdown',
       });
 
       const fullText = response.choices?.[0]?.message?.content || '';
-      // Emulate streaming by sending the whole text at once
-      onChunk(fullText);
-      clearTimeout(timeoutId);
-      return { text: fullText, usage: extractUsage(response) };
+      if (fullText.trim().length > 0) {
+        // Emulate streaming by sending the whole text at once
+        onChunk(fullText);
+        return { text: fullText, usage: extractUsage(response) };
+      }
+
+      // Buffered also returned empty
+      return { text: '', usage: extractUsage(response) };
     }
   } catch (outerError) {
-    clearTimeout(timeoutId);
     throw outerError;
   }
 }

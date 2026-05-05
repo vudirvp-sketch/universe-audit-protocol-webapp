@@ -193,7 +193,7 @@ describe('classifyLLMError', () => {
     const result = classifyLLMError(error);
     expect(result.type).toBe('fatal_cors_error');
     expect(result.retryable).toBe(false);
-    expect(result.userMessage).toContain('CORS-прокси');
+    expect(result.userMessage).toContain('CORS');
   });
 
   test('Classifies error with "cors" (lowercase) in message as fatal_cors_error', () => {
@@ -202,11 +202,29 @@ describe('classifyLLMError', () => {
     expect(result.type).toBe('fatal_cors_error');
   });
 
-  test('Classifies error with "proxy" in message as fatal_cors_error', () => {
+  test('Classifies error with "proxy" in message as default provider (not fatal_cors)', () => {
+    // BUGFIX: "proxy" alone should NOT be classified as fatal_cors_error.
+    // Many error messages contain "proxy" (e.g. timeout from proxy, 502 from proxy)
+    // and should fall through to the default classification.
+    // Only "CORS" in message triggers fatal_cors_error.
     const error = new Error('proxy connection refused');
     const result = classifyLLMError(error);
-    expect(result.type).toBe('fatal_cors_error');
+    expect(result.type).toBe('provider'); // falls through to default
     expect(result.retryable).toBe(false);
+  });
+
+  test('Classifies error with "proxy_error" in message as transient_error (proxy internal error)', () => {
+    const error = new Error('proxy_error: internal worker failure');
+    const result = classifyLLMError(error);
+    expect(result.type).toBe('transient_error');
+    expect(result.retryable).toBe(true);
+  });
+
+  test('Classifies error with "Внутренняя ошибка прокси" as transient_error', () => {
+    const error = new Error('Внутренняя ошибка прокси');
+    const result = classifyLLMError(error);
+    expect(result.type).toBe('transient_error');
+    expect(result.retryable).toBe(true);
   });
 
   // =========================================================================

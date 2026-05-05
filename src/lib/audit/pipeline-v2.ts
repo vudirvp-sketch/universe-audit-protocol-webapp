@@ -263,7 +263,7 @@ export async function runAuditPipelineV2(
     callbacks.onStepStart(3);
     const step3Start = Date.now();
 
-    const weakAssessments = state.step2.assessments.filter(a => a.verdict === 'weak');
+    const weakAssessments = state.step2?.assessments.filter(a => a.verdict === 'weak') ?? [];
     const maxTokens3 = resolveStepMaxTokens(3, modelCaps);
     const compressedMode3 = maxTokens3 < 8192;
     let accumulatedText3 = '';
@@ -348,18 +348,31 @@ async function callWithRetry(
   try {
     return await fn();
   } catch (error: unknown) {
+    // BUGFIX: Прежде чем решать — ретрай или фатал — проверяем,
+    // получили ли мы часть текста через streaming. Если да —
+    // используем partial текст вместо ретрая.
+    // Это критично для таймаутов: LLM может думать 90-120сек,
+    // прокси возвращает 504, но мы уже получили 80% ответа
+    // через streaming. Ретрай в этом случае только потеряет время.
+    const partial = getAccumulatedText();
+    if (partial.trim().length > 0) {
+      console.warn(`Step ${step}: error after streaming, but have partial text (${partial.length} chars) — using it instead of retry`);
+      return { text: partial, usage: null };
+    }
+
     if (isTransientError(error)) {
-      // 429, 503, 502 — один повтор через 10 секунд
-      await abortAwareSleep(10_000, abortSignal);
+      // 429, 503, 502 — один повтор через 5 секунд (уменьшено с 10,
+      // т.к. прокси уже делает свои ретраи)
+      console.warn(`Step ${step}: transient error, retrying in 5s...`, error instanceof Error ? error.message : String(error));
+      await abortAwareSleep(5_000, abortSignal);
       try {
         return await fn();
-      } catch {
-        // Вторая транзиентная ошибка — не убивать пайплайн
-        // Если уже получили часть текста через streaming — парсим лучшее усилие
-        const partial = getAccumulatedText();
-        if (partial.trim().length > 0) {
-          console.warn(`Step ${step}: transient error after retry, using partial text (${partial.length} chars)`);
-          return { text: partial, usage: null };
+      } catch (retryError) {
+        // Вторая транзиентная ошибка — проверяем partial ещё раз
+        const partialAfterRetry = getAccumulatedText();
+        if (partialAfterRetry.trim().length > 0) {
+          console.warn(`Step ${step}: transient error after retry, using partial text (${partialAfterRetry.length} chars)`);
+          return { text: partialAfterRetry, usage: null };
         }
         // Нет даже partial текста — это фатально
         throw new Error(`LLM не ответил на шаге ${step} после повторной попытки`);
