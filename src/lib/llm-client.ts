@@ -110,11 +110,11 @@ export interface ModelCapabilities {
  * most conservative default.
  */
 const PROVIDER_DEFAULT_CAPABILITIES: Partial<Record<LLMProvider, ModelCapabilities>> = {
-  google:     { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
-  anthropic:  { contextWindow: 200_000,   maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+  google:     { contextWindow: 1_048_576, maxOutputTokens: 65535, supportsJSONMode: true,  supportsSystemMessages: true },
+  anthropic:  { contextWindow: 200_000,   maxOutputTokens: 16384, supportsJSONMode: false, supportsSystemMessages: true },
   openai:     { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
   groq:       { contextWindow: 128_000,   maxOutputTokens: 32768, supportsJSONMode: false, supportsSystemMessages: true },
-  deepseek:   { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  deepseek:   { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
   mistral:    { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
   zai:        { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
   qwen:       { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
@@ -141,35 +141,45 @@ const DEFAULT_CAPABILITIES: ModelCapabilities = {
  * The key format is `${provider}/${model}` to avoid ambiguity across providers.
  */
 const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
-  // Google Gemini — full family coverage
-  'google/gemini-2.5-flash':       { contextWindow: 1_000_000, maxOutputTokens: 65536, supportsJSONMode: true,  supportsSystemMessages: true },
-  'google/gemini-2.5-pro':         { contextWindow: 1_000_000, maxOutputTokens: 65536, supportsJSONMode: true,  supportsSystemMessages: true },
-  'google/gemini-2.0-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
-  'google/gemini-2.0-flash-lite':  { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
-  'google/gemini-1.5-flash':       { contextWindow: 1_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
-  'google/gemini-1.5-pro':         { contextWindow: 2_000_000, maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
-  'google/gemini-1.0-pro':         { contextWindow: 32_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  // --- Google Gemini ---
+  'google/gemini-2.5-pro':          { contextWindow: 1_048_576, maxOutputTokens: 65535,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.5-flash':        { contextWindow: 1_048_576, maxOutputTokens: 65535,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.0-flash':        { contextWindow: 1_048_576, maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.5-flash-lite':   { contextWindow: 1_048_576, maxOutputTokens: 32768,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-2.0-flash-lite':   { contextWindow: 1_048_576, maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-1.5-flash':        { contextWindow: 1_000_000, maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-1.5-pro':          { contextWindow: 2_000_000, maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'google/gemini-1.0-pro':          { contextWindow: 32_000,    maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
 
-  // OpenAI
-  'openai/gpt-4o-mini':            { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
-  'openai/gpt-4.1-mini':           { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
-  'openai/gpt-4o':                 { contextWindow: 128_000,   maxOutputTokens: 16384, supportsJSONMode: true,  supportsSystemMessages: true },
-  'openai/gpt-4.1':                { contextWindow: 1_000_000, maxOutputTokens: 32768, supportsJSONMode: true,  supportsSystemMessages: true },
+  // --- OpenAI ---
+  'openai/gpt-4.1':                 { contextWindow: 1_047_576, maxOutputTokens: 32768,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4.1-mini':            { contextWindow: 1_047_576, maxOutputTokens: 32768,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4.1-nano':            { contextWindow: 1_047_576, maxOutputTokens: 32768,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4o':                  { contextWindow: 128_000,   maxOutputTokens: 16384,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/gpt-4o-mini':             { contextWindow: 128_000,   maxOutputTokens: 16384,  supportsJSONMode: true,  supportsSystemMessages: true },
+  'openai/o1':                      { contextWindow: 200_000,   maxOutputTokens: 100_000, supportsJSONMode: false, supportsSystemMessages: true },
+  'openai/o3':                      { contextWindow: 200_000,   maxOutputTokens: 100_000, supportsJSONMode: false, supportsSystemMessages: true },
+  'openai/o4-mini':                 { contextWindow: 200_000,   maxOutputTokens: 100_000, supportsJSONMode: false, supportsSystemMessages: true },
 
-  // Anthropic Claude — use prefill trick for JSON (no native json_object mode)
-  'anthropic/claude-sonnet-4-20250514': { contextWindow: 200_000, maxOutputTokens: 16384, supportsJSONMode: false, supportsSystemMessages: true },
-  'anthropic/claude-3-5-sonnet':        { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
-  'anthropic/claude-3-haiku':           { contextWindow: 200_000, maxOutputTokens: 8192,  supportsJSONMode: false, supportsSystemMessages: true },
+  // --- Anthropic Claude ---
+  'anthropic/claude-sonnet-4-20250514': { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-opus-4':            { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-3-5-sonnet':        { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-3-5-haiku':         { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-3-haiku':           { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true },
 
-  // Groq
-  'groq/llama-3.3-70b-versatile':  { contextWindow: 128_000,   maxOutputTokens: 32768, supportsJSONMode: false, supportsSystemMessages: true },
+  // --- DeepSeek ---
+  'deepseek/deepseek-chat':         { contextWindow: 128_000,   maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'deepseek/deepseek-reasoner':     { contextWindow: 128_000,   maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'deepseek/deepseek-v3':           { contextWindow: 128_000,   maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
+  'deepseek/deepseek-r1':           { contextWindow: 128_000,   maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
 
-  // DeepSeek
-  'deepseek/deepseek-chat':        { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
-  'deepseek/deepseek-reasoner':    { contextWindow: 64_000,    maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  // --- Groq ---
+  'groq/llama-3.3-70b-versatile':   { contextWindow: 131_072,   maxOutputTokens: 32768,  supportsJSONMode: false, supportsSystemMessages: true },
+  'groq/qwen3-32b':                 { contextWindow: 131_072,   maxOutputTokens: 40960,  supportsJSONMode: false, supportsSystemMessages: true },
 
-  // Mistral
-  'mistral/mistral-large-latest':   { contextWindow: 128_000,   maxOutputTokens: 8192,  supportsJSONMode: true,  supportsSystemMessages: true },
+  // --- Mistral ---
+  'mistral/mistral-large-latest':    { contextWindow: 128_000,   maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
 };
 
 /**
@@ -272,13 +282,13 @@ export function resolveMaxOutputTokens(
 export const PREFERRED_MODELS: Record<LLMProvider, string[]> = {
   zai:         ['default'],
   openai:      ['gpt-4.1-mini', 'gpt-4o-mini'],
-  anthropic:   ['claude-sonnet-4-20250514', 'claude-3-5-sonnet', 'claude-3-haiku'],
-  google:      ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'],
+  anthropic:   ['claude-sonnet-4-20250514', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
+  google:      ['gemini-2.5-flash', 'gemini-2.0-flash'],
   mistral:     ['mistral-large-latest'],
-  deepseek:    ['deepseek-chat'],
+  deepseek:    ['deepseek-chat', 'deepseek-reasoner'],
   qwen:        ['qwen-turbo'],
   kimi:        ['moonshot-v1-8k'],
-  groq:        ['llama-3.3-70b-versatile'],
+  groq:        ['llama-3.3-70b-versatile', 'qwen3-32b'],
   openrouter:  ['anthropic/claude-sonnet-4'],
   huggingface: ['meta-llama/Llama-3.2-3B-Instruct'],
   together:    ['meta-llama/Llama-3.2-3B-Instruct-Turbo'],
