@@ -61,7 +61,7 @@ export function AuditProgressV2({ currentStep, streamingText, onCancel }: AuditP
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Прогресс</span>
-            <span>Шаг {Math.min(currentStep, 3)} из 3</span>
+            <span>{currentStep > 0 ? `Шаг ${Math.min(currentStep, 3)} из 3` : 'Подготовка...'}</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>

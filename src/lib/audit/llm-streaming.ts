@@ -16,6 +16,13 @@
  * мешал: при fallback streaming→buffered, сигнал уже мог быть aborted,
  * и buffered-запрос мгновенно падал.
  *
+ * BUGFIX (v3): Buffered fallback больше НЕ передаёт abortSignal напрямую.
+ * Если пользователь отменил запрос во время streaming, abortSignal уже
+ * aborted — и buffered-запрос мгновенно падает с AbortError. Теперь
+ * мы создаём НОВЫЙ AbortController для buffered fallback, который
+ * перенаправляет отмену от пользователя, но не наследует уже-aborted
+ * состояние.
+ *
  * Также: при таймауте streaming-запроса, если мы уже получили часть
  * текста через onChunk — используем его вместо фоллбэка на buffered.
  * Это критично для длинных Step 2 (50+ критериев), где модель может
@@ -60,8 +67,8 @@ export interface LLMStreamingOptions {
  *    используем partial текст (лучшая стратегия для таймаутов)
  * 4. Если streaming вернул пустой текст (прокси не SSE) —
  *    фоллбэк на buffered chatCompletion
- * 5. Если buffered тоже упал — пробуем buffered с НОВЫМ сигналом
- *    (старый мог уже сработать по таймауту)
+ * 5. Если buffered тоже упал — возвращаем ошибку
+ *    (НЕ пытаемся ещё раз — cascade prevention)
  *
  * ВАЖНО: Мы НЕ добавляем свой таймаут поверх нижних уровней.
  * streaming.ts и llm-client.ts уже имеют свои 120с таймауты.
@@ -139,14 +146,23 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         console.warn('Streaming returned empty text, falling back to buffered request');
         bufferedFallbackAttempted = true;
 
-        // Use a FRESH signal for buffered fallback — the streaming signal
-        // may have been consumed/aborted during the streaming attempt.
+        // BUGFIX (v3): Use a FRESH AbortController for buffered fallback.
+        // The original abortSignal may already be aborted (e.g. user cancelled
+        // during streaming, or Cloudflare Worker timed out the streaming request).
         // llm-client.ts creates its own 120s timeout internally.
+        // We still forward user cancellation to the new controller.
+        const fallbackController = new AbortController();
+        if (abortSignal?.aborted) {
+          fallbackController.abort();
+        } else if (abortSignal) {
+          abortSignal.addEventListener('abort', () => fallbackController.abort(), { once: true });
+        }
+
         const bufferedResponse = await client.chatCompletion({
           messages,
           max_tokens: maxTokens,
           temperature: 0.7,
-          signal: abortSignal,
+          signal: fallbackController.signal,
           responseFormat: options.responseFormat || 'markdown',
         });
 
@@ -185,11 +201,20 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         throw streamError;
       }
 
+      // BUGFIX (v3): Create a FRESH AbortController for buffered fallback.
+      // Same reason as above — abortSignal may already be aborted.
+      const fallbackController = new AbortController();
+      if (abortSignal?.aborted) {
+        fallbackController.abort();
+      } else if (abortSignal) {
+        abortSignal.addEventListener('abort', () => fallbackController.abort(), { once: true });
+      }
+
       const response = await client.chatCompletion({
         messages,
         max_tokens: maxTokens,
         temperature: 0.7,
-        signal: abortSignal,
+        signal: fallbackController.signal,
         responseFormat: options.responseFormat || 'markdown',
       });
 

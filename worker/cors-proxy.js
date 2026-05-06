@@ -11,7 +11,7 @@
 
 const PROVIDER_CONFIGS = {
   openai: {
-    // OpenAI, DeepSeek, Groq, OpenRouter, Mistral, etc.
+    // OpenAI, DeepSeek, Groq, Mistral, Together, xAI, Z.AI, Qwen, Kimi
     // All use: Authorization header + /v1/chat/completions
     transformRequest: ({ body, apiKey }) => {
       const parsed = JSON.parse(body);
@@ -20,6 +20,22 @@ const PROVIDER_CONFIGS = {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
+        },
+        body: parsed.payload,
+      };
+    },
+  },
+  openrouter: {
+    // OpenRouter uses Authorization header + requires HTTP-Referer and X-Title
+    transformRequest: ({ body, apiKey }) => {
+      const parsed = JSON.parse(body);
+      return {
+        targetUrl: parsed.targetUrl,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': 'https://universe-audit-protocol.pages.dev',
+          'X-Title': 'Universe Audit Protocol',
         },
         body: parsed.payload,
       };
@@ -90,7 +106,7 @@ const KNOWN_PROVIDER_DOMAINS = [
 ];
 
 // Proxy version for health-check
-const PROXY_VERSION = 'v4';
+const PROXY_VERSION = 'v5';
 
 // Proxy start time for uptime calculation
 const PROXY_START_TIME = Date.now();
@@ -445,7 +461,7 @@ export default {
           return new Response(
             JSON.stringify({
               error: 'timeout',
-              message: 'Провайдер не ответил за 25 секунд. Попробуйте ещё раз или выберите другую модель.',
+              message: `Провайдер не ответил за ${Math.round(PROVIDER_TIMEOUT_MS / 1000)} секунд. Попробуйте ещё раз или выберите другую модель.`,
             }),
             { status: 504, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
           );
@@ -473,11 +489,19 @@ export default {
       // ── Streaming passthrough ─────────────────────────────────────
       if (isStreaming && response.ok && response.body) {
         const elapsedMs = Date.now() - startTime;
-        console.log(`[Proxy Stream] ${provider} — streaming started in ${elapsedMs}ms — key: ${maskApiKey(apiKey)}`);
+
+        // BUGFIX: Preserve upstream Content-Type instead of always forcing
+        // text/event-stream. Some providers return buffered JSON even with
+        // stream:true, and forcing text/event-stream causes the client-side
+        // SSE parser to fail (it tries to parse JSON as SSE → empty text).
+        const upstreamContentType = response.headers.get('Content-Type') || '';
+        const isActuallySSE = upstreamContentType.includes('text/event-stream');
+
+        console.log(`[Proxy Stream] ${provider} — streaming started in ${elapsedMs}ms (upstream CT: ${upstreamContentType || 'unknown'}) — key: ${maskApiKey(apiKey)}`);
 
         // Pass through the ReadableStream without buffering
         const streamHeaders = {
-          'Content-Type': 'text/event-stream',
+          'Content-Type': isActuallySSE ? 'text/event-stream' : upstreamContentType || 'application/json',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
           ...CORS_HEADERS,

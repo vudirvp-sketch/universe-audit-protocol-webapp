@@ -1,4 +1,4 @@
-// Universe Audit Protocol v10.0 - Protocol Data
+// Universe Audit Protocol v11.0 - Protocol Data
 
 // ============================================================
 // Legacy types — previously in types.ts, now defined locally

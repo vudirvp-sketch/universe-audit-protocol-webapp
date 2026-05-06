@@ -269,7 +269,7 @@ export function parseScreeningAnswers(section: string): ScreeningAnswer[] {
     // Match: "1. ДА — пояснение" or "1. НЕТ — пояснение"
     const match = line.match(/^\s*\d+[\.\)]\s*(ДА|НЕТ|YES|NO)\s*[—\-|:]\s*(.+)/i);
     if (match) {
-      const passed = /^ДА|YES$/i.test(match[1].trim());
+      const passed = /^(ДА|YES)$/i.test(match[1].trim());
       const explanation = match[2].trim();
       const idx = answers.length;
       answers.push({
