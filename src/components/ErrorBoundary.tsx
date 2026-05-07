@@ -13,7 +13,8 @@ interface ErrorBoundaryState {
 }
 
 // Only remove audit state — NEVER touch settings or other localStorage keys
-const AUDIT_STATE_KEY = 'universe-audit-state';
+// MUST match the Zustand persist key in useAuditStateV2.ts
+const AUDIT_STATE_KEY = 'audit-state-v2';
 
 /**
  * ErrorBoundary component to catch React rendering errors gracefully.
@@ -24,7 +25,7 @@ const AUDIT_STATE_KEY = 'universe-audit-state';
  * - "Попробовать восстановить" — resets error boundary without page reload
  * - "Сбросить и перезагрузить" — clears audit state and reloads page
  *
- * IMPORTANT: Only removes 'universe-audit-state' from localStorage,
+ * IMPORTANT: Only removes 'audit-state-v2' from localStorage,
  * NOT 'universe-audit-settings' or any other keys.
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {

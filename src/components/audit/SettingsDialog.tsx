@@ -538,31 +538,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-2 pt-2">
-        <Button
-          variant="outline"
-          onClick={handleClear}
-          disabled={!inputKey && !hasKey}
-          className="w-full sm:w-auto"
-        >
-          <Trash2 className="h-4 w-4 mr-2" />
-          {t.app.clear}
-        </Button>
-        <Button
-          onClick={handleSave}
-          disabled={saved}
-          className="w-full sm:w-auto"
-        >
-          {saved ? (
-            <>
-              <Check className="h-4 w-4 mr-2" />
-              {t.app.saved}
-            </>
-          ) : (
-            t.app.save
-          )}
-        </Button>
-      </div>
     </>
   );
 
@@ -588,6 +563,31 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <ScrollArea className="flex-1 overflow-y-auto px-4">
             {settingsForm}
           </ScrollArea>
+          <div className="flex flex-col gap-2 px-4 py-3 border-t">
+            <Button
+              variant="outline"
+              onClick={handleClear}
+              disabled={!inputKey && !hasKey}
+              className="w-full"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {t.app.clear}
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={saved}
+              className="w-full"
+            >
+              {saved ? (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  {t.app.saved}
+                </>
+              ) : (
+                t.app.save
+              )}
+            </Button>
+          </div>
         </SheetContent>
       </Sheet>
     );
