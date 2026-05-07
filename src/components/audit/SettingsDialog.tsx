@@ -195,7 +195,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     // FIX: Use AbortController with signal passed to fetch() for REAL timeout.
     // Also use skipProxyRetry to tell the worker not to retry 429s server-side
     // (prevents 12+ seconds of hidden retries before the client gets a response).
-    // maxRateLimitRetries: 0 means the client also doesn't retry on 429.
     // Combined: the test connection fails fast with a clear error message.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -212,7 +211,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           { role: 'user', content: 'Ответь одним словом: работает' },
         ],
         max_tokens: 10,
-        maxRateLimitRetries: 0, // No client-side retries — fail fast
+        maxRateLimitRetries: 0, // Deprecated but kept for type compatibility — no client-side retries
         signal: controller.signal, // Real fetch cancellation on timeout
         skipProxyRetry: true, // Tell proxy to skip server-side 429 retries
       });

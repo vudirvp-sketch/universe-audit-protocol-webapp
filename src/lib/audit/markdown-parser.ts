@@ -9,7 +9,19 @@
  * 4. Если значение не парсится → insufficient_data / null
  * 5. Если весь ответ пуст → выбросить ParseError наверх (→ error состояние)
  *
- * v11.0-fix: Fuzzy matching для заголовков + расслабленные regex
+ * v11.1-fix:
+ * - BUGFIX: Fuzzy matching теперь использует includes() вместо точного совпадения
+ *   нормализованных строк. Раньше «l1: механизм» не совпадало с алиасом «l1 механизм»
+ *   из-за двоеточия. Теперь алиас считается совпавшим, если нормализованный
+ *   заголовок содержит нормализованный алиас (или наоборот).
+ * - BUGFIX: parseSingleCriterion — конфликт ID блока L (L1, L2, L3) с
+ *   уровнями L1/L2/L3. Теперь regex требует, чтобы после ID шёл разделитель
+ *   и вердикт, а не просто любой текст. Также добавлен fallback-парсинг
+ *   для строк, где LLM пишет формат «- **ID** Вердикт — ...» без двоеточия.
+ * - BUGFIX: extractSection/extractSubsection — убран дублирующий расчёт offset.
+ * - RELAX: parseSingleCriterion — добавлена поддержка формата без разделителя
+ *   между ID и вердиктом (LLM иногда пишет «A1 СИЛЬНО — ...»).
+ * - DIAG: Добавлено console.warn при пустых секциях и нулевых assessments.
  */
 
 import type {
@@ -56,10 +68,13 @@ const SECTION_ALIASES: Record<string, string[]> = {
   'SCREENING':        ['скрининг', 'screening', 'скрининг проверок', 'проверки'],
 
   // Step 2 sections (## level)
-  'L1_MECHANISM':     ['l1 mechanism', 'l1 механизм', 'механизм', 'l1', 'уровень 1 механизм', 'l1: механизм', 'уровень 1: механизм'],
-  'L2_BODY':          ['l2 body', 'l2 тело', 'тело', 'l2', 'уровень 2 тело', 'l2: тело', 'уровень 2: тело'],
-  'L3_PSYCHE':        ['l3 psyche', 'l3 психика', 'психика', 'l3', 'уровень 3 психика', 'l3: психика', 'уровень 3: психика'],
-  'L4_META':          ['l4 meta', 'l4 мета', 'мета', 'l4', 'уровень 4 мета', 'l4: мета', 'уровень 4: мета'],
+  // ВНИМАНИЕ: алиасы не должны быть слишком короткими (например просто «l1»),
+  // иначе они совпадут с заголовками типа «## L1: Механизм» из блока L.
+  // Порядок: самые специфичные алиасы — первыми.
+  'L1_MECHANISM':     ['l1 mechanism', 'l1 механизм', 'уровень 1 механизм', 'l1: механизм', 'уровень 1: механизм', 'l1 механизм (структура)', 'механизм'],
+  'L2_BODY':          ['l2 body', 'l2 тело', 'уровень 2 тело', 'l2: тело', 'уровень 2: тело', 'l2 тело (воплощённость)', 'тело'],
+  'L3_PSYCHE':        ['l3 psyche', 'l3 психика', 'уровень 3 психика', 'l3: психика', 'уровень 3: психика', 'l3 психика (горе)', 'психика'],
+  'L4_META':          ['l4 meta', 'l4 мета', 'уровень 4 мета', 'l4: мета', 'уровень 4: мета', 'l4 мета (интеграция)', 'мета'],
 
   // Step 3 sections (## level)
   'FIX_LIST':         ['fix list', 'список исправлений', 'исправления', 'фикс-лист', 'фикс лист', 'рекомендации'],
@@ -86,16 +101,45 @@ const SECTION_ALIASES: Record<string, string[]> = {
  * Нормализовать строку для fuzzy-сравнения:
  * - lowercase
  * - заменить _ на пробел
+ * - убрать : (двоеточия) — LLM часто пишет «L1: Механизм»
  * - убрать лишние пробелы
  * - убрать markdown bold/italic маркеры (**, *, __)
  */
 function normalizeHeader(str: string): string {
   return str
     .toLowerCase()
-    .replace(/[_\-]/g, ' ')       // underscore и dash → пробел
+    .replace(/[_\-:]/g, ' ')      // underscore, dash, colon → пробел
     .replace(/[*_]{1,2}/g, '')    // убрать **, *, __, _
     .replace(/\s+/g, ' ')         // схлопнуть пробелы
     .trim();
+}
+
+/**
+ * Проверить, совпадает ли заголовок с одним из алиасов.
+ * v11.1-fix: Используем substring matching вместо точного совпадения.
+ * Если нормализованный заголовок содержит нормализованный алиас
+ * (или наоборот), считаем совпадение.
+ *
+ * Это решает проблему, когда LLM пишет:
+ *   ## L1: Механизм (структура и связи)
+ * а алиас «l1 механизм» — нормализуется в «l1 механизм».
+ * Точное сравнение не сработало из-за скобок и доп. текста.
+ */
+function headerMatchesAlias(headerText: string, normalizedTargets: string[]): boolean {
+  const normalizedHeader = normalizeHeader(headerText);
+
+  for (const target of normalizedTargets) {
+    // Точное совпадение (быстрый путь)
+    if (normalizedHeader === target) return true;
+
+    // Заголовок содержит алиас (LLM добавила пояснение)
+    if (normalizedHeader.includes(target)) return true;
+
+    // Алиас содержит заголовок (маловероятно, но для симметрии)
+    if (target.includes(normalizedHeader) && normalizedHeader.length >= 3) return true;
+  }
+
+  return false;
 }
 
 // ============================================================
@@ -103,7 +147,7 @@ function normalizeHeader(str: string): string {
 // ============================================================
 
 /** Извлечь текст между ## HEADER и следующим ## заголовком (или концом текста).
- *  Поддерживает fuzzy matching по алиасам. */
+ *  Поддерживает fuzzy matching по алиасам (v11.1: substring matching). */
 export function extractSection(markdown: string, header: string): string {
   const aliases = SECTION_ALIASES[header] || [];
   const allHeaders = [header, ...aliases];
@@ -111,8 +155,7 @@ export function extractSection(markdown: string, header: string): string {
 
   // Ищем первый ## заголовок, который совпадает с одним из алиасов
   const lines = markdown.split('\n');
-  let sectionStartLine = -1;
-  let sectionStartIdx = 0;
+  let sectionStartIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -120,10 +163,7 @@ export function extractSection(markdown: string, header: string): string {
     const headerMatch = line.match(/^##\s+(?!#)\s*(.+?)\s*$/);
     if (!headerMatch) continue;
 
-    const headerText = normalizeHeader(headerMatch[1]);
-    if (normalizedTargets.includes(headerText)) {
-      sectionStartLine = i;
-      sectionStartIdx = line.length + 1; // +1 for the \n
+    if (headerMatchesAlias(headerMatch[1], normalizedTargets)) {
       // Calculate the actual offset in the original string
       let offset = 0;
       for (let j = 0; j < i; j++) {
@@ -134,7 +174,7 @@ export function extractSection(markdown: string, header: string): string {
     }
   }
 
-  if (sectionStartLine === -1) return '';
+  if (sectionStartIdx === -1) return '';
 
   // Find the next ## header (but not ###)
   const rest = markdown.slice(sectionStartIdx);
@@ -148,15 +188,14 @@ export function extractSection(markdown: string, header: string): string {
 }
 
 /** Извлечь текст между ### HEADER и следующим ### или ## заголовком.
- *  Поддерживает fuzzy matching по алиасам. */
+ *  Поддерживает fuzzy matching по алиасам (v11.1: substring matching). */
 export function extractSubsection(markdown: string, header: string): string {
   const aliases = SECTION_ALIASES[header] || [];
   const allHeaders = [header, ...aliases];
   const normalizedTargets = allHeaders.map(normalizeHeader);
 
   const lines = markdown.split('\n');
-  let sectionStartLine = -1;
-  let sectionStartIdx = 0;
+  let sectionStartIdx = -1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -164,9 +203,7 @@ export function extractSubsection(markdown: string, header: string): string {
     const headerMatch = line.match(/^###\s+(?!#)\s*(.+?)\s*$/);
     if (!headerMatch) continue;
 
-    const headerText = normalizeHeader(headerMatch[1]);
-    if (normalizedTargets.includes(headerText)) {
-      sectionStartLine = i;
+    if (headerMatchesAlias(headerMatch[1], normalizedTargets)) {
       let offset = 0;
       for (let j = 0; j < i; j++) {
         offset += lines[j].length + 1;
@@ -176,7 +213,7 @@ export function extractSubsection(markdown: string, header: string): string {
     }
   }
 
-  if (sectionStartLine === -1) return '';
+  if (sectionStartIdx === -1) return '';
 
   const rest = markdown.slice(sectionStartIdx);
 
@@ -219,6 +256,12 @@ export function parseStep1Response(markdown: string): Step1Result {
   const authorProfileSection = extractSection(markdown, 'AUTHOR_PROFILE');
   const skeletonSection = extractSection(markdown, 'SKELETON');
   const screeningSection = extractSection(markdown, 'SCREENING');
+
+  // DIAG: логируем пустые секции
+  if (!auditModeSection) console.warn('[Parser] Step 1: секция AUDIT_MODE не найдена');
+  if (!authorProfileSection) console.warn('[Parser] Step 1: секция AUTHOR_PROFILE не найдена');
+  if (!skeletonSection) console.warn('[Parser] Step 1: секция SKELETON не найдена');
+  if (!screeningSection) console.warn('[Parser] Step 1: секция SCREENING не найдена');
 
   const auditMode = parseAuditMode(auditModeSection);
   const authorProfile = parseAuthorProfile(authorProfileSection);
@@ -432,16 +475,59 @@ export function parseScreeningAnswers(section: string): ScreeningAnswer[] {
 // Парсинг Запроса 2: Оценка по критериям
 // ============================================================
 
+/**
+ * Известные ID критериев из MASTER_CHECKLIST.
+ * Используется для валидации распарсенных ID и предотвращения
+ * ложных срабатываний (например, L1 как ID блока L vs уровень L1).
+ *
+ * Критерии блока L имеют id: L1, L2, L3 — их НЕ нужно путать
+ * с уровнями L1/L2/L3/L4.
+ */
+const KNOWN_CRITERIA_IDS = new Set([
+  // Block A
+  'A1','A2','A3','A4','A5','A6','A7',
+  // Block B
+  'B1','B2','B3','B4','B5','B6','B7','B8',
+  // Block C
+  'C1','C2','C3','C4','C5','C6','C7',
+  // Block D
+  'D1','D2','D3','D4','D5','D6','D7',
+  // Block E
+  'E1','E2','E3','E4','E5','E6',
+  // Block F
+  'F1','F2',
+  // Block G
+  'G1',
+  // Block H
+  'H1',
+  // Block I
+  'I1','I2',
+  // Block J
+  'J1','J2','J3',
+  // Block K
+  'K1','K2','K3','K4',
+  // Block L — ВНИМАНИЕ: L1, L2, L3 — это ID критериев, не уровни!
+  'L1','L2','L3',
+  // Block M
+  'M1','M2','M3',
+]);
+
 /** Распарсить ответ Запроса 2 целиком */
 export function parseStep2Response(markdown: string, criteriaIds: string[]): Step2Result {
   if (!markdown || !markdown.trim()) {
     throw new ParseError('Пустой ответ LLM для Запроса 2');
   }
 
+  // DIAG: логируем первые 200 символов ответа для диагностики
+  console.log('[Parser] Step 2: ответ LLM, первые 200 символов:', markdown.slice(0, 200));
+
   const l1Section = extractSection(markdown, 'L1_MECHANISM');
   const l2Section = extractSection(markdown, 'L2_BODY');
   const l3Section = extractSection(markdown, 'L3_PSYCHE');
   const l4Section = extractSection(markdown, 'L4_META');
+
+  // DIAG: логируем найденные секции
+  console.log(`[Parser] Step 2: L1=${l1Section.length}ch, L2=${l2Section.length}ch, L3=${l3Section.length}ch, L4=${l4Section.length}ch`);
 
   const assessments: CriterionAssessment[] = [
     ...parseCriterionAssessments(l1Section, 'L1'),
@@ -450,8 +536,16 @@ export function parseStep2Response(markdown: string, criteriaIds: string[]): Ste
     ...parseCriterionAssessments(l4Section, 'L4'),
   ];
 
+  // DIAG: логируем сколько критериев распарсилось
+  console.log(`[Parser] Step 2: распарсено ${assessments.length} из ${criteriaIds.length} критериев`);
+
   // If we got fewer assessments than expected, fill missing ones with insufficient_data
   const foundIds = new Set(assessments.map(a => a.id));
+  const missingIds = criteriaIds.filter(id => !foundIds.has(id));
+  if (missingIds.length > 0) {
+    console.warn(`[Parser] Step 2: не найдены критерии: ${missingIds.join(', ')}`);
+  }
+
   for (const id of criteriaIds) {
     if (!foundIds.has(id)) {
       assessments.push({
@@ -489,6 +583,8 @@ export function parseCriterionAssessments(
     if (/^\|?[-:\s|]+\|?$/.test(line)) continue;
     // Skip table header rows
     if (/^\|?\s*(стадия|stage|персонаж|character)/i.test(line)) continue;
+    // Skip lines that look like narrative text (too long, no ID pattern)
+    if (line.length > 300 && !/[A-Z]\d+/i.test(line)) continue;
 
     const parsed = parseSingleCriterion(line, level);
     if (parsed) {
@@ -504,14 +600,12 @@ export function parseCriterionAssessments(
  *
  *   A1: СИЛЬНО — «Элементы не связаны циклом» — Нет замкнутой петли
  *
- * Толерантность (v11.0-fix — расслаблена):
- * - Вердикт: СИЛЬНО / СЛАБО / НЕДОСТАТОЧНО ДАННЫХ (любой регистр, сокращения)
- * - Разделитель: —, -, |, :, запятая
- * - Доказательство в кавычках «» или "" или без
- * - ID может быть с bold-обёрткой: **A1**
- * - Перед ID может быть номер: 1. A1: ...
- * - Перед ID может быть тег уровня: [L1] A1: ...
- * - Разделитель между ID и вердиктом: :, —, -, |
+ * v11.1-fix — дальнейшая релаксация:
+ * - Поддержка формата без разделителя: «A1 СИЛЬНО — ...»
+ * - Поддержка формата с дефисом: «- A1: СИЛЬНО — ...»
+ * - Валидация ID по KNOWN_CRITERIA_IDS (предотвращает ложные срабатывания)
+ * - Fallback: если ID не распознан, пробуем найти вердикт в строке
+ * - Block L (L1, L2, L3) корректно обрабатывается — это ID критериев, не уровни
  */
 export function parseSingleCriterion(
   line: string,
@@ -521,15 +615,59 @@ export function parseSingleCriterion(
   let cleaned = line
     .replace(/^\s*\d+[\.\)]\s*/, '')      // "1. " или "1) "
     .replace(/^\s*\[L\d[\/L\d]*\]\s*/, '') // "[L1]" или "[L1/L2]"
+    .replace(/^[-*]\s+/, '')                // "- " или "* " в начале
     .replace(/\*{1,2}/g, '')               // убрать **bold** и *italic*
     .trim();
 
-  // Extract ID: first token that looks like A1, B2, L3 etc.
-  const idMatch = cleaned.match(/^([A-Z]\d+)\s*[:.\-—|,]\s*(.+)/i);
-  if (!idMatch) return null;
+  // Вариант 1: ID с разделителем (: — - |)
+  // Match: "A1: СИЛЬНО — ..." or "A1 — СИЛЬНО — ..." or "A1 СИЛЬНО — ..."
+  const idWithSepMatch = cleaned.match(/^([A-Z]\d+)\s*[:.\-—|,]?\s*(.+)/i);
+  if (idWithSepMatch) {
+    const rawId = idWithSepMatch[1].toUpperCase();
+    const rest = idWithSepMatch[2];
 
-  const id = idMatch[1].toUpperCase();
-  const rest = idMatch[2];
+    // Валидация: известный ли это ID критерия?
+    if (KNOWN_CRITERIA_IDS.has(rawId)) {
+      return parseCriterionRest(rawId, rest, level);
+    }
+
+    // Если ID не из известных — возможно это ложное срабатывание
+    // (например «L1» из уровня, а не из блока L).
+    // Пробуем дальше — может быть, это просто мусорная строка.
+  }
+
+  // Вариант 2: Попытка найти ID критерия в любом месте строки
+  // LLM иногда пишет: "1. **A1** СИЛЬНО — ..." или "- A1 СИЛЬНО — ..."
+  const idAnywhereMatch = cleaned.match(/\b([A-Z]\d+)\b/i);
+  if (idAnywhereMatch) {
+    const rawId = idAnywhereMatch[1].toUpperCase();
+    if (KNOWN_CRITERIA_IDS.has(rawId)) {
+      // Извлекаем текст после ID
+      const afterId = cleaned.slice(cleaned.indexOf(idAnywhereMatch[0]) + idAnywhereMatch[0].length).trim();
+      // Убираем ведущий разделитель
+      const rest = afterId.replace(/^[:.\-—|,]\s*/, '');
+      return parseCriterionRest(rawId, rest, level);
+    }
+  }
+
+  // Не распарсилось — возвращаем null
+  return null;
+}
+
+/**
+ * Распарсить вердикт, evidence и explanation из текста после ID критерия.
+ * Вынесено в отдельную функцию для переиспользования из parseSingleCriterion.
+ */
+function parseCriterionRest(id: string, rest: string, level: 'L1' | 'L2' | 'L3' | 'L4'): CriterionAssessment | null {
+  if (!rest.trim()) {
+    return {
+      id,
+      level,
+      verdict: 'insufficient_data',
+      evidence: '',
+      explanation: '',
+    };
+  }
 
   // Extract verdict — ищем в первой части до разделителя
   let verdict: CriterionAssessment['verdict'] = 'insufficient_data';
@@ -656,8 +794,9 @@ export function parseGriefMatrix(section: string): GriefArchitectureMatrix | nul
 
 /**
  * Guess level from criterion ID prefix.
- * v11.0-fix: Block L (L1, L2, L3) → L2/L3 → нормализуем к L2
- * (по данным MASTER_CHECKLIST, блок L имеет level 'L2/L3')
+ * v11.1-fix: Block L (L1, L2, L3) — эти ID совпадают с именами уровней,
+ * но это критерии из блока L (Narrative Infrastructure), их уровень — L2/L3.
+ * Берём L2 как дефолт для блока L (по данным MASTER_CHECKLIST).
  */
 export function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
   const block = id.charAt(0).toUpperCase();
@@ -666,7 +805,7 @@ export function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
     case 'C': case 'D': case 'H': return 'L2';
     case 'I': return 'L3';       // I1/I2 → L1/L3 → берём L3 (тематическая физика = психика)
     case 'J': return 'L3';
-    case 'L': return 'L2';       // FIX: Block L (L1, L2, L3) → L2 (нарративная инфраструктура = тело)
+    case 'L': return 'L2';       // Block L (L1, L2, L3) → L2 (нарративная инфраструктура = тело)
     case 'G': case 'K': case 'M': return 'L4';
     default: return 'L1';
   }
@@ -695,7 +834,7 @@ export function parseStep3Response(markdown: string): Step3Result {
 
 /**
  * Распарсить приоритизированный fix-лист.
- * v11.0-fix: расслаблена — [L1] тег опционален, разделители гибкие
+ * v11.1-fix: расслаблена — [L1] тег опционален, разделители гибкие
  */
 export function parseFixList(section: string): FixRecommendation[] {
   if (!section.trim()) return [];

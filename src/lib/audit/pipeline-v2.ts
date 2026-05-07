@@ -140,20 +140,30 @@ export async function runAuditPipelineV2(
       state.meta.tokensUsed.total += usage1.total;
     }
 
+    // DIAG: логируем ответ LLM для Step 1
+    console.log(`[Pipeline] Step 1: ответ LLM — ${raw1.length} символов`);
+    if (raw1.length === 0) {
+      console.warn('[Pipeline] Step 1: ПУСТОЙ ответ LLM! accumulatedText1 =', accumulatedText1.length, 'символов');
+    } else if (raw1.length < 100) {
+      console.warn('[Pipeline] Step 1: подозрительно короткий ответ:', raw1);
+    } else {
+      console.log('[Pipeline] Step 1: первые 300 символов:', raw1.slice(0, 300));
+    }
+
     // Best-effort parsing: if ParseError, use accumulated streaming text as fallback
     try {
       state.step1 = parseStep1Response(raw1);
     } catch (parseErr) {
       if (parseErr instanceof ParseError && accumulatedText1.trim().length > 0) {
-        console.warn('Step 1: ParseError on raw response, retrying with accumulated streaming text');
+        console.warn('[Pipeline] Step 1: ParseError on raw response, retrying with accumulated streaming text');
         try {
           state.step1 = parseStep1Response(accumulatedText1);
         } catch {
-          console.warn('Step 1: Fallback parse also failed, using empty Step1Result');
+          console.warn('[Pipeline] Step 1: Fallback parse also failed, using empty Step1Result');
           state.step1 = makeEmptyStep1Result();
         }
       } else if (parseErr instanceof ParseError) {
-        console.warn('Step 1: Empty LLM response, using empty Step1Result');
+        console.warn('[Pipeline] Step 1: Empty LLM response, using empty Step1Result');
         state.step1 = makeEmptyStep1Result();
       } else {
         throw parseErr;
@@ -227,20 +237,30 @@ export async function runAuditPipelineV2(
       state.meta.tokensUsed.total += usage2.total;
     }
 
+    // DIAG: логируем ответ LLM для Step 2 (самый тяжёлый шаг)
+    console.log(`[Pipeline] Step 2: ответ LLM — ${raw2.length} символов`);
+    if (raw2.length === 0) {
+      console.warn('[Pipeline] Step 2: ПУСТОЙ ответ LLM! accumulatedText2 =', accumulatedText2.length, 'символов');
+    } else if (raw2.length < 200) {
+      console.warn('[Pipeline] Step 2: подозрительно короткий ответ:', raw2);
+    } else {
+      console.log('[Pipeline] Step 2: первые 500 символов:', raw2.slice(0, 500));
+    }
+
     // Best-effort parsing for Step 2
     try {
       state.step2 = parseStep2Response(raw2, criteria.map(c => c.id));
     } catch (parseErr) {
       if (parseErr instanceof ParseError && accumulatedText2.trim().length > 0) {
-        console.warn('Step 2: ParseError on raw response, retrying with accumulated streaming text');
+        console.warn('[Pipeline] Step 2: ParseError on raw response, retrying with accumulated streaming text');
         try {
           state.step2 = parseStep2Response(accumulatedText2, criteria.map(c => c.id));
         } catch {
-          console.warn('Step 2: Fallback parse also failed, using empty Step2Result');
+          console.warn('[Pipeline] Step 2: Fallback parse also failed, using empty Step2Result');
           state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
         }
       } else if (parseErr instanceof ParseError) {
-        console.warn('Step 2: Empty LLM response, using empty Step2Result');
+        console.warn('[Pipeline] Step 2: Empty LLM response, using empty Step2Result');
         state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
       } else {
         throw parseErr;
@@ -290,20 +310,28 @@ export async function runAuditPipelineV2(
       state.meta.tokensUsed.total += usage3.total;
     }
 
+    // DIAG: логируем ответ LLM для Step 3
+    console.log(`[Pipeline] Step 3: ответ LLM — ${raw3.length} символов`);
+    if (raw3.length === 0) {
+      console.warn('[Pipeline] Step 3: ПУСТОЙ ответ LLM! accumulatedText3 =', accumulatedText3.length, 'символов');
+    } else {
+      console.log('[Pipeline] Step 3: первые 300 символов:', raw3.slice(0, 300));
+    }
+
     // Best-effort parsing for Step 3
     try {
       state.step3 = parseStep3Response(raw3);
     } catch (parseErr) {
       if (parseErr instanceof ParseError && accumulatedText3.trim().length > 0) {
-        console.warn('Step 3: ParseError on raw response, retrying with accumulated streaming text');
+        console.warn('[Pipeline] Step 3: ParseError on raw response, retrying with accumulated streaming text');
         try {
           state.step3 = parseStep3Response(accumulatedText3);
         } catch {
-          console.warn('Step 3: Fallback parse also failed, using empty Step3Result');
+          console.warn('[Pipeline] Step 3: Fallback parse also failed, using empty Step3Result');
           state.step3 = makeEmptyStep3Result();
         }
       } else if (parseErr instanceof ParseError) {
-        console.warn('Step 3: Empty LLM response, using empty Step3Result');
+        console.warn('[Pipeline] Step 3: Empty LLM response, using empty Step3Result');
         state.step3 = makeEmptyStep3Result();
       } else {
         throw parseErr;
