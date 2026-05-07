@@ -100,6 +100,10 @@ ${inputText}`;
 // Запрос 2: Оценка по критериям
 // ============================================================
 
+/**
+ * Обёртка для обратной совместимости — вызывает buildStep2ChunkPrompt
+ * с chunkIndex=1, chunkTotal=1 (один чанк = весь список).
+ */
 export function buildStep2Prompt(
   skeleton: Skeleton,
   narrativeOrDigest: string,
@@ -107,7 +111,35 @@ export function buildStep2Prompt(
   griefMatrixHint: boolean,
   compressedMode: boolean
 ): PromptSet {
-  const system = `Ты — эксперт-аудитор. Оцени концепт по критериям Протокола Аудита Вселенной v11.0.${compressedMode ? '\n\nОТВЕЧАЙ КРАТКО: вердикт + 1 предложение обоснования. Цитаты — только для СЛАБО критерия. Доказательство — до 15 слов. Объяснение — 1 предложение.' : ''}${FORMAT_INSTRUCTION}`;
+  return buildStep2ChunkPrompt(skeleton, narrativeOrDigest, criteria, griefMatrixHint, compressedMode, 1, 1);
+}
+
+/**
+ * Построить промпт для одной части (чанка) критериев Step 2.
+ *
+ * Пайплайн разбивает 52+ критерия на 2-3 чанка, каждый из которых
+ * отправляется отдельным LLM-запросом. Это позволяет уложиться
+ * в 30-секундный лимит Cloudflare Workers (бесплатный план):
+ * вместо одного запроса на 52 критерия (~90-120с) делаем 3 запроса
+ * по ~17 критериев (~15-25с каждый).
+ *
+ * @param chunkIndex  Номер чанка (1-based)
+ * @param chunkTotal  Общее количество чанков
+ */
+export function buildStep2ChunkPrompt(
+  skeleton: Skeleton,
+  narrativeOrDigest: string,
+  criteria: ChecklistItem[],
+  griefMatrixHint: boolean,
+  compressedMode: boolean,
+  chunkIndex: number,
+  chunkTotal: number,
+): PromptSet {
+  const chunkLabel = chunkTotal > 1
+    ? `\nЭто часть ${chunkIndex} из ${chunkTotal}. Оцени ТОЛЬКО критерии из списка ниже. НЕ добавляй критерии, которых нет в списке.`
+    : '';
+
+  const system = `Ты — эксперт-аудитор. Оцени концепт по критериям Протокола Аудита Вселенной v11.0.${chunkLabel}${compressedMode ? '\n\nОТВЕЧАЙ КРАТКО: вердикт + 1 предложение обоснования. Цитаты — только для СЛАБО критерия. Доказательство — до 15 слов. Объяснение — 1 предложение.' : ''}${FORMAT_INSTRUCTION}`;
 
   // Format skeleton
   const skeletonText = `Тематический закон: ${skeleton.thematicLaw || 'НЕ НАЙДЕНО'}
@@ -146,18 +178,20 @@ ID: ВЕРДИКТ — Доказательство — Объяснение
 A1: СИЛЬНО — «Закон сохранения боли сформулирован как физическое правило» — Закон определяет экономику мира
 B3: СЛАБО — «Только 2 из 6 критериев жизнеспособности для фракции Альфа» — Фракция не проходит порог
 
-КРИТЕРИИ (заголовки секций пиши ТОЧНО как указано — с подчёркиваниями):
+КРИТЕРИИ (заголовки секций пиши ТОЧНО как указано — с подчёркиваниями):`;
 
-## L1_MECHANISM
-${formatCriteria(l1Criteria)}
+  // Only include sections that have criteria in this chunk
+  if (l1Criteria.length > 0) {
+    user += `\n\n## L1_MECHANISM\n${formatCriteria(l1Criteria)}`;
+  }
+  if (l2Criteria.length > 0) {
+    user += `\n\n## L2_BODY\n${formatCriteria(l2Criteria)}`;
+  }
+  if (l3Criteria.length > 0) {
+    user += `\n\n## L3_PSYCHE\n${formatCriteria(l3Criteria)}`;
+  }
 
-## L2_BODY
-${formatCriteria(l2Criteria)}
-
-## L3_PSYCHE
-${formatCriteria(l3Criteria)}`;
-
-  if (griefMatrixHint) {
+  if (griefMatrixHint && l3Criteria.length > 0) {
     user += `
 
 ### GRIEF_MATRIX
@@ -174,10 +208,9 @@ ${formatCriteria(l3Criteria)}`;
 Доминирующая стадия: [стадия] (проявлена на [N] уровнях из 4)`;
   }
 
-  user += `
-
-## L4_META
-${formatCriteria(l4Criteria)}`;
+  if (l4Criteria.length > 0) {
+    user += `\n\n## L4_META\n${formatCriteria(l4Criteria)}`;
+  }
 
   return { system, user };
 }

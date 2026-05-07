@@ -18,12 +18,12 @@ import type {
   MediaType,
   ScreeningAnswer,
   CriterionAssessment,
-  FixRecommendation,
+  ChecklistItem,
 } from './types-v2';
 import type { ModelCapabilities } from '../llm-client';
 import type { LLMStreamingResult } from './llm-streaming';
 import { getModelCapabilities } from '../llm-client';
-import { buildStep1Prompt, buildStep2Prompt, buildStep3Prompt } from './prompts-v2';
+import { buildStep1Prompt, buildStep2ChunkPrompt, buildStep3Prompt } from './prompts-v2';
 import {
   parseStep1Response,
   parseStep2Response,
@@ -31,6 +31,7 @@ import {
   ParseError,
   guessLevelFromId,
 } from './markdown-parser';
+import type { GriefArchitectureMatrix } from './types-v2';
 import { callLLMStreaming } from './llm-streaming';
 import { MASTER_CHECKLIST } from './protocol-data';
 import { getAdaptiveDigestThreshold, computeDigestForV2 } from './narrative-processor-v2';
@@ -49,6 +50,33 @@ const DESIRED_MAX_TOKENS: Record<1 | 2 | 3, number> = {
   2: 16384,
   3: 16384,
 };
+
+// ============================================================
+// Step 2: Chunk-разбиение критериев
+// ============================================================
+
+/**
+ * Группы критериев для параллельных LLM-запросов в Step 2.
+ *
+ * Проблема: один запрос на 52+ критерия занимает 90-120с,
+ * что превышает 30-секундный лимит Cloudflare Workers (бесплатный план).
+ *
+ * Решение: разбиваем критерии на 3 чанка по ~17 штук,
+ * каждый из которых укладывается в 15-25с.
+ *
+ * Группировка по смыслу:
+ *   2A — Фундамент (структура, связность, системы, новые элементы) — 23 критерия
+ *   2B — Жизненность + Персонажи + Тематическая физика — 16 критериев
+ *   2C — Сцены + Инфраструктура + Горе + Культовость + Мета + Финал — 15 критериев
+ */
+const STEP2_CHUNK_GROUPS: string[][] = [
+  // Chunk 2A: Фундамент (Structure + Connectedness + Systems + New Elements)
+  ['A1','A2','A3','A4','A5','A6','A7', 'B1','B2','B3','B4','B5','B6','B7','B8', 'E1','E2','E3','E4','E5','E6', 'F1','F2'],
+  // Chunk 2B: Vitality + Characters + Thematic Physics
+  ['C1','C2','C3','C4','C5','C6','C7', 'D1','D2','D3','D4','D5','D6','D7', 'I1','I2'],
+  // Chunk 2C: Scenes + Narrative Infrastructure + Grief + Cult + Meta + Finale
+  ['H1', 'L1','L2','L3', 'J1','J2','J3', 'G1', 'K1','K2','K3','K4', 'M1','M2','M3'],
+];
 
 /** Вычислить фактический max_tokens для шага с учётом возможностей модели */
 export function resolveStepMaxTokens(step: 1 | 2 | 3, modelCaps: ModelCapabilities): number {
@@ -187,8 +215,17 @@ export async function runAuditPipelineV2(
       : input.text;
 
     // ============================================================
-    // Запрос 2: Оценка по критериям
+    // Запрос 2: Оценка по критериям (чанкованный — параллельные вызовы)
     // ============================================================
+    // Каждый чанк содержит ~17 критериев и отправляется отдельным
+    // LLM-запросом. Это позволяет уложиться в 30-секундный лимит
+    // Cloudflare Workers (бесплатный план): вместо одного запроса
+    // на 52 критерия (~90-120с) делаем 3 запроса по ~17 (~15-25с).
+    //
+    // Чанки выполняются параллельно (Promise.allSettled) — общее
+    // время Step 2 ≈ max(2A, 2B, 2C) ≈ 20-25с вместо 90-120с.
+    // Если один чанк падает — остальные сохраняются, а упавшие
+    // критерии получают verdict=insufficient_data.
     state.currentStep = 2;
     callbacks.onStepStart(2);
     const step2Start = Date.now();
@@ -207,74 +244,157 @@ export async function runAuditPipelineV2(
 
     const maxTokens2 = resolveStepMaxTokens(2, modelCaps);
     const compressedMode2 = maxTokens2 < 8192;
-    let accumulatedText2 = '';
 
-    const result2 = await callWithRetry(
-      () => callLLMStreaming({
-        prompt: buildStep2Prompt(
-          state.step1!.skeleton,
-          textForStep2,
-          criteriaV2,
-          true,
-          compressedMode2
-        ),
-        llmConfig,
-        onChunk: (text) => { accumulatedText2 += text; callbacks.onChunk(2, text); },
-        maxTokens: maxTokens2,
-        abortSignal,
-        responseFormat: 'markdown',
-      }),
-      () => accumulatedText2,
-      2,
-      abortSignal,
+    // --- Split criteria into chunks ---
+    const criteriaV2ById = new Map<string, ChecklistItem>(criteriaV2.map(c => [c.id, c]));
+    const allCriteriaIds = criteria.map(c => c.id);
+
+    const chunkSpecs = STEP2_CHUNK_GROUPS.map((groupIds, idx) => {
+      const chunkCriteria = groupIds
+        .map(id => criteriaV2ById.get(id))
+        .filter((c): c is ChecklistItem => c !== undefined);
+      return {
+        criteria: chunkCriteria,
+        criteriaIds: chunkCriteria.map(c => c.id),
+        chunkIndex: idx,
+        hasL3: chunkCriteria.some(c => c.level === 'L3'),
+      };
+    }).filter(spec => spec.criteria.length > 0); // Remove empty chunks (media-filtered)
+
+    console.log(
+      `[Pipeline] Step 2: ${allCriteriaIds.length} criteria → ${chunkSpecs.length} chunks:`,
+      chunkSpecs.map(s => `${s.criteriaIds.length} criteria [${s.criteriaIds[0]}..${s.criteriaIds[s.criteriaIds.length - 1]}]`).join(', ')
     );
 
-    const raw2 = typeof result2 === 'string' ? result2 : result2.text;
-    const usage2 = typeof result2 === 'string' ? null : result2.usage;
-    if (usage2) {
-      state.meta.tokensUsed.prompt += usage2.prompt;
-      state.meta.tokensUsed.completion += usage2.completion;
-      state.meta.tokensUsed.total += usage2.total;
-    }
+    // --- Run chunks in parallel ---
+    const chunkPromises = chunkSpecs.map((spec) => {
+      let accumulatedTextChunk = '';
+      return callWithRetry(
+        () => callLLMStreaming({
+          prompt: buildStep2ChunkPrompt(
+            state.step1!.skeleton,
+            textForStep2,
+            spec.criteria,
+            spec.hasL3, // grief matrix hint only for chunk with L3 criteria
+            compressedMode2,
+            spec.chunkIndex + 1,
+            chunkSpecs.length,
+          ),
+          llmConfig,
+          onChunk: (text) => { accumulatedTextChunk += text; callbacks.onChunk(2, text); },
+          maxTokens: maxTokens2,
+          abortSignal,
+          responseFormat: 'markdown',
+        }),
+        () => accumulatedTextChunk,
+        2,
+        abortSignal,
+      ).then(result => ({
+        raw: typeof result === 'string' ? result : result.text,
+        usage: typeof result === 'string' ? null : result.usage,
+        criteriaIds: spec.criteriaIds,
+        hasL3: spec.hasL3,
+        chunkIndex: spec.chunkIndex,
+      }));
+    });
 
-    // DIAG: логируем ответ LLM для Step 2 (самый тяжёлый шаг)
-    console.log(`[Pipeline] Step 2: ответ LLM — ${raw2.length} символов`);
-    if (raw2.length === 0) {
-      console.warn('[Pipeline] Step 2: ПУСТОЙ ответ LLM! accumulatedText2 =', accumulatedText2.length, 'символов');
-    } else if (raw2.length < 200) {
-      console.warn('[Pipeline] Step 2: подозрительно короткий ответ:', raw2);
-    } else {
-      console.log('[Pipeline] Step 2: первые 500 символов:', raw2.slice(0, 500));
-    }
+    const chunkResponses = await Promise.allSettled(chunkPromises);
 
-    // Best-effort parsing for Step 2
-    try {
-      state.step2 = parseStep2Response(raw2, criteria.map(c => c.id));
-    } catch (parseErr) {
-      if (parseErr instanceof ParseError && accumulatedText2.trim().length > 0) {
-        console.warn('[Pipeline] Step 2: ParseError on raw response, retrying with accumulated streaming text');
-        try {
-          state.step2 = parseStep2Response(accumulatedText2, criteria.map(c => c.id));
-        } catch {
-          console.warn('[Pipeline] Step 2: Fallback parse also failed, using empty Step2Result');
-          state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
+    // --- Merge results from all chunks ---
+    let allAssessments: CriterionAssessment[] = [];
+    let griefMatrix: GriefArchitectureMatrix | null = null;
+    let successfulChunks = 0;
+    let failedChunks = 0;
+
+    for (let i = 0; i < chunkResponses.length; i++) {
+      const response = chunkResponses[i];
+      const spec = chunkSpecs[i];
+
+      if (response.status === 'fulfilled') {
+        const { raw, usage, criteriaIds, hasL3 } = response.value;
+
+        // Accumulate token usage
+        if (usage) {
+          state.meta.tokensUsed.prompt += usage.prompt;
+          state.meta.tokensUsed.completion += usage.completion;
+          state.meta.tokensUsed.total += usage.total;
         }
-      } else if (parseErr instanceof ParseError) {
-        // CRITICAL DIAG: Empty LLM response on Step 2 — almost always a proxy timeout.
-        // This is the "Не удалось распарсить ответ LLM" error the user sees.
-        console.error(
-          '[Pipeline] Step 2: ПУСТОЙ ответ LLM! Это почти всегда означает:\n' +
-          '  1. Cloudflare Worker (free plan) 30s timeout — Step 2 too heavy\n' +
-          '  2. PROVIDER_TIMEOUT_MS too low (25s default) for Step 2\n' +
-          '  Решение: (a) Перейти на платный Workers план + PROVIDER_TIMEOUT_MS=55s,\n' +
-          '           (b) Использовать более быструю модель (Gemini Flash, GPT-4o-mini),\n' +
-          '           (c) Уменьшить размер текста/критериев'
-        );
-        state.step2 = makeEmptyStep2Result(criteria.map(c => c.id), 'Пустой ответ LLM — вероятно таймаут прокси (Step 2 слишком тяжёлый)');
+
+        // DIAG: log chunk response
+        console.log(`[Pipeline] Step 2 chunk ${i + 1}/${chunkSpecs.length}: ${raw.length} символов`);
+        if (raw.length === 0) {
+          console.warn(`[Pipeline] Step 2 chunk ${i + 1}: ПУСТОЙ ответ LLM!`);
+        } else if (raw.length < 100) {
+          console.warn(`[Pipeline] Step 2 chunk ${i + 1}: подозрительно короткий ответ:`, raw.slice(0, 200));
+        }
+
+        // Parse chunk
+        try {
+          const parsed = parseStep2Response(raw, criteriaIds);
+          allAssessments.push(...parsed.assessments);
+          if (parsed.griefMatrix) griefMatrix = parsed.griefMatrix;
+          successfulChunks++;
+        } catch (parseErr) {
+          if (parseErr instanceof ParseError) {
+            console.warn(`[Pipeline] Step 2 chunk ${i + 1}: ParseError — filling ${criteriaIds.length} criteria with insufficient_data`);
+          } else {
+            console.error(`[Pipeline] Step 2 chunk ${i + 1}: Unexpected parse error:`, parseErr);
+          }
+          // Fill this chunk's criteria with insufficient_data
+          for (const id of criteriaIds) {
+            if (!allAssessments.find(a => a.id === id)) {
+              allAssessments.push({
+                id,
+                level: guessLevelFromId(id),
+                verdict: 'insufficient_data',
+                evidence: '',
+                explanation: 'Не удалось распарсить ответ LLM для этой части',
+              });
+            }
+          }
+          failedChunks++;
+        }
       } else {
-        throw parseErr;
+        // Chunk failed entirely (network error, timeout, etc.)
+        console.error(`[Pipeline] Step 2 chunk ${i + 1} FAILED:`, response.reason);
+        for (const id of spec.criteriaIds) {
+          allAssessments.push({
+            id,
+            level: guessLevelFromId(id),
+            verdict: 'insufficient_data',
+            evidence: '',
+            explanation: 'LLM не ответила на эту часть (ошибка запроса)',
+          });
+        }
+        failedChunks++;
       }
     }
+
+    // Fill any missing criteria (e.g., media-filtered out of all chunks)
+    const foundIds = new Set(allAssessments.map(a => a.id));
+    for (const id of allCriteriaIds) {
+      if (!foundIds.has(id)) {
+        allAssessments.push({
+          id,
+          level: guessLevelFromId(id),
+          verdict: 'insufficient_data',
+          evidence: '',
+          explanation: 'Критерий не был включён ни в один чанк',
+        });
+      }
+    }
+
+    console.log(
+      `[Pipeline] Step 2 complete: ${successfulChunks}/${chunkSpecs.length} chunks OK, ` +
+      `${allAssessments.length} assessments ` +
+      `(${allAssessments.filter(a => a.verdict !== 'insufficient_data').length} with data, ` +
+      `${allAssessments.filter(a => a.verdict === 'insufficient_data').length} insufficient_data)`
+    );
+
+    state.step2 = {
+      assessments: allAssessments,
+      griefMatrix,
+    };
     state.meta.stepTimings.step2 = Date.now() - step2Start;
     callbacks.onStepComplete(2, state.step2);
 
