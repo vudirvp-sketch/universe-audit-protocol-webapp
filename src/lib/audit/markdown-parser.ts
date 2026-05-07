@@ -3,10 +3,13 @@
  *
  * Принципы:
  * 1. Извлечение текста между маркерными заголовками ## SECTION_NAME
- * 2. Толерантность к вариациям: лишние пробелы, другой регистр, markdown-форматирование
+ * 2. ТОЛЕРАНТНОСТЬ К ВАРИАЦИЯМ LLM: пробелы вместо подчёркиваний,
+ *    русские заголовки, bold-обёртки, разные разделители, emoji
  * 3. Если секция не найдена → пустой результат (не ошибка)
  * 4. Если значение не парсится → insufficient_data / null
  * 5. Если весь ответ пуст → выбросить ParseError наверх (→ error состояние)
+ *
+ * v11.0-fix: Fuzzy matching для заголовков + расслабленные regex
  */
 
 import type {
@@ -37,24 +40,105 @@ export class ParseError extends Error {
 }
 
 // ============================================================
-// Базовые утилиты
+// Fuzzy header matching — алиасы заголовков
 // ============================================================
 
-/** Извлечь текст между ## HEADER и следующим ## заголовком (или концом текста) */
-export function extractSection(markdown: string, header: string): string {
-  // Case-insensitive, allow extra spaces
-  const regex = new RegExp(
-    `^##\\s+${escapeRegex(header)}\\s*$`,
-    'im'
-  );
-  const match = regex.exec(markdown);
-  if (!match) return '';
+/**
+ * Маппинг: каноническое имя секции → массив альтернативных написаний,
+ * которые LLM может выдать. Каждое имя нормализуется перед сравнением
+ * (lowercase + replace _ с пробелом).
+ */
+const SECTION_ALIASES: Record<string, string[]> = {
+  // Step 1 sections (## level)
+  'AUDIT_MODE':       ['режим аудита', 'audit mode', 'режим', 'mode'],
+  'AUTHOR_PROFILE':   ['профиль автора', 'author profile', 'профиль', 'author'],
+  'SKELETON':         ['скелет', 'skeleton', 'скелет концепта', 'скелетона'],
+  'SCREENING':        ['скрининг', 'screening', 'скрининг проверок', 'проверки'],
 
-  const startIdx = match.index + match[0].length;
+  // Step 2 sections (## level)
+  'L1_MECHANISM':     ['l1 mechanism', 'l1 механизм', 'механизм', 'l1', 'уровень 1 механизм', 'l1: механизм', 'уровень 1: механизм'],
+  'L2_BODY':          ['l2 body', 'l2 тело', 'тело', 'l2', 'уровень 2 тело', 'l2: тело', 'уровень 2: тело'],
+  'L3_PSYCHE':        ['l3 psyche', 'l3 психика', 'психика', 'l3', 'уровень 3 психика', 'l3: психика', 'уровень 3: психика'],
+  'L4_META':          ['l4 meta', 'l4 мета', 'мета', 'l4', 'уровень 4 мета', 'l4: мета', 'уровень 4: мета'],
+
+  // Step 3 sections (## level)
+  'FIX_LIST':         ['fix list', 'список исправлений', 'исправления', 'фикс-лист', 'фикс лист', 'рекомендации'],
+  'WHAT_FOR_CHAINS':  ['what for chains', 'цепочки', 'цепочки а чтобы что', 'chains', 'а чтобы что'],
+  'GENERATIVE':       ['generative', 'генеративные', 'генеративные модули', 'генеративное'],
+
+  // Skeleton subsections (### level)
+  'thematic_law':       ['тематический закон', 'thematic law', 'закон', 'тема закон'],
+  'root_trauma':        ['корневая травма', 'root trauma', 'травма', 'корень травма'],
+  'hamartia':           ['хамартия', 'hamartia', 'фатальный изъян', 'изъян'],
+  'pillars':            ['столпы', 'pillars', 'опоры', 'столп'],
+  'emotional_engine':   ['эмоциональный двигатель', 'emotional engine', 'эмоциональный мотор', 'эмоция двигатель', 'эмоциональный движок'],
+  'author_prohibition': ['авторский запрет', 'author prohibition', 'запрет', 'автор запрет'],
+  'target_experience':  ['целевой опыт', 'target experience', 'опыт', 'целевой'],
+  'central_question':   ['центральный вопрос', 'central question', 'вопрос', 'главный вопрос'],
+
+  // Generative subsections (### level)
+  'grief_mapping':    ['карта горя', 'grief mapping', 'маппинг горя', 'привязка горя'],
+  'dilemma':          ['дилемма', 'dilemma', 'корнелианская дилемма'],
+  'GRIEF_MATRIX':     ['матрица горя', 'grief matrix', 'архитектура горя', 'матрица архитектуры горя'],
+};
+
+/**
+ * Нормализовать строку для fuzzy-сравнения:
+ * - lowercase
+ * - заменить _ на пробел
+ * - убрать лишние пробелы
+ * - убрать markdown bold/italic маркеры (**, *, __)
+ */
+function normalizeHeader(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[_\-]/g, ' ')       // underscore и dash → пробел
+    .replace(/[*_]{1,2}/g, '')    // убрать **, *, __, _
+    .replace(/\s+/g, ' ')         // схлопнуть пробелы
+    .trim();
+}
+
+// ============================================================
+// Базовые утилиты (fuzzy)
+// ============================================================
+
+/** Извлечь текст между ## HEADER и следующим ## заголовком (или концом текста).
+ *  Поддерживает fuzzy matching по алиасам. */
+export function extractSection(markdown: string, header: string): string {
+  const aliases = SECTION_ALIASES[header] || [];
+  const allHeaders = [header, ...aliases];
+  const normalizedTargets = allHeaders.map(normalizeHeader);
+
+  // Ищем первый ## заголовок, который совпадает с одним из алиасов
+  const lines = markdown.split('\n');
+  let sectionStartLine = -1;
+  let sectionStartIdx = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Match ## header (but not ###)
+    const headerMatch = line.match(/^##\s+(?!#)\s*(.+?)\s*$/);
+    if (!headerMatch) continue;
+
+    const headerText = normalizeHeader(headerMatch[1]);
+    if (normalizedTargets.includes(headerText)) {
+      sectionStartLine = i;
+      sectionStartIdx = line.length + 1; // +1 for the \n
+      // Calculate the actual offset in the original string
+      let offset = 0;
+      for (let j = 0; j < i; j++) {
+        offset += lines[j].length + 1; // +1 for \n
+      }
+      sectionStartIdx = offset + line.length + 1;
+      break;
+    }
+  }
+
+  if (sectionStartLine === -1) return '';
 
   // Find the next ## header (but not ###)
+  const rest = markdown.slice(sectionStartIdx);
   const nextHeaderRegex = /^##\s+(?!#)/m;
-  const rest = markdown.slice(startIdx);
   const nextMatch = nextHeaderRegex.exec(rest);
 
   if (nextMatch) {
@@ -63,17 +147,38 @@ export function extractSection(markdown: string, header: string): string {
   return rest.trim();
 }
 
-/** Извлечь текст между ### HEADER и следующим ### или ## заголовком */
+/** Извлечь текст между ### HEADER и следующим ### или ## заголовком.
+ *  Поддерживает fuzzy matching по алиасам. */
 export function extractSubsection(markdown: string, header: string): string {
-  const regex = new RegExp(
-    `^###\\s+${escapeRegex(header)}\\s*$`,
-    'im'
-  );
-  const match = regex.exec(markdown);
-  if (!match) return '';
+  const aliases = SECTION_ALIASES[header] || [];
+  const allHeaders = [header, ...aliases];
+  const normalizedTargets = allHeaders.map(normalizeHeader);
 
-  const startIdx = match.index + match[0].length;
-  const rest = markdown.slice(startIdx);
+  const lines = markdown.split('\n');
+  let sectionStartLine = -1;
+  let sectionStartIdx = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Match ### header (but not ####)
+    const headerMatch = line.match(/^###\s+(?!#)\s*(.+?)\s*$/);
+    if (!headerMatch) continue;
+
+    const headerText = normalizeHeader(headerMatch[1]);
+    if (normalizedTargets.includes(headerText)) {
+      sectionStartLine = i;
+      let offset = 0;
+      for (let j = 0; j < i; j++) {
+        offset += lines[j].length + 1;
+      }
+      sectionStartIdx = offset + line.length + 1;
+      break;
+    }
+  }
+
+  if (sectionStartLine === -1) return '';
+
+  const rest = markdown.slice(sectionStartIdx);
 
   // Next ### or ## header
   const nextRegex = /^#{2,3}\s+(?!#)/m;
@@ -211,6 +316,8 @@ export function parseSkeleton(section: string): Skeleton {
     const cleaned = sub
       .replace(/^НЕ НАЙДЕНО$/im, '')
       .replace(/^не найдено$/im, '')
+      .replace(/^NOT FOUND$/im, '')
+      .replace(/^не найдено\s*\(?/im, '')
       .trim();
     return cleaned || null;
   };
@@ -266,11 +373,40 @@ export function parseScreeningAnswers(section: string): ScreeningAnswer[] {
 
   for (let i = 0; i < lines.length && answers.length < 7; i++) {
     const line = lines[i];
-    // Match: "1. ДА — пояснение" or "1. НЕТ — пояснение"
-    const match = line.match(/^\s*\d+[\.\)]\s*(ДА|НЕТ|YES|NO)\s*[—\-|:]\s*(.+)/i);
+
+    // Убираем emoji и markdown-обёртки в начале
+    const cleaned = line
+      .replace(/\s*[✅❌⚪🔴🟢🟡]\s*/g, ' ')  // убрать emoji
+      .replace(/\*{1,2}/g, '')                  // убрать bold/italic
+      .trim();
+
+    // Match multiple formats:
+    // "1. ДА — пояснение" or "1. НЕТ — пояснение"
+    // "1. Да, пояснение" (запятая вместо тире)
+    // "1) ДА: пояснение"
+    // "- ДА — пояснение"
+    const match = cleaned.match(
+      /^\s*(?:\d+[\.\)]\s*|[-*]\s*)(ДА|НЕТ|YES|NO)\s*[—\-|:,]\s*(.+)/i
+    );
     if (match) {
       const passed = /^(ДА|YES)$/i.test(match[1].trim());
       const explanation = match[2].trim();
+      const idx = answers.length;
+      answers.push({
+        question: idx < questions.length ? questions[idx] : `Скрининг ${idx + 1}`,
+        passed,
+        explanation,
+      });
+      continue;
+    }
+
+    // Fallback: пробуем найти ДА/НЕТ в начале строки без номера
+    const fallbackMatch = cleaned.match(
+      /^\s*(ДА|НЕТ|YES|NO)\s*[—\-|:,]?\s*(.*)/i
+    );
+    if (fallbackMatch && answers.length < 7) {
+      const passed = /^(ДА|YES)$/i.test(fallbackMatch[1].trim());
+      const explanation = fallbackMatch[2].trim() || 'Без пояснения';
       const idx = answers.length;
       answers.push({
         question: idx < questions.length ? questions[idx] : `Скрининг ${idx + 1}`,
@@ -349,6 +485,10 @@ export function parseCriterionAssessments(
     // Skip lines that are clearly headers or the GRIEF_MATRIX marker
     if (line.startsWith('###') || line.startsWith('##')) continue;
     if (/^GRIEF_MATRIX/i.test(line)) continue;
+    // Skip table dividers
+    if (/^\|?[-:\s|]+\|?$/.test(line)) continue;
+    // Skip table header rows
+    if (/^\|?\s*(стадия|stage|персонаж|character)/i.test(line)) continue;
 
     const parsed = parseSingleCriterion(line, level);
     if (parsed) {
@@ -362,41 +502,45 @@ export function parseCriterionAssessments(
 /**
  * Парсинг отдельного критерия. Ожидаемый формат в markdown:
  *
- *   interdependence: СЛАБО — «Элементы не связаны циклом» — Нет замкнутой петли
+ *   A1: СИЛЬНО — «Элементы не связаны циклом» — Нет замкнутой петли
  *
- * Толерантность:
- * - Вердикт может быть: СИЛЬНО / СЛАБО / НЕДОСТАТОЧНО ДАННЫХ (и в любом регистре)
- * - Разделитель может быть: —, -, |, :
- * - Доказательство может быть в кавычках или без
+ * Толерантность (v11.0-fix — расслаблена):
+ * - Вердикт: СИЛЬНО / СЛАБО / НЕДОСТАТОЧНО ДАННЫХ (любой регистр, сокращения)
+ * - Разделитель: —, -, |, :, запятая
+ * - Доказательство в кавычках «» или "" или без
+ * - ID может быть с bold-обёрткой: **A1**
+ * - Перед ID может быть номер: 1. A1: ...
+ * - Перед ID может быть тег уровня: [L1] A1: ...
+ * - Разделитель между ID и вердиктом: :, —, -, |
  */
 export function parseSingleCriterion(
   line: string,
   level: 'L1' | 'L2' | 'L3' | 'L4'
 ): CriterionAssessment | null {
-  // Pattern: id: verdict — evidence — explanation
-  // or: id: verdict — evidence
-  // Also: id: ВЕРДИКТ — "evidence" — explanation
-  // Also: [L1] id: ВЕРДИКТ | evidence | explanation
+  // Strip leading priority markers like "1. [L1]" or "[L1]" or "1."
+  let cleaned = line
+    .replace(/^\s*\d+[\.\)]\s*/, '')      // "1. " или "1) "
+    .replace(/^\s*\[L\d[\/L\d]*\]\s*/, '') // "[L1]" или "[L1/L2]"
+    .replace(/\*{1,2}/g, '')               // убрать **bold** и *italic*
+    .trim();
 
-  // Strip leading priority markers like "1. [L1]" or "[L1]"
-  const cleaned = line.replace(/^\s*\d+[\.\)]\s*/, '').replace(/^\s*\[L\d[\/L\d]*\]\s*/, '');
-
-  // Extract ID: first token before the first separator
-  const idMatch = cleaned.match(/^([A-Z]\d+)\s*[:.\-—]\s*(.+)/i);
+  // Extract ID: first token that looks like A1, B2, L3 etc.
+  const idMatch = cleaned.match(/^([A-Z]\d+)\s*[:.\-—|,]\s*(.+)/i);
   if (!idMatch) return null;
 
   const id = idMatch[1].toUpperCase();
   const rest = idMatch[2];
 
-  // Extract verdict
+  // Extract verdict — ищем в первой части до разделителя
   let verdict: CriterionAssessment['verdict'] = 'insufficient_data';
   const lowerRest = rest.toLowerCase();
+  const firstPart = lowerRest.split(/[—\-|,]/)[0];
 
-  if (/сильно|strong/i.test(lowerRest.split(/[—\-|]/)[0])) {
+  if (/сильно|strong/i.test(firstPart)) {
     verdict = 'strong';
-  } else if (/слабо|weak/i.test(lowerRest.split(/[—\-|]/)[0])) {
+  } else if (/слабо|weak/i.test(firstPart)) {
     verdict = 'weak';
-  } else if (/недостаточно\s*данн|insufficient/i.test(lowerRest.split(/[—\-|]/)[0])) {
+  } else if (/недостаточно\s*данн|insufficient|н\/д|н\.д/i.test(firstPart)) {
     verdict = 'insufficient_data';
   }
 
@@ -440,6 +584,13 @@ export function parseGriefMatrix(section: string): GriefArchitectureMatrix | nul
   const stages: GriefStageEntry[] = [];
 
   const stageNames = ['denial', 'anger', 'bargaining', 'depression', 'acceptance'];
+  const stageNamesRu: Record<string, string> = {
+    'отрицание': 'denial',
+    'гнев': 'anger',
+    'торг': 'bargaining',
+    'депрессия': 'depression',
+    'принятие': 'acceptance',
+  };
 
   for (const line of lines) {
     // Match table rows: | denial | character | location | mechanic | act |
@@ -448,7 +599,16 @@ export function parseGriefMatrix(section: string): GriefArchitectureMatrix | nul
 
     // Check if first cell is a grief stage
     const stageCandidate = cells[0].toLowerCase();
-    const matchedStage = stageNames.find(s => stageCandidate.includes(s));
+    let matchedStage = stageNames.find(s => stageCandidate.includes(s));
+    if (!matchedStage) {
+      // Try Russian stage names
+      for (const [ru, en] of Object.entries(stageNamesRu)) {
+        if (stageCandidate.includes(ru)) {
+          matchedStage = en;
+          break;
+        }
+      }
+    }
     if (!matchedStage) continue;
 
     stages.push({
@@ -467,9 +627,20 @@ export function parseGriefMatrix(section: string): GriefArchitectureMatrix | nul
   // Extract dominant stage
   const dominantMatch = section.match(/доминирующ\w+\s+стади\w*:\s*(\w+)/i) ||
     section.match(/dominant\s+stage:\s*(\w+)/i);
-  const dominantStage = dominantMatch
-    ? stageNames.find(s => dominantMatch[1].toLowerCase().includes(s)) || null
-    : null;
+  let dominantStage: string | null = null;
+  if (dominantMatch) {
+    const candidate = dominantMatch[1].toLowerCase();
+    dominantStage = stageNames.find(s => candidate.includes(s)) || null;
+    if (!dominantStage) {
+      // Try Russian
+      for (const [ru, en] of Object.entries(stageNamesRu)) {
+        if (candidate.includes(ru)) {
+          dominantStage = en;
+          break;
+        }
+      }
+    }
+  }
 
   // Calculate acrossLevels for dominant stage
   let acrossLevels = 0;
@@ -483,13 +654,19 @@ export function parseGriefMatrix(section: string): GriefArchitectureMatrix | nul
   return { stages, dominantStage, acrossLevels };
 }
 
-/** Guess level from criterion ID prefix */
+/**
+ * Guess level from criterion ID prefix.
+ * v11.0-fix: Block L (L1, L2, L3) → L2/L3 → нормализуем к L2
+ * (по данным MASTER_CHECKLIST, блок L имеет level 'L2/L3')
+ */
 export function guessLevelFromId(id: string): 'L1' | 'L2' | 'L3' | 'L4' {
   const block = id.charAt(0).toUpperCase();
   switch (block) {
     case 'A': case 'B': case 'E': case 'F': return 'L1';
     case 'C': case 'D': case 'H': return 'L2';
-    case 'J': case 'I': return 'L3';
+    case 'I': return 'L3';       // I1/I2 → L1/L3 → берём L3 (тематическая физика = психика)
+    case 'J': return 'L3';
+    case 'L': return 'L2';       // FIX: Block L (L1, L2, L3) → L2 (нарративная инфраструктура = тело)
     case 'G': case 'K': case 'M': return 'L4';
     default: return 'L1';
   }
@@ -516,7 +693,10 @@ export function parseStep3Response(markdown: string): Step3Result {
   };
 }
 
-/** Распарсить приоритизированный fix-лист */
+/**
+ * Распарсить приоритизированный fix-лист.
+ * v11.0-fix: расслаблена — [L1] тег опционален, разделители гибкие
+ */
 export function parseFixList(section: string): FixRecommendation[] {
   if (!section.trim()) return [];
 
@@ -525,11 +705,56 @@ export function parseFixList(section: string): FixRecommendation[] {
   let priority = 1;
 
   for (const line of lines) {
-    // Match: "1. [L1] interdependence: Диагноз | Исправление | подход | усилие"
-    // or: "- [L1] id: Диагноз | Исправление | подход | усилие"
-    const match = line.match(
+    // Strip bold markers
+    const cleaned = line.replace(/\*{1,2}/g, '').trim();
+
+    // Primary pattern: "1. [L1] interdependence: Диагноз | Исправление | подход | усилие"
+    let match = cleaned.match(
       /^\s*\d+[\.\)]\s*\[(L\d[\/L\d]*)\]\s*([A-Z]\d+)\s*[:.\-—]\s*(.+)/i
     );
+
+    // Fallback pattern without [Lx] tag: "1. A1: Диагноз | Исправление | подход | усилие"
+    if (!match) {
+      match = cleaned.match(
+        /^\s*\d+[\.\)]\s*([-*]\s*)?([A-Z]\d+)\s*[:.\-—]\s*(.+)/i
+      );
+      if (match) {
+        // Reconstruct: no level tag, guess from ID
+        const criterionId = match[2].toUpperCase();
+        const rest = match[3];
+        const level = guessLevelFromId(criterionId);
+        const parts = rest.split(/[|—]/).map(p => p.trim()).filter(p => p.length > 0);
+
+        const diagnosis = parts[0] || '';
+        const fix = parts[1] || '';
+
+        let approach: FixRecommendation['approach'] = 'compromise';
+        if (parts.length > 2) {
+          const aLower = parts[2].toLowerCase();
+          if (aLower.includes('консерватив') || aLower.includes('conservative')) approach = 'conservative';
+          else if (aLower.includes('радикал') || aLower.includes('radical')) approach = 'radical';
+        }
+
+        let effort: FixRecommendation['effort'] = 'days';
+        if (parts.length > 3) {
+          const eLower = parts[3].toLowerCase();
+          if (eLower.includes('час') || eLower.includes('hour')) effort = 'hours';
+          else if (eLower.includes('недел') || eLower.includes('week')) effort = 'weeks';
+        }
+
+        fixes.push({
+          priority: priority++,
+          criterionId,
+          level,
+          diagnosis,
+          fix,
+          approach,
+          effort,
+        });
+        continue;
+      }
+    }
+
     if (!match) continue;
 
     const levelStr = match[1];
@@ -602,7 +827,7 @@ export function parseChains(section: string): ChainResult[] {
     const lines = extractLines(chainText);
 
     for (const line of lines) {
-      // Match: "А чтобы что? → ответ" or "-> answer"
+      // Match: "А чтобы что? → ответ" or "-> answer" or "→ answer"
       const chainMatch = line.match(/[→\-]>\s*(.+)/);
       if (chainMatch) {
         chain.push(chainMatch[1].trim());
