@@ -529,12 +529,26 @@ export function parseStep2Response(markdown: string, criteriaIds: string[]): Ste
   // DIAG: логируем найденные секции
   console.log(`[Parser] Step 2: L1=${l1Section.length}ch, L2=${l2Section.length}ch, L3=${l3Section.length}ch, L4=${l4Section.length}ch`);
 
-  const assessments: CriterionAssessment[] = [
-    ...parseCriterionAssessments(l1Section, 'L1'),
-    ...parseCriterionAssessments(l2Section, 'L2'),
-    ...parseCriterionAssessments(l3Section, 'L3'),
-    ...parseCriterionAssessments(l4Section, 'L4'),
-  ];
+  let assessments: CriterionAssessment[];
+
+  // ── Fallback: если LLM не поставила заголовки секций (## L1_MECHANISM и т.д.),
+  //    все 4 секции будут пустыми. В этом случае парсим весь текст как плоский
+  //    список критериев «ID: ВЕРДИКТ — ...», определяя уровень по ID.
+  //    Это критично для слабых моделей (бесплатный Nemotron и т.д.),
+  //    которые игнорируют инструкции по заголовкам.
+  const allSectionsEmpty = !l1Section && !l2Section && !l3Section && !l4Section;
+
+  if (allSectionsEmpty) {
+    console.warn('[Parser] Step 2: все секции пустые — LLM не поставила заголовки ## L1_MECHANISM и т.д. Использую flat-list fallback.');
+    assessments = parseFlatCriteriaList(markdown, criteriaIds);
+  } else {
+    assessments = [
+      ...parseCriterionAssessments(l1Section, 'L1'),
+      ...parseCriterionAssessments(l2Section, 'L2'),
+      ...parseCriterionAssessments(l3Section, 'L3'),
+      ...parseCriterionAssessments(l4Section, 'L4'),
+    ];
+  }
 
   // DIAG: логируем сколько критериев распарсилось
   console.log(`[Parser] Step 2: распарсено ${assessments.length} из ${criteriaIds.length} критериев`);
@@ -558,11 +572,70 @@ export function parseStep2Response(markdown: string, criteriaIds: string[]): Ste
     }
   }
 
-  // Parse grief matrix from L3 section
-  const griefSubsection = extractSubsection(l3Section, 'GRIEF_MATRIX');
-  const griefMatrix = griefSubsection ? parseGriefMatrix(griefSubsection) : null;
+  // Parse grief matrix — from L3 section if available, or from full text as fallback
+  let griefMatrix: GriefArchitectureMatrix | null = null;
+  if (l3Section) {
+    const griefSubsection = extractSubsection(l3Section, 'GRIEF_MATRIX');
+    griefMatrix = griefSubsection ? parseGriefMatrix(griefSubsection) : null;
+  }
+  if (!griefMatrix && allSectionsEmpty) {
+    // Try to find grief matrix anywhere in the text
+    const griefSubsection = extractSubsection(markdown, 'GRIEF_MATRIX');
+    griefMatrix = griefSubsection ? parseGriefMatrix(griefSubsection) : null;
+    // Also try parsing grief table directly from the text (some LLMs put it without header)
+    if (!griefMatrix) {
+      griefMatrix = parseGriefMatrix(markdown);
+    }
+  }
 
   return { assessments, griefMatrix };
+}
+
+/**
+ * Парсинг плоского списка критериев без заголовков секций.
+ *
+ * Fallback для случая, когда LLM не ставит ## L1_MECHANISM и т.д.
+ * (типично для слабых/бесплатных моделей — Nemotron, и т.д.).
+ * LLM отвечает просто:
+ *   A1: СИЛЬНО — «Цитата» — Объяснение
+ *   B3: СЛАБО — «Цитата» — Объяснение
+ *
+ * Уровень (L1/L2/L3/L4) определяется по ID критерия через guessLevelFromId().
+ */
+function parseFlatCriteriaList(
+  markdown: string,
+  criteriaIds: string[],
+): CriterionAssessment[] {
+  const lines = extractLines(markdown);
+  const assessments: CriterionAssessment[] = [];
+  const seenIds = new Set<string>();
+
+  for (const line of lines) {
+    // Skip header lines (## or ###) — already failed to find sections above,
+    // but skip them anyway to avoid noise
+    if (line.startsWith('###') || line.startsWith('##')) continue;
+    // Skip table dividers and header rows
+    if (/^\|?[-:\s|]+\|?$/.test(line)) continue;
+    if (/^\|?\s*(стадия|stage|персонаж|character)/i.test(line)) continue;
+    // Skip GRIEF_MATRIX marker
+    if (/^GRIEF_MATRIX/i.test(line)) continue;
+    // Skip very long lines without criterion IDs
+    if (line.length > 300 && !/[A-Z]\d+/i.test(line)) continue;
+
+    // Try to parse as a single criterion — level will be guessed from ID
+    const parsed = parseSingleCriterion(line, 'L1'); // placeholder level, will be overridden
+    if (parsed && KNOWN_CRITERIA_IDS.has(parsed.id) && !seenIds.has(parsed.id)) {
+      // Override the placeholder level with the correct one from ID
+      parsed.level = guessLevelFromId(parsed.id);
+      seenIds.add(parsed.id);
+      assessments.push(parsed);
+    }
+  }
+
+  // DIAG
+  console.log(`[Parser] Flat-list fallback: распарсено ${assessments.length} критериев из ${criteriaIds.length}`);
+
+  return assessments;
 }
 
 /** Распарсить оценки критериев из секции уровня (L1/L2/L3/L4) */
