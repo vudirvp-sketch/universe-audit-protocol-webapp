@@ -13,6 +13,10 @@ compatibility_date = "2024-01-01"
 # cpu_ms = 50000
 
 # Environment variables (NOT secrets — just config)
+# These are read by the Worker via the `env` parameter in fetch(request, env, ctx).
 [vars]
 MAX_REQUESTS_PER_MINUTE = "60"
 MAX_BODY_SIZE_BYTES = "2097152"
+# Provider timeout in milliseconds. Default: 25000 (25s) for Cloudflare free plan.
+# On paid Workers Unbound plan, increase to "55000" (55s) for longer responses.
+PROVIDER_TIMEOUT_MS = "25000"

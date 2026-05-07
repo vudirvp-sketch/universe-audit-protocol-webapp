@@ -64,7 +64,7 @@ export default function Home() {
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
-  const { provider, apiKey, model, proxyUrl } = useSettings();
+  const { provider, apiKey, model, proxyUrl, baseUrl } = useSettings();
   const [proxyUnavailable, setProxyUnavailable] = React.useState(false);
 
   // ── Health-check: silent background request to proxy /health endpoint ────
@@ -74,7 +74,9 @@ export default function Home() {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const response = await fetch(`${proxyUrl}/health`, {
+        // Normalize URL: strip trailing slash to avoid double-slash in path
+        const baseUrl = proxyUrl.replace(/\/+$/, '');
+        const response = await fetch(`${baseUrl}/health`, {
           method: 'GET',
           signal: controller.signal,
         });
@@ -130,6 +132,7 @@ export default function Home() {
           apiKey: currentApiKey,
           model: currentModel || '',
           proxyUrl: currentProxyUrl,
+          baseUrl: useSettings.getState().baseUrl || undefined,
         },
         {
           onStepStart: (step) => {

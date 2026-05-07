@@ -8,6 +8,10 @@
 // v4: Added rate limiting by IP, body size limit, targetUrl validation,
 //     explicit timeout with AbortController, health-check endpoint,
 //     improved error handling with user-friendly messages, masked API key logging.
+// v5: Fixed env variable handling — now reads config from wrangler.toml [vars]
+//     via the `env` parameter instead of hardcoded constants that shadowed them.
+//     Fixed PROVIDER_TIMEOUT_MS default (25s for free plan compatibility).
+//     Fixed MAX_BODY_SIZE_BYTES naming mismatch with wrangler.toml.
 
 const PROVIDER_CONFIGS = {
   openai: {
@@ -83,19 +87,16 @@ const RETRY_BACKOFF_MS = [3000, 9000]; // 3s, 9s
 const MAX_5XX_RETRIES = 2;
 const RETRY_5XX_BACKOFF_MS = [2000, 5000]; // 2s, 5s
 
-// Rate limiting: max requests per minute per IP
-const MAX_REQUESTS_PER_MINUTE = 60;
-const ipRateLimitMap = new Map(); // IP → { count, resetAt }
-
-// Body size limit: 2MB
-const MAX_BODY_SIZE = 2 * 1024 * 1024;
+// Default configuration values — can be overridden via wrangler.toml [vars]
+const DEFAULT_MAX_REQUESTS_PER_MINUTE = 60;
+const DEFAULT_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Timeout for buffered (non-streaming) requests to provider.
 // IMPORTANT: Cloudflare Workers (free plan) have a 30-second wall-clock limit.
-// If you're on the paid Workers Unbound plan, you can increase this to 90+ seconds.
-// Set the PROVIDER_TIMEOUT_MS environment variable to override.
-const DEFAULT_PROVIDER_TIMEOUT_MS = 55_000; // 55 seconds (leaves margin for Worker overhead)
-const PROVIDER_TIMEOUT_MS = parseInt(typeof PROVIDER_TIMEOUT_ENV !== 'undefined' ? PROVIDER_TIMEOUT_ENV : '', 10) || DEFAULT_PROVIDER_TIMEOUT_MS;
+// This default (25s) leaves 5s margin for Worker overhead on the free plan.
+// If you're on the paid Workers Unbound/Bundled plan, set PROVIDER_TIMEOUT_MS
+// in wrangler.toml [vars] to a higher value (e.g., "55000" for 55 seconds).
+const DEFAULT_PROVIDER_TIMEOUT_MS = 25_000;
 
 // Known provider domains for targetUrl validation
 const KNOWN_PROVIDER_DOMAINS = [
@@ -106,10 +107,13 @@ const KNOWN_PROVIDER_DOMAINS = [
 ];
 
 // Proxy version for health-check
-const PROXY_VERSION = 'v5';
+const PROXY_VERSION = 'v6';
 
 // Proxy start time for uptime calculation
 const PROXY_START_TIME = Date.now();
+
+// Rate limiting state (in-memory, per-isolate)
+const ipRateLimitMap = new Map(); // IP → { count, resetAt }
 
 /**
  * Sleep for the specified number of milliseconds.
@@ -160,7 +164,7 @@ function isTransient5xx(status) {
 /**
  * Check rate limit for a given IP. Returns true if the request is allowed.
  */
-function checkRateLimit(ip) {
+function checkRateLimit(ip, maxRequestsPerMinute) {
   // Periodic cleanup to prevent memory leak
   if (ipRateLimitMap.size > 1000) pruneExpiredRateLimits();
   const now = Date.now();
@@ -172,7 +176,7 @@ function checkRateLimit(ip) {
     return true;
   }
 
-  if (entry.count >= MAX_REQUESTS_PER_MINUTE) {
+  if (entry.count >= maxRequestsPerMinute) {
     return false; // Rate limit exceeded
   }
 
@@ -332,8 +336,25 @@ function rewrite429IfModelNotFound(status, body, provider) {
   return { status, body };
 }
 
+/**
+ * Read a numeric env variable with fallback default.
+ * Env vars from wrangler.toml [vars] are always strings.
+ */
+function readEnvInt(env, key, defaultValue) {
+  if (env && env[key] !== undefined && env[key] !== null) {
+    const parsed = parseInt(env[key], 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return defaultValue;
+}
+
 export default {
-  async fetch(request) {
+  async fetch(request, env, ctx) {
+    // Read configuration from env (wrangler.toml [vars]) with fallbacks
+    const maxRequestsPerMinute = readEnvInt(env, 'MAX_REQUESTS_PER_MINUTE', DEFAULT_MAX_REQUESTS_PER_MINUTE);
+    const maxBodySize = readEnvInt(env, 'MAX_BODY_SIZE_BYTES', DEFAULT_MAX_BODY_SIZE);
+    const providerTimeoutMs = readEnvInt(env, 'PROVIDER_TIMEOUT_MS', DEFAULT_PROVIDER_TIMEOUT_MS);
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
@@ -345,7 +366,16 @@ export default {
       if (url.pathname === '/health') {
         const uptime = Math.round((Date.now() - PROXY_START_TIME) / 1000);
         return new Response(
-          JSON.stringify({ status: 'ok', version: PROXY_VERSION, uptime_seconds: uptime }),
+          JSON.stringify({
+            status: 'ok',
+            version: PROXY_VERSION,
+            uptime_seconds: uptime,
+            config: {
+              maxRequestsPerMinute,
+              maxBodySizeMB: Math.round(maxBodySize / (1024 * 1024)),
+              providerTimeoutMs,
+            },
+          }),
           { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
         );
       }
@@ -359,7 +389,7 @@ export default {
 
     // ── Rate limiting by IP ──────────────────────────────────────────
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
-    if (!checkRateLimit(clientIp)) {
+    if (!checkRateLimit(clientIp, maxRequestsPerMinute)) {
       const retryAfter = 60; // seconds
       return new Response(
         JSON.stringify({
@@ -379,7 +409,7 @@ export default {
 
     // ── Body size check ──────────────────────────────────────────────
     const contentLength = request.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > MAX_BODY_SIZE) {
+    if (contentLength && parseInt(contentLength) > maxBodySize) {
       return new Response(
         JSON.stringify({
           error: 'payload_too_large',
@@ -448,7 +478,7 @@ export default {
 
       try {
         if (controller) {
-          timeoutId = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+          timeoutId = setTimeout(() => controller.abort(), providerTimeoutMs);
         }
 
         response = await fetchWithRetry(transformed.targetUrl, fetchOptions, max429Retries, max5xxRetries, provider);
@@ -457,11 +487,11 @@ export default {
 
         // Handle AbortError (timeout)
         if (fetchError.name === 'AbortError') {
-          console.error(`[Proxy Timeout] Provider ${provider} did not respond within ${PROVIDER_TIMEOUT_MS}ms — key: ${maskApiKey(apiKey)}`);
+          console.error(`[Proxy Timeout] Provider ${provider} did not respond within ${providerTimeoutMs}ms — key: ${maskApiKey(apiKey)}`);
           return new Response(
             JSON.stringify({
               error: 'timeout',
-              message: `Провайдер не ответил за ${Math.round(PROVIDER_TIMEOUT_MS / 1000)} секунд. Попробуйте ещё раз или выберите другую модель.`,
+              message: `Провайдер не ответил за ${Math.round(providerTimeoutMs / 1000)} секунд. Попробуйте ещё раз или выберите другую модель.`,
             }),
             { status: 504, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
           );

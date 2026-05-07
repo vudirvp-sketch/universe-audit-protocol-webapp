@@ -31,6 +31,8 @@ export interface AppSettings {
   model: string | null;
   proxyUrl: string;
   rpmLimit: number;
+  // Custom provider base URL (for 'custom' provider type)
+  baseUrl: string | null;
   // Custom model capabilities (user override, advanced settings)
   customContextWindow: number | null;
   customMaxOutputTokens: number | null;
@@ -46,6 +48,7 @@ interface SettingsState extends AppSettings {
   setModel: (model: string | null) => void;
   setProxyUrl: (url: string) => void;
   setRpmLimit: (limit: number) => void;
+  setBaseUrl: (url: string | null) => void;
   setCustomContextWindow: (value: number | null) => void;
   setCustomMaxOutputTokens: (value: number | null) => void;
   setCustomSupportsJSONMode: (value: boolean | null) => void;
@@ -69,6 +72,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   model: null,
   proxyUrl: PROXY_URL_DEFAULT,
   rpmLimit: PROVIDER_RPM_DEFAULTS.zai,
+  baseUrl: null,
   customContextWindow: null,
   customMaxOutputTokens: null,
   customSupportsJSONMode: null,
@@ -112,6 +116,10 @@ export const useSettings = create<SettingsState>()(
         set({ customMaxOutputTokens });
       },
 
+      setBaseUrl: (baseUrl: string | null) => {
+        set({ baseUrl });
+      },
+
       setCustomSupportsJSONMode: (customSupportsJSONMode: boolean | null) => {
         set({ customSupportsJSONMode });
       },
@@ -136,6 +144,7 @@ export const useSettings = create<SettingsState>()(
         model: state.model,
         proxyUrl: state.proxyUrl,
         rpmLimit: state.rpmLimit,
+        baseUrl: state.baseUrl,
         customContextWindow: state.customContextWindow,
         customMaxOutputTokens: state.customMaxOutputTokens,
         customSupportsJSONMode: state.customSupportsJSONMode,

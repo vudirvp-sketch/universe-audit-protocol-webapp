@@ -61,6 +61,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const setCustomContextWindow = useSettings((s) => s.setCustomContextWindow);
   const setCustomMaxOutputTokens = useSettings((s) => s.setCustomMaxOutputTokens);
   const setCustomSupportsJSONMode = useSettings((s) => s.setCustomSupportsJSONMode);
+  const setBaseUrl = useSettings((s) => s.setBaseUrl);
+  const baseUrl = useSettings((s) => s.baseUrl);
   const customContextWindow = useSettings((s) => s.customContextWindow);
   const customMaxOutputTokens = useSettings((s) => s.customMaxOutputTokens);
   const customSupportsJSONMode = useSettings((s) => s.customSupportsJSONMode);
@@ -72,6 +74,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [inputModel, setInputModel] = React.useState('');
   const [inputProxyUrl, setInputProxyUrl] = React.useState('');
   const [inputRpmLimit, setInputRpmLimit] = React.useState('');
+  const [inputBaseUrl, setInputBaseUrl] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -90,11 +93,12 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setInputModel(model || '');
       setInputProxyUrl(proxyUrl || '');
       setInputRpmLimit(String(rpmLimit));
+      setInputBaseUrl(baseUrl || '');
       setInputContextWindow(customContextWindow != null ? String(customContextWindow) : '');
       setInputMaxOutputTokens(customMaxOutputTokens != null ? String(customMaxOutputTokens) : '');
       setSaved(false);
     }
-  }, [open, apiKey, model, proxyUrl, rpmLimit, customContextWindow, customMaxOutputTokens]);
+  }, [open, apiKey, model, proxyUrl, rpmLimit, customContextWindow, customMaxOutputTokens, baseUrl]);
 
   // Update model input when provider changes
   React.useEffect(() => {
@@ -113,8 +117,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     setCustomContextWindow(null);
     setCustomMaxOutputTokens(null);
     setCustomSupportsJSONMode(null);
+    setBaseUrl(null);
     setInputContextWindow('');
     setInputMaxOutputTokens('');
+    setInputBaseUrl('');
   };
 
   const handleSave = () => {
@@ -150,6 +156,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     const parsedMaxOutputTokens = parseInt(inputMaxOutputTokens, 10);
     setCustomMaxOutputTokens(!isNaN(parsedMaxOutputTokens) && parsedMaxOutputTokens > 0 ? parsedMaxOutputTokens : null);
 
+    // Save base URL for custom providers
+    const trimmedBaseUrl = inputBaseUrl.trim();
+    setBaseUrl(trimmedBaseUrl || null);
+
     onSettingsChange?.({
       provider,
       apiKey: trimmedKey || null,
@@ -165,6 +175,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     setInputModel('');
     setInputProxyUrl('');
     setInputRpmLimit('');
+    setInputBaseUrl('');
     setInputContextWindow('');
     setInputMaxOutputTokens('');
     clearSettings();
@@ -387,6 +398,27 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                     </Alert>
                   )}
                 </div>
+
+                {/* Base URL for Custom Provider */}
+                {provider === 'custom' && (
+                  <div className="space-y-2">
+                    <Label htmlFor="base-url" className="flex items-center gap-2 text-xs">
+                      <Globe className="h-3 w-3" />
+                      Base URL провайдера
+                    </Label>
+                    <Input
+                      id="base-url"
+                      type="url"
+                      placeholder="https://api.example.com/v1"
+                      value={inputBaseUrl}
+                      onChange={(e) => setInputBaseUrl(e.target.value)}
+                      className="text-xs h-8"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Базовый URL API для кастомного провайдера (без /chat/completions)
+                    </p>
+                  </div>
+                )}
 
                 {/* RPM Limit */}
                 <div className="space-y-2">
