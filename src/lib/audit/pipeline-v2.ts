@@ -260,8 +260,17 @@ export async function runAuditPipelineV2(
           state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
         }
       } else if (parseErr instanceof ParseError) {
-        console.warn('[Pipeline] Step 2: Empty LLM response, using empty Step2Result');
-        state.step2 = makeEmptyStep2Result(criteria.map(c => c.id));
+        // CRITICAL DIAG: Empty LLM response on Step 2 — almost always a proxy timeout.
+        // This is the "Не удалось распарсить ответ LLM" error the user sees.
+        console.error(
+          '[Pipeline] Step 2: ПУСТОЙ ответ LLM! Это почти всегда означает:\n' +
+          '  1. Cloudflare Worker (free plan) 30s timeout — Step 2 too heavy\n' +
+          '  2. PROVIDER_TIMEOUT_MS too low (25s default) for Step 2\n' +
+          '  Решение: (a) Перейти на платный Workers план + PROVIDER_TIMEOUT_MS=55s,\n' +
+          '           (b) Использовать более быструю модель (Gemini Flash, GPT-4o-mini),\n' +
+          '           (c) Уменьшить размер текста/критериев'
+        );
+        state.step2 = makeEmptyStep2Result(criteria.map(c => c.id), 'Пустой ответ LLM — вероятно таймаут прокси (Step 2 слишком тяжёлый)');
       } else {
         throw parseErr;
       }
@@ -546,13 +555,14 @@ function makeEmptyStep1Result(): Step1Result {
 }
 
 /** Create an empty Step2Result when parsing fails */
-function makeEmptyStep2Result(criteriaIds: string[]): Step2Result {
+function makeEmptyStep2Result(criteriaIds: string[], reason?: string): Step2Result {
+  const explanation = reason || 'Не удалось распарсить ответ LLM';
   const assessments: CriterionAssessment[] = criteriaIds.map((id) => ({
     id,
     level: guessLevelFromId(id),
     verdict: 'insufficient_data' as const,
     evidence: '',
-    explanation: 'Не удалось распарсить ответ LLM',
+    explanation,
   }));
   return {
     assessments,

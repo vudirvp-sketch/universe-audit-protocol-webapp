@@ -1,5 +1,5 @@
 /**
- * LLM Streaming wrapper for Pipeline V2 (Universe Audit Protocol v11.0).
+ * LLM Streaming wrapper for Pipeline V2 (Universe Audit Protocol v11.1).
  *
  * Обёртка над llm-client.ts, добавляющая streaming-поддержку.
  * Использует существующий streaming.ts для SSE-парсинга.
@@ -23,6 +23,12 @@
  * перенаправляет отмену от пользователя, но не наследует уже-aborted
  * состояние.
  *
+ * BUGFIX (v4): Улучшена диагностика при обрыве streaming. Когда
+ * streaming обрывается с AbortError и streamingAccumulated=0, это
+ * почти всегда означает таймаут прокси. Теперь мы логируем конкретную
+ * причину (AbortError vs Timeout) и предлагаем решения. Buffered
+ * fallback также логирует результат.
+ *
  * Также: при таймауте streaming-запроса, если мы уже получили часть
  * текста через onChunk — используем его вместо фоллбэка на buffered.
  * Это критично для длинных Step 2 (50+ критериев), где модель может
@@ -30,7 +36,7 @@
  */
 
 import type { LLMConfig, PromptSet } from './types-v2';
-import { createLLMClient, type LLMProvider } from '../llm-client';
+import { createLLMClient, type LLMProvider, type ChatCompletionResponse } from '../llm-client';
 
 // ============================================================
 // Типы
@@ -191,8 +197,21 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         return { text: streamingAccumulated, usage: null };
       }
 
-      // No partial text — try buffered fallback
-      console.warn('Streaming failed, falling back to buffered request:', streamError);
+      // No partial text — streaming was aborted before ANY data arrived.
+      // DIAG: Log the specific error type for debugging.
+      const isAbort = streamError instanceof DOMException && streamError.name === 'AbortError';
+      const isTimeout = streamError instanceof Error && /timeout|таймаут/i.test(streamError.message);
+      console.warn(
+        'Streaming failed, falling back to buffered request:' +
+        (isAbort ? ' (AbortError — connection aborted, likely proxy timeout)' :
+         isTimeout ? ' (Timeout — LLM too slow)' :
+         '') +
+        ' Error:', streamError
+      );
+      console.warn(
+        '[DIAG] streamingAccumulated=' + streamingAccumulated.length +
+        ' chars, abortSignal.aborted=' + !!abortSignal?.aborted
+      );
 
       // If we already tried buffered fallback above (streaming returned empty,
       // buffered timed out), DON'T try buffered again — that causes double-timeout.
@@ -203,6 +222,11 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
 
       // BUGFIX (v3): Create a FRESH AbortController for buffered fallback.
       // Same reason as above — abortSignal may already be aborted.
+      // BUGFIX (v4): For Step 2 timeout recovery, the buffered fallback
+      // gets its own 120s timeout via llm-client.ts. This is critical
+      // because the proxy's 25s timeout (free plan) is too short for
+      // Step 2 (52 criteria). On paid plans with PROVIDER_TIMEOUT_MS=55s,
+      // the buffered fallback has a much better chance of succeeding.
       const fallbackController = new AbortController();
       if (abortSignal?.aborted) {
         fallbackController.abort();
@@ -210,23 +234,41 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         abortSignal.addEventListener('abort', () => fallbackController.abort(), { once: true });
       }
 
-      const response = await client.chatCompletion({
-        messages,
-        max_tokens: maxTokens,
-        temperature: 0.7,
-        signal: fallbackController.signal,
-        responseFormat: options.responseFormat || 'markdown',
-      });
-
-      const fullText = response.choices?.[0]?.message?.content || '';
-      if (fullText.trim().length > 0) {
-        // Emulate streaming by sending the whole text at once
-        onChunk(fullText);
-        return { text: fullText, usage: extractUsage(response) };
+      let bufferedResponse: ChatCompletionResponse;
+      try {
+        bufferedResponse = await client.chatCompletion({
+          messages,
+          max_tokens: maxTokens,
+          temperature: 0.7,
+          signal: fallbackController.signal,
+          responseFormat: options.responseFormat || 'markdown',
+        });
+      } catch (bufferedError) {
+        // Buffered fallback ALSO failed — likely proxy timeout (504).
+        // DIAG: Log clearly what happened.
+        console.error(
+          '[DIAG] Buffered fallback ALSO failed:', bufferedError instanceof Error ? bufferedError.message : String(bufferedError),
+          '\nThis usually means the LLM provider is too slow for the proxy timeout.',
+          '\nSolutions: (1) Use faster model, (2) Upgrade Workers plan for longer timeout, (3) Reduce Step 2 criteria count'
+        );
+        throw bufferedError;
       }
 
-      // Buffered also returned empty
-      return { text: '', usage: extractUsage(response) };
+      const fullText = bufferedResponse.choices?.[0]?.message?.content || '';
+      if (fullText.trim().length > 0) {
+        console.log('[DIAG] Buffered fallback succeeded: ' + fullText.length + ' chars');
+        // Emulate streaming by sending the whole text at once
+        onChunk(fullText);
+        return { text: fullText, usage: extractUsage(bufferedResponse) };
+      }
+
+      // Buffered returned 200 OK but with EMPTY content — this is unusual
+      console.error(
+        '[DIAG] Buffered fallback returned 200 OK but EMPTY content!',
+        '\nThis may indicate: (1) LLM safety filter blocked the response,',
+        '\n(2) Model hit context/output limits, (3) Model returned empty for this prompt.'
+      );
+      return { text: '', usage: extractUsage(bufferedResponse) };
     }
   } catch (outerError) {
     throw outerError;

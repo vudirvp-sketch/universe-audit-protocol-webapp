@@ -18,5 +18,12 @@ compatibility_date = "2024-01-01"
 MAX_REQUESTS_PER_MINUTE = "60"
 MAX_BODY_SIZE_BYTES = "2097152"
 # Provider timeout in milliseconds. Default: 25000 (25s) for Cloudflare free plan.
-# On paid Workers Unbound plan, increase to "55000" (55s) for longer responses.
-PROVIDER_TIMEOUT_MS = "25000"
+# On paid Workers Standard/Unbound plan, increase to "55000" (55s) for longer responses.
+# IMPORTANT: Step 2 (52 criteria) can take 90-120s on slower models.
+# On free plan: Worker is killed at ~30s regardless. For Step 2 to work,
+# you MUST upgrade to paid Workers plan and set this to at least "55000".
+PROVIDER_TIMEOUT_MS = "55000"
+# Streaming timeout in milliseconds. Similar to PROVIDER_TIMEOUT_MS but for
+# streaming requests. On free plan: max ~25s before Worker dies.
+# On paid plan: can be much higher (e.g., "120000" for 2 minutes).
+PROVIDER_STREAMING_TIMEOUT_MS = "120000"

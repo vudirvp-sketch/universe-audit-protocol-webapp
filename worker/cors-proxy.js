@@ -94,9 +94,16 @@ const DEFAULT_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 // Timeout for buffered (non-streaming) requests to provider.
 // IMPORTANT: Cloudflare Workers (free plan) have a 30-second wall-clock limit.
 // This default (25s) leaves 5s margin for Worker overhead on the free plan.
-// If you're on the paid Workers Unbound/Bundled plan, set PROVIDER_TIMEOUT_MS
+// If you're on the paid Workers Standard/Unbound plan, set PROVIDER_TIMEOUT_MS
 // in wrangler.toml [vars] to a higher value (e.g., "55000" for 55 seconds).
 const DEFAULT_PROVIDER_TIMEOUT_MS = 25_000;
+
+// Timeout for streaming requests before we consider the upstream unresponsive.
+// On the free plan, the Worker is killed at ~30s anyway, so this timeout
+// gives us a chance to send a graceful error SSE event before the Worker dies.
+// On paid plans, streaming can run much longer (minutes), so increase this.
+// Set PROVIDER_STREAMING_TIMEOUT_MS in wrangler.toml [vars] to override.
+const DEFAULT_STREAMING_TIMEOUT_MS = 25_000;
 
 // Known provider domains for targetUrl validation
 const KNOWN_PROVIDER_DOMAINS = [
@@ -107,7 +114,7 @@ const KNOWN_PROVIDER_DOMAINS = [
 ];
 
 // Proxy version for health-check
-const PROXY_VERSION = 'v6';
+const PROXY_VERSION = 'v7';
 
 // Proxy start time for uptime calculation
 const PROXY_START_TIME = Date.now();
@@ -354,6 +361,7 @@ export default {
     const maxRequestsPerMinute = readEnvInt(env, 'MAX_REQUESTS_PER_MINUTE', DEFAULT_MAX_REQUESTS_PER_MINUTE);
     const maxBodySize = readEnvInt(env, 'MAX_BODY_SIZE_BYTES', DEFAULT_MAX_BODY_SIZE);
     const providerTimeoutMs = readEnvInt(env, 'PROVIDER_TIMEOUT_MS', DEFAULT_PROVIDER_TIMEOUT_MS);
+    const streamingTimeoutMs = readEnvInt(env, 'PROVIDER_STREAMING_TIMEOUT_MS', DEFAULT_STREAMING_TIMEOUT_MS);
 
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
@@ -529,7 +537,51 @@ export default {
 
         console.log(`[Proxy Stream] ${provider} — streaming started in ${elapsedMs}ms (upstream CT: ${upstreamContentType || 'unknown'}) — key: ${maskApiKey(apiKey)}`);
 
-        // Pass through the ReadableStream without buffering
+        // v7 BUGFIX: Add streaming timeout so we can send a graceful error
+        // event instead of the Worker being killed abruptly by Cloudflare.
+        // On free plan: Worker dies at ~30s. On paid plan: can run much longer.
+        // We set a timeout slightly before the Worker's wall-clock limit,
+        // and when it fires, we inject an SSE error event into the stream.
+        let streamTimedOut = false;
+        const streamTimeoutId = setTimeout(() => {
+          streamTimedOut = true;
+          console.warn(`[Proxy Stream] Streaming timeout (${streamingTimeoutMs}ms) — upstream ${provider} did not finish — key: ${maskApiKey(apiKey)}`);
+        }, streamingTimeoutMs);
+
+        // Create a TransformStream to inject timeout error event
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        const reader = response.body.getReader();
+
+        // Pipe the upstream response through our transform
+        // If timeout fires, inject an error SSE event
+        (async () => {
+          try {
+            while (true) {
+              if (streamTimedOut) {
+                // Inject timeout error as SSE event before closing
+                const timeoutEvent = `event: error\ndata: ${JSON.stringify({
+                  error: 'stream_timeout',
+                  message: `Стриминг прерван: провайдер не ответил за ${Math.round(streamingTimeoutMs / 1000)} секунд. Попробуйте более быструю модель или уменьшите текст.`,
+                })}\n\n`;
+                await writer.write(new TextEncoder().encode(timeoutEvent));
+                break;
+              }
+              const { done, value } = await reader.read();
+              if (done) break;
+              await writer.write(value);
+            }
+          } catch (pipeError) {
+            // Upstream stream was closed or errored
+            console.warn(`[Proxy Stream] Pipe error: ${pipeError.message || pipeError}`);
+          } finally {
+            clearTimeout(streamTimeoutId);
+            try { await writer.close(); } catch { /* already closed */ }
+            try { reader.releaseLock(); } catch { /* already released */ }
+          }
+        })();
+
+        // Pass through the transformed ReadableStream
         const streamHeaders = {
           'Content-Type': isActuallySSE ? 'text/event-stream' : upstreamContentType || 'application/json',
           'Cache-Control': 'no-cache',
@@ -537,7 +589,7 @@ export default {
           ...CORS_HEADERS,
         };
 
-        return new Response(response.body, {
+        return new Response(readable, {
           status: response.status,
           headers: streamHeaders,
         });
