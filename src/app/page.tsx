@@ -52,6 +52,8 @@ export default function Home() {
   // =========================================================================
   const phase = useAuditStateV3(s => s.phase);
   const currentBlock = useAuditStateV3(s => s.currentBlock);
+  const currentBlockTotalChunks = useAuditStateV3(s => s.currentBlockTotalChunks);
+  const currentChunkIndex = useAuditStateV3(s => s.currentChunkIndex);
   const block1 = useAuditStateV3(s => s.block1);
   const block2 = useAuditStateV3(s => s.block2);
   const block3 = useAuditStateV3(s => s.block3);
@@ -134,8 +136,12 @@ export default function Home() {
           baseUrl: useSettings.getState().baseUrl || undefined,
         },
         {
-          onBlockStart: (blockNum) => {
+          onBlockStart: (blockNum, totalChunks, chunkIndex) => {
             useAuditStateV3.getState().clearStreamingText();
+            // Update chunk progress for UI
+            if (totalChunks !== undefined && chunkIndex !== undefined) {
+              useAuditStateV3.getState().setChunkProgress(totalChunks, chunkIndex);
+            }
           },
           onChunk: (blockNum, text) => {
             useAuditStateV3.getState().appendStreamingText(text);
@@ -330,6 +336,8 @@ export default function Home() {
                   <AuditProgressV3
                     currentBlock={currentBlock}
                     onCancel={cancelAudit}
+                    currentBlockTotalChunks={currentBlockTotalChunks || undefined}
+                    currentChunkIndex={currentChunkIndex || undefined}
                   />
 
                   {/* Quick info card */}

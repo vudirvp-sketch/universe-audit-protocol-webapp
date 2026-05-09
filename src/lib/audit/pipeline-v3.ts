@@ -235,13 +235,18 @@ async function executeChunkedBlock(
   const subPrompts = buildSubPrompts();
 
   // Notify UI about the block starting (with total chunks for progress display)
-  callbacks.onBlockStart(blockNumber, subPrompts.length > 1 ? subPrompts.length : undefined);
+  callbacks.onBlockStart(blockNumber, subPrompts.length > 1 ? subPrompts.length : undefined, 0);
 
   const blockStart = Date.now();
   const subResults: SubBlockResult[] = [];
   let fullMarkdown = '';
 
   for (let i = 0; i < subPrompts.length; i++) {
+    // Notify UI about current chunk progress (for multi-chunk blocks)
+    if (i > 0 && subPrompts.length > 1) {
+      callbacks.onBlockStart(blockNumber, subPrompts.length, i);
+    }
+
     const prompt = subPrompts[i];
     const maxTokens = subPrompts.length > 1
       ? Math.min(

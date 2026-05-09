@@ -10,6 +10,8 @@ interface AuditProgressV3Props {
   onCancel: () => void;
   /** Total chunks for the current block (if chunked execution) */
   currentBlockTotalChunks?: number;
+  /** Current chunk index (0-based) within the current block */
+  currentChunkIndex?: number;
 }
 
 const BLOCKS = [
@@ -40,7 +42,7 @@ function StatusIcon({ status }: { status: 'waiting' | 'in_progress' | 'completed
   }
 }
 
-export function AuditProgressV3({ currentBlock, onCancel, currentBlockTotalChunks }: AuditProgressV3Props) {
+export function AuditProgressV3({ currentBlock, onCancel, currentBlockTotalChunks, currentChunkIndex }: AuditProgressV3Props) {
   const progressPercent = currentBlock === 0 ? 0 : Math.round((currentBlock / 5) * 100);
   const isAuditing = currentBlock > 0 && currentBlock <= 5;
 
@@ -48,6 +50,11 @@ export function AuditProgressV3({ currentBlock, onCancel, currentBlockTotalChunk
   const currentBlockInfo = BLOCKS.find(b => b.index === currentBlock);
   const totalChunks = currentBlockTotalChunks ?? currentBlockInfo?.defaultChunks ?? 1;
   const showChunks = totalChunks > 1 && currentBlock > 0;
+  const chunkDisplay = showChunks && currentChunkIndex !== undefined
+    ? ` (часть ${currentChunkIndex + 1}/${totalChunks})`
+    : showChunks
+      ? ` (${totalChunks} частей)`
+      : '';
 
   return (
     <Card>
@@ -59,7 +66,7 @@ export function AuditProgressV3({ currentBlock, onCancel, currentBlockTotalChunk
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Прогресс</span>
-            <span>{currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${showChunks ? ` (${totalChunks} частей)` : ''}` : 'Подготовка...'}</span>
+            <span>{currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${chunkDisplay}` : 'Подготовка...'}</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>

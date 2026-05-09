@@ -109,20 +109,59 @@ function extractSkeletonSummary(text: string): string | null {
 /**
  * Extract the weaknesses summary from the end of a block's markdown.
  * The prompt instructs the LLM to start this section with "РЕЗЮМЕ СЛАБЫХ МЕСТ:".
- * If not found, returns the last 500 characters of the text.
+ *
+ * With chunked execution (F3), sub-results are concatenated with `---` separators,
+ * and each chunk may have its own "РЕЗЮМЕ СЛАБЫХ МЕСТ:" section. This function
+ * finds ALL such markers and aggregates their content, so no weaknesses are lost.
+ *
+ * If no markers are found, returns the last 500 characters of the text.
  */
 export function extractWeaknessesSummary(markdown: string): string {
   const marker = 'РЕЗЮМЕ СЛАБЫХ МЕСТ:';
-  const idx = markdown.lastIndexOf(marker);
-  if (idx !== -1) {
-    return markdown.slice(idx + marker.length).trim();
-  }
-  // Fallback: try English variant
   const enMarker = 'WEAKNESSES SUMMARY:';
-  const enIdx = markdown.lastIndexOf(enMarker);
-  if (enIdx !== -1) {
-    return markdown.slice(enIdx + enMarker.length).trim();
+
+  // Collect all weakness summary sections from chunked output
+  const summaries: string[] = [];
+
+  // Find all occurrences of the RU marker
+  let searchFrom = 0;
+  while (searchFrom < markdown.length) {
+    const idx = markdown.indexOf(marker, searchFrom);
+    if (idx === -1) break;
+
+    // Extract text from this marker to the next `---` separator or end of text
+    const afterMarker = idx + marker.length;
+    const nextSeparator = markdown.indexOf('\n---\n', afterMarker);
+    const sectionEnd = nextSeparator !== -1 ? nextSeparator : markdown.length;
+    const summaryText = markdown.slice(afterMarker, sectionEnd).trim();
+    if (summaryText) {
+      summaries.push(summaryText);
+    }
+    searchFrom = sectionEnd + 1;
   }
+
+  // If no RU markers found, try EN markers
+  if (summaries.length === 0) {
+    searchFrom = 0;
+    while (searchFrom < markdown.length) {
+      const idx = markdown.indexOf(enMarker, searchFrom);
+      if (idx === -1) break;
+
+      const afterMarker = idx + enMarker.length;
+      const nextSeparator = markdown.indexOf('\n---\n', afterMarker);
+      const sectionEnd = nextSeparator !== -1 ? nextSeparator : markdown.length;
+      const summaryText = markdown.slice(afterMarker, sectionEnd).trim();
+      if (summaryText) {
+        summaries.push(summaryText);
+      }
+      searchFrom = sectionEnd + 1;
+    }
+  }
+
+  if (summaries.length > 0) {
+    return summaries.join('\n\n');
+  }
+
   // Final fallback: last 500 characters
   return markdown.slice(-500).trim();
 }

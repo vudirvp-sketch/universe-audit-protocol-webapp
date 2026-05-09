@@ -23,6 +23,8 @@ export interface AuditStateV3 {
   // State
   phase: PipelinePhase;
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
+  currentBlockTotalChunks: number;
+  currentChunkIndex: number;
   block1: BlockResult | null;
   block2: BlockResult | null;
   block3: BlockResult | null;
@@ -41,6 +43,7 @@ export interface AuditStateV3 {
   setBlockResult: (blockNumber: 1 | 2 | 3 | 4 | 5, result: BlockResult) => void;
   setOrientationContext: (context: OrientationContext) => void;
   setMeta: (meta: PipelineMeta) => void;
+  setChunkProgress: (totalChunks: number, chunkIndex: number) => void;
   appendStreamingText: (text: string) => void;
   clearStreamingText: () => void;
   setError: (message: string) => void;
@@ -57,6 +60,8 @@ export interface AuditStateV3 {
 const initialState = {
   phase: 'idle' as PipelinePhase,
   currentBlock: 0 as 0 | 1 | 2 | 3 | 4 | 5,
+  currentBlockTotalChunks: 0,
+  currentChunkIndex: 0,
   block1: null as BlockResult | null,
   block2: null as BlockResult | null,
   block3: null as BlockResult | null,
@@ -86,6 +91,8 @@ export const useAuditStateV3 = create<AuditStateV3>()(
         set({
           phase: 'running',
           currentBlock: 1,
+          currentBlockTotalChunks: 0,
+          currentChunkIndex: 0,
           block1: null,
           block2: null,
           block3: null,
@@ -106,6 +113,8 @@ export const useAuditStateV3 = create<AuditStateV3>()(
           return {
             [key]: result,
             currentBlock: isLastBlock ? 5 : nextBlock,
+            currentBlockTotalChunks: 0,
+            currentChunkIndex: 0,
             streamingText: '',
             ...(isLastBlock ? { phase: 'done' as const } : {}),
           };
@@ -114,6 +123,9 @@ export const useAuditStateV3 = create<AuditStateV3>()(
       setOrientationContext: (context) => set({ orientationContext: context }),
 
       setMeta: (meta) => set({ meta }),
+
+      setChunkProgress: (totalChunks, chunkIndex) =>
+        set({ currentBlockTotalChunks: totalChunks, currentChunkIndex: chunkIndex }),
 
       appendStreamingText: (text) =>
         set((state) => ({ streamingText: state.streamingText + text })),
@@ -141,6 +153,8 @@ export const useAuditStateV3 = create<AuditStateV3>()(
       partialize: (state) => ({
         phase: state.phase,
         currentBlock: state.currentBlock,
+        currentBlockTotalChunks: state.currentBlockTotalChunks,
+        currentChunkIndex: state.currentChunkIndex,
         block1: state.block1,
         block2: state.block2,
         block3: state.block3,
@@ -160,6 +174,8 @@ export const useAuditStateV3 = create<AuditStateV3>()(
               useAuditStateV3.setState({
                 phase: 'idle',
                 currentBlock: 0,
+                currentBlockTotalChunks: 0,
+                currentChunkIndex: 0,
                 block1: null,
                 block2: null,
                 block3: null,

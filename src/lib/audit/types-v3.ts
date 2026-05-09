@@ -138,8 +138,9 @@ export interface PipelineMeta {
 
 /** Callbacks for streaming pipeline execution */
 export interface StreamingCallbacksV3 {
-  /** Called when a block starts executing */
-  onBlockStart: (blockNumber: 1 | 2 | 3 | 4 | 5, totalChunks?: number) => void;
+  /** Called when a block starts executing, and again for each sub-chunk within a chunked block.
+   *  - chunkIndex: 0-based index of the current sub-chunk (only when totalChunks > 1) */
+  onBlockStart: (blockNumber: 1 | 2 | 3 | 4 | 5, totalChunks?: number, chunkIndex?: number) => void;
   /** Called for each streaming text chunk from the LLM */
   onChunk: (blockNumber: 1 | 2 | 3 | 4 | 5, text: string) => void;
   /** Called when a block completes (markdown fully received + processed) */
