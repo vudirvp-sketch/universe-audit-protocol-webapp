@@ -8,14 +8,16 @@ import { Progress } from '@/components/ui/progress';
 interface AuditProgressV3Props {
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
   onCancel: () => void;
+  /** Total chunks for the current block (if chunked execution) */
+  currentBlockTotalChunks?: number;
 }
 
 const BLOCKS = [
-  { index: 1, label: 'Ориентация' },
-  { index: 2, label: 'Механизм (L1)' },
-  { index: 3, label: 'Тело + Психика (L2+L3)' },
-  { index: 4, label: 'Мета (L4)' },
-  { index: 5, label: 'Синтез + Рекомендации' },
+  { index: 1, label: 'Ориентация', defaultChunks: 1 },
+  { index: 2, label: 'Механизм (L1)', defaultChunks: 4 },
+  { index: 3, label: 'Тело + Психика (L2+L3)', defaultChunks: 2 },
+  { index: 4, label: 'Мета (L4)', defaultChunks: 1 },
+  { index: 5, label: 'Синтез + Рекомендации', defaultChunks: 1 },
 ] as const;
 
 function getBlockStatus(
@@ -38,9 +40,14 @@ function StatusIcon({ status }: { status: 'waiting' | 'in_progress' | 'completed
   }
 }
 
-export function AuditProgressV3({ currentBlock, onCancel }: AuditProgressV3Props) {
+export function AuditProgressV3({ currentBlock, onCancel, currentBlockTotalChunks }: AuditProgressV3Props) {
   const progressPercent = currentBlock === 0 ? 0 : Math.round((currentBlock / 5) * 100);
   const isAuditing = currentBlock > 0 && currentBlock <= 5;
+
+  // Determine the chunk display for the current block
+  const currentBlockInfo = BLOCKS.find(b => b.index === currentBlock);
+  const totalChunks = currentBlockTotalChunks ?? currentBlockInfo?.defaultChunks ?? 1;
+  const showChunks = totalChunks > 1 && currentBlock > 0;
 
   return (
     <Card>
@@ -52,7 +59,7 @@ export function AuditProgressV3({ currentBlock, onCancel }: AuditProgressV3Props
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Прогресс</span>
-            <span>{currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5` : 'Подготовка...'}</span>
+            <span>{currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${showChunks ? ` (${totalChunks} частей)` : ''}` : 'Подготовка...'}</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>
@@ -62,6 +69,8 @@ export function AuditProgressV3({ currentBlock, onCancel }: AuditProgressV3Props
           {BLOCKS.map((block) => {
             const status = getBlockStatus(block.index, currentBlock);
             const isActive = status === 'in_progress';
+            const isChunked = block.defaultChunks > 1;
+            const chunkLabel = isChunked ? ` (${block.defaultChunks} части)` : '';
 
             return (
               <div
@@ -71,7 +80,7 @@ export function AuditProgressV3({ currentBlock, onCancel }: AuditProgressV3Props
                 }`}
               >
                 <StatusIcon status={status} />
-                <span className="text-sm font-medium">{block.label}</span>
+                <span className="text-sm font-medium">{block.label}{chunkLabel}</span>
               </div>
             );
           })}

@@ -758,6 +758,24 @@ export function createLLMClient(config: LLMClientConfig) {
       payload,
     };
 
+    // ── Preflight validation — catch missing fields before hitting the proxy ──
+    if (!proxyRequest.apiKey || proxyRequest.apiKey.trim() === '') {
+      throw new Error(
+        'API-ключ не задан. Укажите его в Настройки → API-ключ.'
+      );
+    }
+    if (!proxyRequest.targetUrl || proxyRequest.targetUrl.trim() === '') {
+      throw new Error(
+        `URL провайдера не определён для «${config.provider}» с моделью «${effectiveModel}». ` +
+        'Проверьте настройки провайдера и модели.'
+      );
+    }
+    if (!proxyRequest.payload || proxyRequest.payload.trim() === '' || proxyRequest.payload === '{}') {
+      throw new Error(
+        'Пустой payload — проверьте настройки модели и попробуйте снова.'
+      );
+    }
+
     // Determine proxy URL
     const proxyUrl = config.proxyUrl || '';
 
@@ -935,6 +953,25 @@ export function createLLMClient(config: LLMClientConfig) {
 
     // Build the request body with stream: true injected
     const rawPayload = buildProviderRequestBody(config.provider, options, effectiveModel);
+
+    // ── Preflight validation — catch missing fields before hitting the proxy ──
+    if (!config.apiKey || config.apiKey.trim() === '') {
+      throw new Error(
+        'API-ключ не задан. Укажите его в Настройки → API-ключ.'
+      );
+    }
+    if (!targetUrl || targetUrl.trim() === '') {
+      throw new Error(
+        `URL провайдера не определён для «${config.provider}» с моделью «${effectiveModel}». ` +
+        'Проверьте настройки провайдера и модели.'
+      );
+    }
+    if (!rawPayload || rawPayload.trim() === '' || rawPayload === '{}') {
+      throw new Error(
+        'Пустой payload — проверьте настройки модели и попробуйте снова.'
+      );
+    }
+
     const { streamChatCompletion, enableStreamingInPayload } = await import('./streaming');
     const { payload: streamingPayload, targetUrl: streamingTargetUrl } =
       enableStreamingInPayload(config.provider, rawPayload, targetUrl);

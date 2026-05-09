@@ -92,17 +92,18 @@ const DEFAULT_MAX_REQUESTS_PER_MINUTE = 60;
 const DEFAULT_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Timeout for buffered (non-streaming) requests to provider.
-// IMPORTANT: Cloudflare Workers (free plan) have a 30-second wall-clock limit.
-// This default (25s) leaves 5s margin for Worker overhead on the free plan.
-// If you're on the paid Workers Standard/Unbound plan, set PROVIDER_TIMEOUT_MS
-// in wrangler.toml [vars] to a higher value (e.g., "55000" for 55 seconds).
+// IMPORTANT: Cloudflare Workers free plan has undocumented but empirically
+// observed wall-clock limits. Setting this to 25s ensures the Worker can
+// send a graceful 504 response before being killed. On paid plans, increase
+// PROVIDER_TIMEOUT_MS in wrangler.toml [vars] (e.g., "55000" for 55 seconds).
 const DEFAULT_PROVIDER_TIMEOUT_MS = 25_000;
 
 // Timeout for streaming requests before we consider the upstream unresponsive.
-// On the free plan, the Worker is killed at ~30s anyway, so this timeout
-// gives us a chance to send a graceful error SSE event before the Worker dies.
-// On paid plans, streaming can run much longer (minutes), so increase this.
-// Set PROVIDER_STREAMING_TIMEOUT_MS in wrangler.toml [vars] to override.
+// IMPORTANT: Cloudflare Workers free plan has undocumented but empirically
+// observed wall-clock limits. This 25s timeout gives us a chance to send a
+// graceful error SSE event before Cloudflare kills the Worker. On paid plans,
+// streaming can run much longer — increase PROVIDER_STREAMING_TIMEOUT_MS
+// in wrangler.toml [vars] (e.g., "120000" for 2 minutes).
 const DEFAULT_STREAMING_TIMEOUT_MS = 25_000;
 
 // Known provider domains for targetUrl validation
@@ -495,7 +496,9 @@ export default {
 
         // Handle AbortError (timeout)
         if (fetchError.name === 'AbortError') {
-          console.error(`[Proxy Timeout] Provider ${provider} did not respond within ${providerTimeoutMs}ms — key: ${maskApiKey(apiKey)}`);
+          console.error(
+            `[Proxy Timeout] Provider ${provider} did not respond within ${providerTimeoutMs}ms (free plan limit) — key: ${maskApiKey(apiKey)}`
+          );
           return new Response(
             JSON.stringify({
               error: 'timeout',
@@ -592,6 +595,27 @@ export default {
         return new Response(readable, {
           status: response.status,
           headers: streamHeaders,
+        });
+      }
+
+      // ── Streaming request but upstream returned an error ──────────────
+      if (isStreaming && !response.ok) {
+        // For streaming requests that got an error, return the error immediately
+        // without buffering the full body. Error bodies are typically small.
+        const errorBody = await response.text();
+        const rewritten = rewrite429IfModelNotFound(response.status, errorBody, provider);
+
+        const elapsedMs = Date.now() - startTime;
+        console.warn(
+          `[Proxy Stream] ${provider} → ${rewritten.status} (upstream error) in ${elapsedMs}ms — key: ${maskApiKey(apiKey)}`
+        );
+
+        return new Response(rewritten.body, {
+          status: rewritten.status,
+          headers: {
+            'Content-Type': 'application/json',
+            ...CORS_HEADERS,
+          },
         });
       }
 

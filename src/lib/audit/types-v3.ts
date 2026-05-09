@@ -51,6 +51,18 @@ export interface BlockResult {
   meta: BlockMeta;
 }
 
+/** Result of a single sub-request within a block */
+export interface SubBlockResult {
+  subIndex: number;
+  markdown: string;
+  elapsedMs: number;
+}
+
+/** Extended BlockResult that supports chunked execution */
+export interface ChunkedBlockResult extends BlockResult {
+  subResults: SubBlockResult[];
+}
+
 /** Per-block execution metadata */
 export interface BlockMeta {
   /** Wall-clock time in ms */
@@ -127,7 +139,7 @@ export interface PipelineMeta {
 /** Callbacks for streaming pipeline execution */
 export interface StreamingCallbacksV3 {
   /** Called when a block starts executing */
-  onBlockStart: (blockNumber: 1 | 2 | 3 | 4 | 5) => void;
+  onBlockStart: (blockNumber: 1 | 2 | 3 | 4 | 5, totalChunks?: number) => void;
   /** Called for each streaming text chunk from the LLM */
   onChunk: (blockNumber: 1 | 2 | 3 | 4 | 5, text: string) => void;
   /** Called when a block completes (markdown fully received + processed) */

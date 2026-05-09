@@ -179,7 +179,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     setInputContextWindow('');
     setInputMaxOutputTokens('');
     clearSettings();
-    onSettingsChange?.({ provider: 'zai', apiKey: null, model: null });
+    onSettingsChange?.({ provider: 'google', apiKey: null, model: null });
     setSaved(false);
     setTestConnection({ loading: false, success: false, error: null });
   };
@@ -353,6 +353,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 )}
               </Button>
             </div>
+            {!inputKey.trim() && (
+              <Alert className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900">
+                <AlertDescription className="text-red-700 dark:text-red-300 text-xs">
+                  API-ключ обязателен для запуска аудита. Без ключа запросы к LLM вернут ошибку 400.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
 
           {/* Advanced Settings (collapsible) */}

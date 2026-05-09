@@ -57,7 +57,8 @@ interface SettingsState extends AppSettings {
 }
 
 // Default proxy URL — pre-configured CORS proxy for this app.
-// If you are self-hosting, update this URL to point to your own proxy.
+// This proxy is already deployed and working. Do not change unless
+// you are self-hosting your own proxy.
 const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
 const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
 
@@ -67,11 +68,11 @@ export function isProxyUrlPlaceholder(url: string): boolean {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  provider: 'zai',
+  provider: 'google',
   apiKey: null,
-  model: null,
+  model: 'gemini-2.0-flash',
   proxyUrl: PROXY_URL_DEFAULT,
-  rpmLimit: PROVIDER_RPM_DEFAULTS.zai,
+  rpmLimit: PROVIDER_RPM_DEFAULTS.google,
   baseUrl: null,
   customContextWindow: null,
   customMaxOutputTokens: null,

@@ -13,6 +13,83 @@
 import type { MediaType, OrientationContext, PromptSet } from './types-v3';
 
 // ============================================================
+// Criteria groups for Block 2 chunking (F3)
+// ============================================================
+
+/**
+ * Criteria groups for Block 2 — split into 4 chunks of ~13 criteria each.
+ * Each chunk evaluates a subset of the 52 criteria to stay within 25s proxy timeout.
+ */
+const CRITERIA_GROUPS = [
+  {
+    label: 'Живость мира (MDA+OT)',
+    range: 'A1–A7',
+    instruction: `ЖИВОСТЬ МИРА — 5 уровней (MDA+OT):
+- Механика: правила и системы, которые управляют миром
+- Динамика: что происходит, когда правила сталкиваются
+- Эстетика: как мир ощущается сенсорно
+- Онтология: каково быть обитателем этого мира
+- Телесность: как мир переживается телом
+- Согласованность уровней: не противоречат ли они друг другу
+
+КРИТЕРИИ A1-A7: Структура и замкнутость
+Оцени каждый критерий связным текстом (не списком вердиктов).`,
+  },
+  {
+    label: 'Связанность и экономика',
+    range: 'B1–B8',
+    instruction: `СВЯЗАННОСТЬ И ЭКОНОМИКА:
+
+КАРТА СВЯЗАННОСТИ:
+- Какие элементы мира связаны друг с другом?
+- Есть ли конфликты между фракциями/системами?
+- Есть ли пространство с памятью (локации, которые меняются от событий)?
+- Есть ли Ripple Effect (одно событие влияет на многие аспекты)?
+
+КРИТЕРИИ B1-B8: Связанность и экономика
+Оцени каждый критерий связным текстом.
+
+ЭКОНОМИКА, ЭКОЛОГИЯ, БЫТ, РИТМ:
+- Как устроена экономика? Есть ли она?
+- Как экология влияет на жизнь?
+- Как выглядит быт обычного обитателя?
+- Есть ли ритм мира (циклы, сезоны, ритуалы)?`,
+  },
+  {
+    label: 'Тест «А что бы что?»',
+    range: 'Итерации 1-4',
+    instruction: `ТЕСТ «А ЧТОБЫ ЧТО?» — проведи 4 итерации для ключевых элементов мира:
+Для каждого значимого правила, закона или системы спрашивай «А чтобы что?» и итерируй, пока не дойдёшь до корневой причины или дилеммы.
+
+Для каждой итерации:
+- Исходное утверждение
+- Вопрос «А чтобы что?»
+- Ответ
+- Вывод (достаточно ли глубоко, или нужно копать дальше)`,
+  },
+  {
+    label: 'Новые элементы + Случайный прохожий',
+    range: 'E1-E6, F1-F2',
+    instruction: `КРИТЕРИИ ЖИВГО МИРА (продолжение):
+E1-E6: Новые элементы
+F1-F2: Дополнительные
+
+ТЕСТ «СЛУЧАЙНОГО ПРОХОЖЕГО»:
+Представь случайного жителя этого мира. Что он делает утром? Где покупает еду? О чём разговаривает с соседом? Если не можешь ответить — мир неживой.
+
+Пиши развёрнуто, с примерами и цитатами из концепта.`,
+  },
+];
+
+/**
+ * Split criteria into groups for Block 2 chunking.
+ * Returns the pre-defined groups.
+ */
+export function splitCriteriaIntoGroups(): typeof CRITERIA_GROUPS {
+  return CRITERIA_GROUPS;
+}
+
+// ============================================================
 // Shared system prompt
 // ============================================================
 
@@ -373,4 +450,169 @@ export function buildBlock5Prompt(
 КОНЦЕПТ:
 ${inputText}`,
   };
+}
+
+// ============================================================
+// Sub-prompt builders for chunked execution (F3)
+// ============================================================
+
+const CONCISE_INSTRUCTION = `
+
+Будь лаконичен. Для каждого критерия укажи:
+- Статус (найдено/не найдено/неясно)
+- Краткое объяснение (1-2 предложения)
+- Серьёзность (низкая/средняя/высокая)
+НЕ пиши длинные абзацы и НЕ повторяй полный текст критерия.`;
+
+/**
+ * Build sub-prompts for Block 2, splitting criteria into groups.
+ * Each group should be small enough for the LLM to respond within ~20s.
+ */
+export function buildBlock2SubPrompts(
+  text: string,
+  mediaType: MediaType,
+  orientationContext: OrientationContext,
+  block1Markdown?: string,
+): Array<{ system: string; user: string }> {
+  const groups = splitCriteriaIntoGroups();
+  const mediaLabel = MEDIA_LABELS[mediaType];
+  const orientationBlock = buildOrientationContextBlock(orientationContext, block1Markdown);
+
+  return groups.map((group, index) => ({
+    system: SYSTEM_PROMPT,
+    user: `${orientationBlock}
+
+Тип медиа: ${mediaLabel}
+
+Проведи аудит МЕХАНИЗМА этого мира (уровень L1) — ЧАСТЬ ${index + 1} из ${groups.length}: ${group.label}
+
+Это подзапрос ${index + 1} из ${groups.length}. Оцени ТОЛЬКО эту часть критериев, не пиши про остальные.
+
+${group.instruction}
+${CONCISE_INSTRUCTION}
+
+В КОНЦЕ ОТВЕТА сформулируй 2-3 предложения резюме слабых мест ЭТОЙ ЧАСТИ. Начни этот блок со строки: "РЕЗЮМЕ СЛАБЫХ МЕСТ:"
+
+КОНЦЕПТ:
+${text}`,
+  }));
+}
+
+/**
+ * Build sub-prompts for Block 3, splitting into Body (L2) and Psyche (L3) separately.
+ */
+export function buildBlock3SubPrompts(
+  text: string,
+  mediaType: MediaType,
+  orientationContext: OrientationContext,
+  block2Weaknesses: string,
+  block1Markdown?: string,
+): Array<{ system: string; user: string }> {
+  const mediaLabel = MEDIA_LABELS[mediaType];
+  const orientationBlock = buildOrientationContextBlock(orientationContext, block1Markdown);
+
+  return [
+    // Sub-prompt 1: Body (L2)
+    {
+      system: SYSTEM_PROMPT,
+      user: `${orientationBlock}
+
+РЕЗУЛЬТАТЫ АУДИТА МЕХАНИЗМА (Блок 2):
+Механизм показал следующие слабости:
+${block2Weaknesses}
+
+Тип медиа: ${mediaLabel}
+
+Проведи аудит ТЕЛА этого мира (уровень L2) — ЧАСТЬ 1 из 2: есть ли телесность и последствия?
+
+АУДИТ ПЕРСОНАЖЕЙ — для каждого ключевого персонажа:
+- 5 слоёв глубины: внешность → голос → привычки → страхи → тайна
+- Цена Величия: что персонаж отдал за свою силу/позицию
+- Тест Мэри Сью (8 пунктов): нет ли персонажа-идеала без изъянов?
+- Культовый потенциал (7 пунктов): запомнится ли персонаж?
+- Психологическая достоверность (5 пунктов): ведёт ли себя как живой человек?
+- 3 антипаттерна: функциональный персонаж, говорящая голова, декорация
+
+СИСТЕМЫ МАГИИ/ТЕХНОЛОГИЙ:
+- Тест Сандерсона: понятны ли правила? Есть ли цена? Расширяет ли сюжет?
+- Связанность с миром: как магия/технология влияет на экономику, быт, политику?
+
+ЛОГИЧЕСКИЕ ДЫРЫ — проверь 7 типов:
+1. Нарушение собственных правил мира
+2. Необъяснённые совпадения
+3. Персонажи, которые должны были умереть
+4. Информация, которой не должно быть
+5. Мотивация из ниоткуда
+6. Забытые персонажи/сюжетные линии
+7. Нарушение причинности
+${CONCISE_INSTRUCTION}
+
+В КОНЦЕ ОТВЕТА сформулируй 2-3 предложения резюме слабых мест ЭТОЙ ЧАСТИ. Начни этот блок со строки: "РЕЗЮМЕ СЛАБЫХ МЕСТ:"
+
+КОНЦЕПТ:
+${text}`,
+    },
+    // Sub-prompt 2: Psyche (L3)
+    {
+      system: SYSTEM_PROMPT,
+      user: `${orientationBlock}
+
+РЕЗУЛЬТАТЫ АУДИТА МЕХАНИЗМА (Блок 2):
+Механизм показал следующие слабости:
+${block2Weaknesses}
+
+Тип медиа: ${mediaLabel}
+
+Проведи аудит ПСИХИКИ этого мира (уровень L3) — ЧАСТЬ 2 из 2: работает ли мир как симптом?
+
+АРХИТЕКТУРА ГОЯ — 5 стадий × 4 уровня материализации:
+Для каждой стадии (отрицание, гнев, торг, депрессия, принятие):
+- Персонаж: кто воплощает эту стадию?
+- Локация: где эта стадия «живёт»?
+- Механика/Действие: что в мире работает как эта стадия?
+- Нарративный акт: в каком моменте сюжета она проявляется?
+
+Представь это как текстовую таблицу или структурированный список.
+
+РАСПРЕДЕЛЕНИЕ ПСИХОТИПОВ АНСАМБЛЯ:
+Нет ли двух персонажей в одной стадии горя на одном этапе?
+Каждый ключевой персонаж должен представлять уникальную психологическую позицию.
+${CONCISE_INSTRUCTION}
+
+В КОНЦЕ ОТВЕТА сформулируй 2-3 предложения резюме слабых мест ЭТОЙ ЧАСТИ. Начни этот блок со строки: "РЕЗЮМЕ СЛАБЫХ МЕСТ:"
+
+КОНЦЕПТ:
+${text}`,
+    },
+  ];
+}
+
+/**
+ * Build sub-prompts for Block 4 (Meta/L4) — keep as single request
+ * but provide the sub-prompt interface for consistency.
+ */
+export function buildBlock4SubPrompts(
+  text: string,
+  mediaType: MediaType,
+  orientationContext: OrientationContext,
+  block2Weaknesses: string,
+  block3Weaknesses: string,
+  block1Markdown?: string,
+): Array<{ system: string; user: string }> {
+  return [buildBlock4Prompt(text, mediaType, orientationContext, block2Weaknesses, block3Weaknesses, block1Markdown)];
+}
+
+/**
+ * Build sub-prompts for Block 5 — keep as single request.
+ */
+export function buildBlock5SubPrompts(
+  text: string,
+  mediaType: MediaType,
+  orientationContext: OrientationContext,
+  block2Weaknesses: string,
+  block3Weaknesses: string,
+  block4Weaknesses: string,
+  block1Markdown?: string,
+): Array<{ system: string; user: string }> {
+  return [buildBlock5Prompt(text, mediaType, orientationContext, block2Weaknesses, block3Weaknesses, block4Weaknesses, block1Markdown)];
 }

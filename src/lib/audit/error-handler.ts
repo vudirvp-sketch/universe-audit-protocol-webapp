@@ -21,7 +21,8 @@ export type AuditErrorType =
   | 'fatal_cors_error'
   | 'provider'
   | 'parse_error'
-  | 'truncated';
+  | 'truncated'
+  | 'proxy_timeout';
 
 // ---------------------------------------------------------------------------
 // AuditError — structured error with classification and retry info
@@ -131,6 +132,19 @@ export function classifyLLMError(error: unknown): AuditError {
         'Внутренняя ошибка на стороне LLM-провайдера. Попробуйте позже или смените провайдера.',
       retryable: true,
       status: 500,
+    };
+  }
+
+  // 6.5. ProxyTimeoutError — LLM request exceeded proxy timeout (free plan)
+  if (error instanceof Error && error.name === 'ProxyTimeoutError') {
+    return {
+      type: 'proxy_timeout',
+      retryable: false, // Do NOT retry with same chunk size
+      userMessage:
+        'Прокси-сервер не дождался ответа от модели за отведённое время. ' +
+        'Попробуйте: (1) более быструю модель (Gemini Flash, GPT-4o-mini), ' +
+        '(2) более короткий текст для аудита, ' +
+        '(3) уменьшить количество критериев в настройках.',
     };
   }
 
