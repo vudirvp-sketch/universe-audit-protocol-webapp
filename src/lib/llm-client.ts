@@ -491,6 +491,7 @@ function buildProviderRequestBody(
         max_tokens: effectiveMaxTokens,
         messages: nonSystemMessages,
         system: systemContent,
+        ...(options.temperature !== undefined ? { temperature: options.temperature } : {}),
       });
     }
 

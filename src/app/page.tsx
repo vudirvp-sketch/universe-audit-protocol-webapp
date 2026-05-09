@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { exportV3ToMarkdown } from '@/lib/audit/export-utils';
+import { extractOrientationContext } from '@/lib/audit/context-bridge';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -141,6 +142,11 @@ export default function Home() {
           },
           onBlockComplete: (blockNum, result) => {
             useAuditStateV3.getState().setBlockResult(blockNum, result);
+            // Sync orientation context after Block 1 so the sidebar shows mode/profile immediately
+            if (blockNum === 1) {
+              const ctx = extractOrientationContext(result.markdown);
+              useAuditStateV3.getState().setOrientationContext(ctx);
+            }
           },
           onError: (message) => {
             useAuditStateV3.getState().setError(message);

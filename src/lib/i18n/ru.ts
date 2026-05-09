@@ -20,7 +20,7 @@ export const t = {
     description:
       'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Введите описание вашего мира — и протокол выявит слабости, предложит исправления и оценит культовый потенциал.',
     footer:
-      'Протокол Аудита Вселенной v11.0 — На основе протокола \u00ABАУДИТ_ВСЕЛЕННОЙ_v11.0.md\u00BB',
+      'Протокол Аудита Вселенной v3 — 5 блоков, 4 уровня, free-form markdown',
     footerStats: '4 уровня \u2022 5 блоков \u2022 free-form markdown',
     newAudit: 'Новый аудит',
     cancelAudit: 'Отменить аудит',
@@ -30,7 +30,7 @@ export const t = {
     save: 'Сохранить',
     saved: 'Сохранено!',
     settings: 'Настройки',
-    criteriaCount: '52 критерия',
+    criteriaCount: '5 блоков',
     block1Label: 'Ориентация',
     block2Label: 'Механизм (L1)',
     block3Label: 'Тело + Психика (L2+L3)',
@@ -281,33 +281,8 @@ export const t = {
     newAudit: 'Новый аудит',
   },
 
-  // Grief architecture (used in AuditReportView)
-  grief: {
-    title: 'Матрица архитектуры горя',
-    description: '5 стадий \u00D7 4 уровня материализации',
-    dominantStage: 'Доминирующая стадия',
-    dominant: 'ДОМИНАНТНАЯ',
-    levelLabels: {
-      character: 'Персонаж',
-      location: 'Локация',
-      mechanic: 'Механика/Действие',
-      act: 'Нарративный акт',
-    },
-    // Grief stage descriptions
-    denial: 'Отказ принять реальность',
-    anger: 'Фрустрация и эмоциональный взрыв',
-    bargaining: 'Попытка договориться или отсрочить',
-    depression: 'Глубокая грусть и замкнутость',
-    acceptance: 'Примирение с реальностью',
-  },
-
-  // Generative modules (used in AuditReportView)
-  generative: {
-    title: 'Генеративные модули',
-    griefMapping: 'Карта горя',
-    dilemma: 'Корнелианская дилемма',
-    notApplicable: 'Не применимо',
-  },
+  // Legacy v2 grief/generative sections removed — v3 renders free-form markdown blocks
+  // Grief architecture and generative modules are now inline in Block 3/5 markdown output.
 
   // Home page description
   homeDescription:
