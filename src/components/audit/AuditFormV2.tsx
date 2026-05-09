@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useAuditStateV2 } from '@/hooks/useAuditStateV2';
+import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Sparkles, BookOpen, Gamepad2, Eye, Dices } from 'lucide-react';
-import type { MediaType } from '@/lib/audit/types-v2';
+import type { MediaType } from '@/lib/audit/types-v3';
 
 // ─── Media type labels & icons ────────────────────────────────────────
 
@@ -40,7 +40,7 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
     setInputText,
     mediaType,
     setMediaType,
-  } = useAuditStateV2();
+  } = useAuditStateV3();
 
   // Local input with debounce (same pattern as AuditForm to avoid
   // excessive Zustand writes on every keystroke)

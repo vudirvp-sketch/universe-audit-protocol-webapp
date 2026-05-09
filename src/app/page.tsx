@@ -1,10 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { useAuditStateV2 } from '@/hooks/useAuditStateV2';
+import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { AuditFormV2 } from '@/components/audit/AuditFormV2';
-import { AuditProgressV2 } from '@/components/audit/AuditProgressV2';
-import { AuditReportView } from '@/components/audit/AuditReportView';
+import { AuditProgressV3 } from '@/components/audit/AuditProgressV3';
+import { AuditReportViewV3 } from '@/components/audit/AuditReportViewV3';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -15,23 +15,21 @@ import {
   RotateCcw,
   AlertTriangle,
 } from 'lucide-react';
-import { runAuditPipelineV2 } from '@/lib/audit/pipeline-v2';
-import { exportToMarkdown, exportToJSON } from '@/lib/audit/export-utils';
+import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
+import { exportV3ToMarkdown } from '@/lib/audit/export-utils';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import type { MediaType, AuditReportV2 } from '@/lib/audit/types-v2';
+import type { MediaType } from '@/lib/audit/types-v3';
 
 export default function Home() {
   // =========================================================================
   // HYDRATION GUARD
-  // Prevents React Error #185 (hydration mismatch) in static-export Next.js.
-  // Same pattern as v10 — skipHydration + rehydrate in useEffect.
   // =========================================================================
   const [isHydrated, setIsHydrated] = React.useState(false);
 
   React.useEffect(() => {
-    useAuditStateV2.persist.rehydrate();
+    useAuditStateV3.persist.rehydrate();
   }, []);
 
   React.useEffect(() => {
@@ -39,10 +37,10 @@ export default function Home() {
   }, []);
 
   React.useEffect(() => {
-    const unsubFinish = useAuditStateV2.persist.onFinishHydration(() => {
+    const unsubFinish = useAuditStateV3.persist.onFinishHydration(() => {
       setIsHydrated(true);
     });
-    if (useAuditStateV2.persist.hasHydrated()) {
+    if (useAuditStateV3.persist.hasHydrated()) {
       setIsHydrated(true);
     }
     return unsubFinish;
@@ -51,32 +49,34 @@ export default function Home() {
   // =========================================================================
   // Store selectors
   // =========================================================================
-  const phase = useAuditStateV2(s => s.phase);
-  const currentStep = useAuditStateV2(s => s.currentStep);
-  const step1 = useAuditStateV2(s => s.step1);
-  const step2 = useAuditStateV2(s => s.step2);
-  const step3 = useAuditStateV2(s => s.step3);
-  const meta = useAuditStateV2(s => s.meta);
-  const streamingText = useAuditStateV2(s => s.streamingText);
-  const error = useAuditStateV2(s => s.error);
-  const inputText = useAuditStateV2(s => s.inputText);
-  const mediaType = useAuditStateV2(s => s.mediaType);
+  const phase = useAuditStateV3(s => s.phase);
+  const currentBlock = useAuditStateV3(s => s.currentBlock);
+  const block1 = useAuditStateV3(s => s.block1);
+  const block2 = useAuditStateV3(s => s.block2);
+  const block3 = useAuditStateV3(s => s.block3);
+  const block4 = useAuditStateV3(s => s.block4);
+  const block5 = useAuditStateV3(s => s.block5);
+  const meta = useAuditStateV3(s => s.meta);
+  const streamingText = useAuditStateV3(s => s.streamingText);
+  const error = useAuditStateV3(s => s.error);
+  const inputText = useAuditStateV3(s => s.inputText);
+  const mediaType = useAuditStateV3(s => s.mediaType);
+  const orientationContext = useAuditStateV3(s => s.orientationContext);
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const { provider, apiKey, model, proxyUrl, baseUrl } = useSettings();
   const [proxyUnavailable, setProxyUnavailable] = React.useState(false);
 
-  // ── Health-check: silent background request to proxy /health endpoint ────
+  // ── Health-check ────
   React.useEffect(() => {
     if (!proxyUrl) return;
     const checkHealth = async () => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        // Normalize URL: strip trailing slash to avoid double-slash in path
-        const baseUrl = proxyUrl.replace(/\/+$/, '');
-        const response = await fetch(`${baseUrl}/health`, {
+        const base = proxyUrl.replace(/\/+$/, '');
+        const response = await fetch(`${base}/health`, {
           method: 'GET',
           signal: controller.signal,
         });
@@ -104,25 +104,23 @@ export default function Home() {
     const currentProvider = useSettings.getState().provider;
 
     if (!currentApiKey) {
-      useAuditStateV2.getState().setError('API-ключ не указан. Откройте Настройки и введите ключ.');
+      useAuditStateV3.getState().setError('API-ключ не указан. Откройте Настройки и введите ключ.');
       return;
     }
 
     if (!currentProxyUrl) {
-      useAuditStateV2.getState().setError('URL прокси не настроен. Откройте Настройки.');
+      useAuditStateV3.getState().setError('URL прокси не настроен. Откройте Настройки.');
       return;
     }
 
-    // Create abort controller for cancellation support
     const controller = new AbortController();
     setAbortController(controller);
 
-    // Initialise pipeline state
-    const store = useAuditStateV2.getState();
+    const store = useAuditStateV3.getState();
     store.startAudit();
 
     try {
-      const result = await runAuditPipelineV2(
+      const result = await runAuditPipelineV3(
         {
           text: input.text,
           mediaType: input.mediaType,
@@ -135,42 +133,36 @@ export default function Home() {
           baseUrl: useSettings.getState().baseUrl || undefined,
         },
         {
-          onStepStart: (step) => {
-            // Step is starting — clear streaming text for new step
-            useAuditStateV2.getState().clearStreamingText();
+          onBlockStart: (blockNum) => {
+            useAuditStateV3.getState().clearStreamingText();
           },
-          onChunk: (step, text) => {
-            // Accumulate streaming text in store for live UI
-            useAuditStateV2.getState().appendStreamingText(text);
+          onChunk: (blockNum, text) => {
+            useAuditStateV3.getState().appendStreamingText(text);
           },
-          onStepComplete: (step, result) => {
-            // Store the parsed result for this step
-            useAuditStateV2.getState().setStepResult(step, result);
+          onBlockComplete: (blockNum, result) => {
+            useAuditStateV3.getState().setBlockResult(blockNum, result);
           },
           onError: (message) => {
-            useAuditStateV2.getState().setError(message);
+            useAuditStateV3.getState().setError(message);
           },
         },
         controller.signal,
       );
 
-      // Handle final state
       if (result.error) {
-        useAuditStateV2.getState().setError(result.error);
+        useAuditStateV3.getState().setError(result.error);
       } else if (result.meta) {
-        // Store pipeline meta (tokens, timings, etc.) so UI and export can use it
-        useAuditStateV2.getState().setMeta(result.meta);
+        useAuditStateV3.getState().setMeta(result.meta);
       }
     } catch (err) {
       if (controller.signal.aborted) {
-        // User cancelled — reset to idle
         queueMicrotask(() => {
-          useAuditStateV2.getState().reset();
+          useAuditStateV3.getState().reset();
         });
       } else {
         const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
         queueMicrotask(() => {
-          useAuditStateV2.getState().setError(errorMessage);
+          useAuditStateV3.getState().setError(errorMessage);
         });
       }
     } finally {
@@ -186,7 +178,7 @@ export default function Home() {
     }
   };
 
-  // Download helper for export
+  // Download helper
   const downloadFile = (content: string, filename: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
@@ -213,6 +205,8 @@ export default function Home() {
     );
   }
 
+  const blocks = [null, block1, block2, block3, block4, block5];
+
   // =========================================================================
   // Render
   // =========================================================================
@@ -233,7 +227,7 @@ export default function Home() {
               <Sparkles className="h-6 w-6 text-amber-500" />
               <div>
                 <h1 className="text-xl font-bold">Universe Audit Protocol</h1>
-                <p className="text-xs text-muted-foreground">v11.0</p>
+                <p className="text-xs text-muted-foreground">v3.0</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -252,7 +246,7 @@ export default function Home() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => useAuditStateV2.getState().reset()}
+                onClick={() => useAuditStateV3.getState().reset()}
                 disabled={phase === 'running'}
               >
                 <RotateCcw className="h-5 w-5" />
@@ -269,8 +263,8 @@ export default function Home() {
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold mb-2">Universe Audit Protocol</h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto">
-                  Анализ вымышленных миров: от скелета концепта до рекомендаций. 
-                  Один запуск — полный отчёт.
+                  Анализ вымышленных миров: от скелета концепта до рекомендаций.
+                  Пять блоков — полный отчёт.
                 </p>
               </div>
 
@@ -278,9 +272,9 @@ export default function Home() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {[
                   { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', icon: '\u2699\uFE0F' },
-                  { level: 'L2', name: 'Тело', question: 'Есть ли телесность и последствия?', icon: '\uD83E\uDEC0' },
-                  { level: 'L3', name: 'Психика', question: 'Работает ли мир как симптом?', icon: '\uD83E\uDDE0' },
+                  { level: 'L2+L3', name: 'Тело + Психика', question: 'Есть ли телесность и последствия?', icon: '\uD83E\uDEC0' },
                   { level: 'L4', name: 'Мета', question: 'Задаёт ли вопрос реальной жизни?', icon: '\uD83E\uDE9E' },
+                  { level: 'L5', name: 'Синтез', question: 'Что конкретно исправить?', icon: '\uD83D\uDD27' },
                 ].map((item) => (
                   <Card key={item.level} className="text-center">
                     <CardHeader className="pb-2">
@@ -310,7 +304,7 @@ export default function Home() {
               <div className="flex justify-center gap-4">
                 <Button
                   variant="default"
-                  onClick={() => useAuditStateV2.getState().reset()}
+                  onClick={() => useAuditStateV3.getState().reset()}
                 >
                   <RotateCcw className="h-4 w-4 mr-2" />
                   Новый аудит
@@ -327,9 +321,8 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
                 {/* Left sidebar — progress + controls */}
                 <div className="space-y-4">
-                  <AuditProgressV2
-                    currentStep={currentStep}
-                    streamingText={streamingText}
+                  <AuditProgressV3
+                    currentBlock={currentBlock}
                     onCancel={cancelAudit}
                   />
 
@@ -347,10 +340,10 @@ export default function Home() {
                         <span className="text-muted-foreground">Символов:</span>
                         <span>{inputText.length}</span>
                       </div>
-                      {step1?.auditMode && (
+                      {orientationContext?.auditMode && (
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Режим:</span>
-                          <span>{step1.auditMode}</span>
+                          <span>{orientationContext.auditMode}</span>
                         </div>
                       )}
                     </CardContent>
@@ -358,68 +351,30 @@ export default function Home() {
                 </div>
 
                 {/* Right panel — progressive report */}
-                <AuditReportView
-                  step1={step1}
-                  step2={step2}
-                  step3={step3}
+                <AuditReportViewV3
+                  blocks={blocks}
                   meta={meta}
+                  currentBlock={currentBlock}
                   streamingText={streamingText}
-                  isStreaming={phase === 'running'}
-                  onNewAudit={() => useAuditStateV2.getState().reset()}
-                  onExportMD={() => {
-                    if (!step1 || !step2 || !step3 || !meta) return;
-                    const report: AuditReportV2 = { step1, step2, step3, meta };
-                    const md = exportToMarkdown(report);
-                    downloadFile(md, 'audit-report.md', 'text/markdown');
-                  }}
-                  onExportJSON={() => {
-                    if (!step1 || !step2 || !step3 || !meta) return;
-                    const report: AuditReportV2 = { step1, step2, step3, meta };
-                    const json = exportToJSON(report);
-                    downloadFile(json, 'audit-report.json', 'application/json');
-                  }}
-                  onCopy={() => {
-                    if (!step1 || !step2 || !step3 || !meta) return;
-                    const report: AuditReportV2 = { step1, step2, step3, meta };
-                    const md = exportToMarkdown(report);
-                    navigator.clipboard.writeText(md).catch(() => {
-                      // Fallback for environments where clipboard API is not available
-                    });
-                  }}
+                  phase={phase}
+                  onNewAudit={() => useAuditStateV3.getState().reset()}
                 />
               </div>
             </div>
           ) : (
             /* ===== Done — Full Report Only ===== */
             <div className="max-w-5xl mx-auto">
-              <AuditReportView
-                step1={step1}
-                step2={step2}
-                step3={step3}
+              <AuditReportViewV3
+                blocks={blocks}
                 meta={meta}
+                currentBlock={currentBlock}
                 streamingText=""
-                isStreaming={false}
-                onNewAudit={() => useAuditStateV2.getState().reset()}
+                phase={phase}
                 onExportMD={() => {
-                  if (!step1 || !step2 || !step3 || !meta) return;
-                  const report: AuditReportV2 = { step1, step2, step3, meta };
-                  const md = exportToMarkdown(report);
+                  const md = exportV3ToMarkdown(blocks);
                   downloadFile(md, 'audit-report.md', 'text/markdown');
                 }}
-                onExportJSON={() => {
-                  if (!step1 || !step2 || !step3 || !meta) return;
-                  const report: AuditReportV2 = { step1, step2, step3, meta };
-                  const json = exportToJSON(report);
-                  downloadFile(json, 'audit-report.json', 'application/json');
-                }}
-                onCopy={() => {
-                  if (!step1 || !step2 || !step3 || !meta) return;
-                  const report: AuditReportV2 = { step1, step2, step3, meta };
-                  const md = exportToMarkdown(report);
-                  navigator.clipboard.writeText(md).catch(() => {
-                    // Fallback for environments where clipboard API is not available
-                  });
-                }}
+                onNewAudit={() => useAuditStateV3.getState().reset()}
               />
             </div>
           )}
@@ -428,10 +383,10 @@ export default function Home() {
         {/* Footer */}
         <footer className="border-t py-4">
           <div className="container flex items-center justify-between text-sm text-muted-foreground">
-            <p>Universe Audit Protocol v11.0</p>
+            <p>Universe Audit Protocol v3.0</p>
             <div className="flex items-center gap-4">
               <BookOpen className="h-4 w-4" />
-              <span>52 критерия | 3 запроса | 4 уровня</span>
+              <span>5 блоков | 4 уровня</span>
             </div>
           </div>
         </footer>

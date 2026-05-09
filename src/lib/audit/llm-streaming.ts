@@ -35,7 +35,7 @@
  * отвечать 90-120 секунд.
  */
 
-import type { LLMConfig, PromptSet } from './types-v2';
+import type { LLMConfig, PromptSet } from './types-v3';
 import { createLLMClient, type LLMProvider, type ChatCompletionResponse } from '../llm-client';
 
 // ============================================================
@@ -55,8 +55,10 @@ export interface LLMStreamingOptions {
   onChunk: (text: string) => void;
   maxTokens: number;
   abortSignal?: AbortSignal;
-  /** Response format — 'markdown' for V2 pipeline, 'json' for legacy */
+  /** Response format — 'markdown' for V3 pipeline, 'json' for legacy */
   responseFormat?: 'markdown' | 'json';
+  /** Temperature for LLM generation. If not provided, defaults to 0.7. */
+  temperature?: number;
 }
 
 // ============================================================
@@ -83,7 +85,8 @@ export interface LLMStreamingOptions {
  *   buffered timeout (120s) BUT signal already aborted → instant fail
  */
 export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LLMStreamingResult> {
-  const { prompt, llmConfig, onChunk, maxTokens, abortSignal } = options;
+  const { prompt, llmConfig, onChunk, maxTokens, abortSignal, temperature } = options;
+  const effectiveTemperature = temperature ?? 0.7;
 
   const provider = llmConfig.provider as LLMProvider;
   const client = createLLMClient({
@@ -125,7 +128,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         {
           messages,
           max_tokens: maxTokens,
-          temperature: 0.7,
+          temperature: effectiveTemperature,
           signal: abortSignal,
           responseFormat: options.responseFormat || 'markdown',
         },
@@ -167,7 +170,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         const bufferedResponse = await client.chatCompletion({
           messages,
           max_tokens: maxTokens,
-          temperature: 0.7,
+          temperature: effectiveTemperature,
           signal: fallbackController.signal,
           responseFormat: options.responseFormat || 'markdown',
         });
@@ -239,7 +242,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         bufferedResponse = await client.chatCompletion({
           messages,
           max_tokens: maxTokens,
-          temperature: 0.7,
+          temperature: effectiveTemperature,
           signal: fallbackController.signal,
           responseFormat: options.responseFormat || 'markdown',
         });
