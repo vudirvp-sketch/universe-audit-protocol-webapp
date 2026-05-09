@@ -1,5 +1,5 @@
 /**
- * Centralized Russian strings for the Universe Audit Protocol v11.0.
+ * Centralized Russian strings for the Universe Audit Protocol v3.
  * All user-facing text is defined here as a flat const object.
  *
  * Language Contract (Section 0.5):
@@ -8,19 +8,20 @@
  * - JSON values in LLM output: Russian
  * - Enum values: English (displayed as-is in badges)
  *
- * v11.0: Все ключи от v10.0 (гейты, 12 шагов, старые компоненты) удалены.
+ * v3: 5-block pipeline, free-form markdown output.
+ * Legacy v2 keys (3-step pipeline, structured cards) removed.
  */
 
 export const t = {
   app: {
     title: 'Протокол Аудита Вселенной',
-    version: 'v11.0',
+    version: 'v3.0',
     subtitle: 'Анализ вымышленных миров через 4 иерархических уровня',
     description:
       'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Введите описание вашего мира — и протокол выявит слабости, предложит исправления и оценит культовый потенциал.',
     footer:
       'Протокол Аудита Вселенной v11.0 — На основе протокола \u00ABАУДИТ_ВСЕЛЕННОЙ_v11.0.md\u00BB',
-    footerStats: '4 уровня \u2022 52 критерия \u2022 3 LLM-запроса',
+    footerStats: '4 уровня \u2022 5 блоков \u2022 free-form markdown',
     newAudit: 'Новый аудит',
     cancelAudit: 'Отменить аудит',
     startAudit: 'Начать аудит',
@@ -30,9 +31,11 @@ export const t = {
     saved: 'Сохранено!',
     settings: 'Настройки',
     criteriaCount: '52 критерия',
-    step1Label: 'Знакомство + Скелет',
-    step2Label: 'Оценка по критериям',
-    step3Label: 'Рекомендации',
+    block1Label: 'Ориентация',
+    block2Label: 'Механизм (L1)',
+    block3Label: 'Тело + Психика (L2+L3)',
+    block4Label: 'Мета (L4)',
+    block5Label: 'Синтез + Рекомендации',
     exportMD: 'Скачать MD',
     exportJSON: 'Скачать JSON',
     copyToClipboard: 'Копировать',
@@ -61,12 +64,14 @@ export const t = {
     fileReadError: 'Ошибка чтения файла',
   },
 
-  // v11.0: 3-шаговый пайплайн (вместо 12 шагов v10.0)
+  // v3: 5-блочный пайплайн
   phases: {
     idle: 'Готов',
-    step1: 'Знакомство + Скелет',
-    step2: 'Оценка по критериям',
-    step3: 'Рекомендации',
+    block1: 'Ориентация',
+    block2: 'Механизм (L1)',
+    block3: 'Тело + Психика (L2+L3)',
+    block4: 'Мета (L4)',
+    block5: 'Синтез + Рекомендации',
     complete: 'Завершено',
     failed: 'Ошибка',
     cancelled: 'Отменено',
@@ -74,9 +79,11 @@ export const t = {
 
   phaseDescriptions: {
     idle: 'Введите нарратив для начала',
-    step1: 'Определение режима аудита, профиля автора, скелета и скрининга',
-    step2: 'Оценка всех критериев по 4 уровням (Механизм, Тело, Психика, Мета)',
-    step3: 'Приоритизированные рекомендации, цепочки «А чтобы что?», генеративные модули',
+    block1: 'Определение режима аудита, профиля автора, скелета концепта и скрининга',
+    block2: 'Аудит механизма: работает ли мир как система (L1)?',
+    block3: 'Аудит тела и психики: телесность, персонажи, архитектура горя (L2+L3)',
+    block4: 'Аудит мета-уровня: дилемма, этика, мисдирекшн (L4)',
+    block5: 'Синтез: приоритизированные рекомендации и итоговый вердикт',
     complete: 'Аудит завершён',
     failed: 'Ошибка при выполнении аудита',
     cancelled: 'Аудит отменён пользователем',
@@ -247,59 +254,31 @@ export const t = {
     },
   },
 
-  // v11.0: Ключи для AuditReportView (единый компонент отчёта)
+  // v3: Ключи для AuditReportViewV3 (5-блочный отчёт с markdown)
   report: {
     title: 'Отчёт аудита',
-    protocolVersion: 'Протокол Аудита Вселенной v11.0',
-    // Classifications
-    cult_masterpiece: 'Культовый шедевр',
-    powerful: 'Мощный нарратив',
-    living_weak_soul: 'Живой мир, слабая душа',
-    decoration: 'Декорация',
-    // Report sections
-    summary: 'Сводка',
-    skeleton: 'Скелет концепта',
-    screening: 'Скрининг',
-    assessment: 'Оценка по критериям',
-    recommendations: 'Рекомендации',
-    chains: 'Цепочки «А чтобы что?»',
-    generative: 'Генеративные модули',
-    meta: 'Мета',
-    // Skeleton labels
-    skeletonLabels: {
-      thematicLaw: 'Тематический закон',
-      rootTrauma: 'Корневая травма',
-      hamartia: 'Хамартия',
-      pillars: '3 Столпа',
-      emotionalEngine: 'Эмоциональный двигатель',
-      authorProhibition: 'Авторский запрет',
-      targetExperience: 'Целевой опыт',
-      centralQuestion: 'Центральный вопрос',
-    },
-    // Screening
-    screeningQuestions: {
-      q1: 'Закон как правило?',
-      q2: 'Мир без героя?',
-      q3: 'Воплощённость?',
-      q4: 'Хамартия определена?',
-      q5: 'Болезненный выбор?',
-      q6: 'Логика антагониста?',
-      q7: 'Финал необратим?',
-    },
-    notFound: 'НЕ НАЙДЕНО',
-    // Approach labels
-    approachConservative: 'Консервативный',
-    approachCompromise: 'Компромиссный',
-    approachRadical: 'Радикальный',
-    // Effort labels
-    effortHours: 'часы',
-    effortDays: 'дни',
-    effortWeeks: 'недели',
-    // Copy/Download
-    copy: 'Копировать',
-    copied: 'Скопировано!',
-    downloadJson: 'Скачать JSON',
-    downloadMarkdown: 'Скачать Markdown',
+    protocolVersion: 'Universe Audit Protocol v3',
+    // Block labels
+    block1: 'Ориентация',
+    block2: 'Механизм (L1)',
+    block3: 'Тело + Психика (L2+L3)',
+    block4: 'Мета (L4)',
+    block5: 'Синтез + Рекомендации',
+    // Status labels
+    waiting: 'Ожидание...',
+    streaming: 'стримится...',
+    completed: 'Завершено',
+    // Meta info
+    tokens: 'Токены',
+    time: 'Время',
+    model: 'Модель',
+    // Verdict options
+    verdictAlive: 'Мир жив',
+    verdictNeedsWork: 'Требует доработки',
+    verdictRedesign: 'Фундаментальный редизайн',
+    // Download
+    downloadMarkdown: 'Скачать MD',
+    newAudit: 'Новый аудит',
   },
 
   // Grief architecture (used in AuditReportView)
@@ -332,5 +311,5 @@ export const t = {
 
   // Home page description
   homeDescription:
-    'Протокол Аудита Вселенной оценивает вымышленные миры через 4 иерархических уровня: Механизм, Тело, Психика и Мета. Введите описание вашего мира — и протокол выявит слабости, предложит исправления и оценит культовый потенциал. Три LLM-запроса, streaming-отчёт, без гейтов и блокировок.',
+    'Universe Audit Protocol v3 — анализ вымышленных миров через 5 последовательных блоков: Ориентация, Механизм, Тело+Психика, Мета, Синтез. Бесплатный markdown-отчёт, streaming, без гейтов и блокировок.',
 } as const;
