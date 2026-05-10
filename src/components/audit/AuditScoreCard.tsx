@@ -19,13 +19,10 @@ interface AuditScoreCardProps {
 // ============================================================
 
 function getVerdict(score: ChecklistScoreResult): { text: string; color: string } {
-  const l1 = score.byLevel['L1'];
-  if (l1) {
-    if (l1.fulfilled >= 13) return { text: 'Мир жив', color: 'text-green-600 dark:text-green-400' };
-    if (l1.fulfilled >= 10) return { text: 'Требует доработки', color: 'text-yellow-600 dark:text-yellow-400' };
-    return { text: 'Фундаментальный редизайн', color: 'text-red-600 dark:text-red-400' };
-  }
-  // Fallback to overall score
+  // Use overall scorePercent for verdict — the 13/17 threshold from v10.0
+  // refers specifically to criterion C1's "17 критериев живого мира", not to
+  // the L1 grouping in byLevel (which contains ~25 items). scorePercent is
+  // the correct proxy: 13/17 ≈ 76%, 10/17 ≈ 59%.
   if (score.scorePercent >= 75) return { text: 'Мир жив', color: 'text-green-600 dark:text-green-400' };
   if (score.scorePercent >= 50) return { text: 'Требует доработки', color: 'text-yellow-600 dark:text-yellow-400' };
   return { text: 'Фундаментальный редизайн', color: 'text-red-600 dark:text-red-400' };

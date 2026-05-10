@@ -88,14 +88,36 @@ function extractSkeletonSummary(text: string): string | null {
   let foundAny = false;
 
   for (const elem of elements) {
+    let found = false;
     for (const key of elem.keys) {
-      // Match "Key:" or "Key —" or "**Key**:" followed by text to end of line
-      const regex = new RegExp(`${escapeRegex(key)}\\s*[:\\—\\-]\\s*(.+?)(?:\\n|$)`, 'i');
-      const match = text.match(regex);
-      if (match && match[1].trim().length > 0) {
-        lines.push(`${elem.label}: ${match[1].trim()}`);
+      // Pattern 1: "Key:" or "Key —" or "**Key**:" followed by text
+      const regex1 = new RegExp(`${escapeRegex(key)}\\s*[:\\—\\-]\\s*(.+?)(?:\\n|$)`, 'i');
+      const match1 = text.match(regex1);
+      if (match1 && match1[1].trim().length > 0) {
+        lines.push(`${elem.label}: ${match1[1].trim()}`);
         foundAny = true;
-        break; // Found this element, move to next
+        found = true;
+        break;
+      }
+
+      // Pattern 2: Table row "| **Key** | text |"
+      const regex2 = new RegExp(`\\|\\s*\\*\\*${escapeRegex(key)}\\*\\*\\s*\\|\\s*(.+?)\\s*\\|`, 'i');
+      const match2 = text.match(regex2);
+      if (match2 && match2[1].trim().length > 0) {
+        lines.push(`${elem.label}: ${match2[1].trim()}`);
+        foundAny = true;
+        found = true;
+        break;
+      }
+
+      // Pattern 3: Bullet point "- **Key**: text"
+      const regex3 = new RegExp(`[-•]\\s*\\*\\*${escapeRegex(key)}\\*\\*\\s*[:\\—\\-]?\\s*(.+?)(?:\\n|$)`, 'i');
+      const match3 = text.match(regex3);
+      if (match3 && match3[1].trim().length > 0) {
+        lines.push(`${elem.label}: ${match3[1].trim()}`);
+        foundAny = true;
+        found = true;
+        break;
       }
     }
   }
@@ -163,13 +185,29 @@ export function extractWeaknessesSummary(markdown: string): string {
     return summaries.join('\n\n');
   }
 
-  // Final fallback: last 500 characters
+  // Final fallback: look for paragraphs with problem/weakness keywords
+  const weaknessKeywords = ['слаб', 'дыр', 'проблем', 'недостат', 'отсутств', 'нарушен', 'провал', 'fail', 'weak', 'hole', 'problem'];
+  const paragraphs = markdown.split(/\n\n+/);
+  const weakParagraphs = paragraphs.filter(p =>
+    weaknessKeywords.some(kw => p.toLowerCase().includes(kw))
+  );
+  if (weakParagraphs.length > 0) {
+    // Return last 2-3 weak paragraphs (up to 800 chars)
+    const selected = weakParagraphs.slice(-3).join('\n\n');
+    return selected.length > 800 ? selected.slice(-800).trim() : selected.trim();
+  }
+
+  // Absolute fallback: last 500 characters
   return markdown.slice(-500).trim();
 }
 
 // ============================================================
 // Helpers
 // ============================================================
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // ============================================================
 // Block 1 screening results extraction (7 YES/NO checks)
@@ -212,10 +250,4 @@ export function extractScreeningResults(block1Markdown: string): ScreeningResult
   return foundAny ? results : null;
 }
 
-// ============================================================
-// Helpers
-// ============================================================
 
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
