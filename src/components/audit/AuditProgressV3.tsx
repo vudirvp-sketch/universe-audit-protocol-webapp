@@ -29,7 +29,9 @@ const BLOCKS = [
 function getBlockStatus(
   blockIndex: number,
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5,
+  phase: PipelinePhase,
 ): 'waiting' | 'in_progress' | 'completed' {
+  if (phase === 'done') return 'completed';
   if (blockIndex < currentBlock) return 'completed';
   if (blockIndex === currentBlock) return 'in_progress';
   return 'waiting';
@@ -56,7 +58,10 @@ export function AuditProgressV3({
   orientationContext,
 }: AuditProgressV3Props) {
   // Progress: show completed blocks / total, not current block / total
-  const completedBlocks = BLOCKS.filter(b => b.index < currentBlock).length;
+  // In 'done' phase all 5 blocks are completed → 100%
+  const completedBlocks = phase === 'done'
+    ? 5
+    : BLOCKS.filter(b => b.index < currentBlock).length;
   const progressPercent = Math.round((completedBlocks / 5) * 100);
   const isAuditing = currentBlock > 0 && currentBlock <= 5 && phase === 'running';
 
@@ -83,7 +88,7 @@ export function AuditProgressV3({
         <div className="space-y-2">
           <div className="flex justify-between text-xs text-muted-foreground">
             <span>Прогресс</span>
-            <span>{currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${chunkDisplay}` : 'Подготовка...'}</span>
+            <span>{phase === 'done' ? 'Завершено' : currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${chunkDisplay}` : 'Подготовка...'}</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>
@@ -91,7 +96,7 @@ export function AuditProgressV3({
         {/* Block indicators — with timing, tokens, and click-to-scroll (Tasks 4.2, 5b, 9) */}
         <div className="space-y-1">
           {BLOCKS.map((block) => {
-            const status = getBlockStatus(block.index, currentBlock);
+            const status = getBlockStatus(block.index, currentBlock, phase);
             const isActive = status === 'in_progress';
             const isChunked = block.defaultChunks > 1;
             const chunkLabel = isChunked ? ` (${block.defaultChunks} части)` : '';
