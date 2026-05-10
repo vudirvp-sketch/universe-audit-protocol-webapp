@@ -1,4 +1,9 @@
 /**
+ * @deprecated Use createLLMClient().chatCompletionStream() instead.
+ * This module is kept only for test compatibility.
+ * Long-term: refactor streaming.test.ts to test chatCompletionStream(),
+ * then delete this module entirely.
+ *
  * Streaming Support — SSE parser and utilities for real-time LLM output.
  *
  * This module handles:

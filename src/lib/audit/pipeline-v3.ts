@@ -21,7 +21,7 @@ import type {
   OrientationContext,
 } from './types-v3';
 import { BLOCK_TEMPERATURES } from './types-v3';
-import { getModelCapabilities } from '../llm-client';
+import { getModelCapabilities, getEffectiveModelCapabilities } from '../llm-client';
 import type { ModelCapabilities } from '../llm-client';
 import type { LLMStreamingResult } from './llm-streaming';
 import { callLLMStreaming } from './llm-streaming';
@@ -90,10 +90,19 @@ export async function runAuditPipelineV3(
   };
 
   try {
-    const modelCaps = getModelCapabilities(
+    const modelCaps = getEffectiveModelCapabilities(
       llmConfig.provider as Parameters<typeof getModelCapabilities>[0],
       llmConfig.model,
+      {
+        customContextWindow: llmConfig.customContextWindow,
+        customMaxOutputTokens: llmConfig.customMaxOutputTokens,
+        customSupportsJSONMode: llmConfig.customSupportsJSONMode,
+      },
     );
+
+    // Calculate RPM-based delay between chunks (FIX-07)
+    // Default: 3 RPM → 20s delay; 60 RPM → 1s delay; minimum 1 second
+    const rpmDelayMs = Math.max(1_000, Math.floor(60_000 / (llmConfig.rpmLimit || 3)));
 
     // ============================================================
     // Block 1: Orientation (single request)
@@ -107,6 +116,7 @@ export async function runAuditPipelineV3(
       callbacks,
       abortSignal,
       () => [buildBlock1Prompt(input.text, input.mediaType)],
+      rpmDelayMs,
     );
     state.block1 = block1Result;
 
@@ -125,6 +135,7 @@ export async function runAuditPipelineV3(
       callbacks,
       abortSignal,
       () => buildBlock2SubPrompts(input.text, input.mediaType, state.orientationContext!, state.block1?.markdown),
+      rpmDelayMs,
     );
     state.block2 = block2Result;
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block2Result.markdown));
@@ -147,6 +158,7 @@ export async function runAuditPipelineV3(
         state.accumulatedWeaknesses[0], // Block 2 weaknesses
         state.block1?.markdown,
       ),
+      rpmDelayMs,
     );
     state.block3 = block3Result;
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block3Result.markdown));
@@ -170,6 +182,7 @@ export async function runAuditPipelineV3(
         state.accumulatedWeaknesses[1], // Block 3 weaknesses
         state.block1?.markdown,
       ),
+      rpmDelayMs,
     );
     state.block4 = block4Result;
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block4Result.markdown));
@@ -195,6 +208,7 @@ export async function runAuditPipelineV3(
         state.block1?.markdown,
         input.referenceComparison,
       ),
+      rpmDelayMs,
     );
     state.block5 = block5Result;
 
@@ -224,6 +238,12 @@ export async function runAuditPipelineV3(
     return state;
 
   } catch (error: unknown) {
+    // User cancellation — do NOT call onError, let page.tsx handle the reset
+    if (abortSignal?.aborted) {
+      state.phase = 'idle';
+      state.currentBlock = 0;
+      return state;
+    }
     const classified = classifyLLMError(error);
     state.phase = 'error';
     state.error = classified.userMessage;
@@ -252,6 +272,7 @@ async function executeChunkedBlock(
   callbacks: StreamingCallbacksV3,
   abortSignal: AbortSignal | undefined,
   buildSubPrompts: () => Array<{ system: string; user: string }>,
+  rpmDelayMs: number = 3_000,
 ): Promise<BlockResult> {
   state.currentBlock = blockNumber;
   const subPrompts = buildSubPrompts();
@@ -317,7 +338,7 @@ async function executeChunkedBlock(
 
     // Delay between sub-requests to avoid rate limits on free models
     if (i < subPrompts.length - 1) {
-      await abortAwareSleep(3_000, abortSignal); // 3s pause between chunks
+      await abortAwareSleep(rpmDelayMs, abortSignal); // RPM-based pause between chunks
     }
 
     // Check abort between sub-requests

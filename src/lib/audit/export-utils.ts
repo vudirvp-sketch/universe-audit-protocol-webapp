@@ -144,8 +144,15 @@ export function exportAuditHTML(
       </table>`;
   }
 
+  const blockMap: Record<number, BlockResult | null> = {
+    1: state.block1,
+    2: state.block2,
+    3: state.block3,
+    4: state.block4,
+    5: state.block5,
+  };
   const blockSections = [1, 2, 3, 4, 5].map(i => {
-    const block = (state as unknown as Record<string, BlockResult | null>)[`block${i}`];
+    const block = blockMap[i];
     const label = BLOCK_LABELS[i];
     const content = block?.markdown
       ? block.markdown.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

@@ -20,7 +20,7 @@
  */
 
 import type { LLMConfig, PromptSet } from './types-v3';
-import { createLLMClient, type LLMProvider, type ChatCompletionResponse } from '../llm-client';
+import { createLLMClient, type LLMProvider, type ChatCompletionResponse, type CustomModelOverrides } from '../llm-client';
 
 // ============================================================
 // Типы
@@ -66,13 +66,21 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
   const effectiveTemperature = temperature ?? 0.7;
 
   const provider = llmConfig.provider as LLMProvider;
+  const customOverrides: CustomModelOverrides | undefined = (
+    llmConfig.customContextWindow || llmConfig.customMaxOutputTokens || llmConfig.customSupportsJSONMode != null
+  ) ? {
+    customContextWindow: llmConfig.customContextWindow || undefined,
+    customMaxOutputTokens: llmConfig.customMaxOutputTokens || undefined,
+    customSupportsJSONMode: llmConfig.customSupportsJSONMode,
+  } : undefined;
+
   const client = createLLMClient({
     provider,
     apiKey: llmConfig.apiKey,
     model: llmConfig.model,
     baseUrl: llmConfig.baseUrl,
     proxyUrl: llmConfig.proxyUrl,
-  });
+  }, customOverrides);
 
   const messages = [
     { role: 'system' as const, content: prompt.system },

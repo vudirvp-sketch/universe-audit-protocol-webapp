@@ -22,6 +22,7 @@ import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import type { MediaType } from '@/lib/audit/types-v3';
+import { t } from '@/lib/i18n/ru';
 
 export default function Home() {
   // =========================================================================
@@ -136,6 +137,10 @@ export default function Home() {
           model: currentModel || '',
           proxyUrl: currentProxyUrl,
           baseUrl: useSettings.getState().baseUrl || undefined,
+          customContextWindow: useSettings.getState().customContextWindow || undefined,
+          customMaxOutputTokens: useSettings.getState().customMaxOutputTokens || undefined,
+          customSupportsJSONMode: useSettings.getState().customSupportsJSONMode,
+          rpmLimit: useSettings.getState().rpmLimit || undefined,
         },
         {
           onBlockStart: (blockNum, totalChunks, chunkIndex) => {
@@ -175,14 +180,11 @@ export default function Home() {
       }
     } catch (err) {
       if (controller.signal.aborted) {
-        queueMicrotask(() => {
-          useAuditStateV3.getState().reset();
-        });
+        // User cancelled — clean reset, no error screen
+        useAuditStateV3.getState().reset();
       } else {
         const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
-        queueMicrotask(() => {
-          useAuditStateV3.getState().setError(errorMessage);
-        });
+        useAuditStateV3.getState().setError(errorMessage);
       }
     } finally {
       setAbortController(null);
@@ -246,7 +248,7 @@ export default function Home() {
               <Sparkles className="h-6 w-6 text-amber-500" />
               <div>
                 <h1 className="text-xl font-bold">Universe Audit Protocol</h1>
-                <p className="text-xs text-muted-foreground">v3.0</p>
+                <p className="text-xs text-muted-foreground">{t.app.version}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -293,7 +295,7 @@ export default function Home() {
                   { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', icon: '\u2699\uFE0F' },
                   { level: 'L2+L3', name: 'Тело + Психика', question: 'Есть ли телесность и последствия?', icon: '\uD83E\uDEC0' },
                   { level: 'L4', name: 'Мета', question: 'Задаёт ли вопрос реальной жизни?', icon: '\uD83E\uDE9E' },
-                  { level: 'L5', name: 'Синтез', question: 'Что конкретно исправить?', icon: '\uD83D\uDD27' },
+                  { level: 'Блок 5', name: 'Синтез', question: 'Что конкретно исправить?', icon: '\uD83D\uDD27' },
                 ].map((item) => (
                   <Card key={item.level} className="text-center">
                     <CardHeader className="pb-2">
@@ -458,7 +460,7 @@ export default function Home() {
         {/* Footer */}
         <footer className="border-t py-4">
           <div className="container flex items-center justify-between text-sm text-muted-foreground">
-            <p>Universe Audit Protocol v3.0</p>
+            <p>{`Universe Audit Protocol ${t.app.version}`}</p>
             <div className="flex items-center gap-4">
               <BookOpen className="h-4 w-4" />
               <span>5 блоков | 4 уровня</span>

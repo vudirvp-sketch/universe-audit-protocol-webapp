@@ -59,8 +59,6 @@ export interface ChatCompletionOptions {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
-  /** @deprecated No longer used — client-side retry removed to avoid cascade with proxy retries. */
-  maxRateLimitRetries?: number;
   /** AbortSignal to cancel the request (e.g. for timeout). Passed to fetch(). */
   signal?: AbortSignal;
   /** If true, tells the proxy to skip server-side 429 retries (for test connections). */
@@ -459,7 +457,8 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
 function buildProviderRequestBody(
   provider: LLMProvider,
   options: ChatCompletionOptions,
-  effectiveModel: string
+  effectiveModel: string,
+  customOverrides?: CustomModelOverrides,
 ): string {
   // Resolve maxOutputTokens clamped to model capabilities
   const effectiveMaxTokens = resolveMaxOutputTokens(provider, effectiveModel, options.max_tokens);
@@ -498,7 +497,7 @@ function buildProviderRequestBody(
     case 'google': {
       // Google Gemini API format
       const systemContent = options.messages.find(m => m.role === 'system')?.content;
-      const caps = getModelCapabilities(provider, effectiveModel);
+      const caps = getEffectiveModelCapabilities(provider, effectiveModel, customOverrides);
 
       const generationConfig: Record<string, unknown> = {
         temperature: options.temperature ?? 0.7,
@@ -539,7 +538,7 @@ function buildProviderRequestBody(
 
     default: {
       // OpenAI-compatible format (openai, deepseek, groq, openrouter, mistral, zai, etc.)
-      const caps = getModelCapabilities(provider, effectiveModel);
+      const caps = getEffectiveModelCapabilities(provider, effectiveModel, customOverrides);
       const body: Record<string, unknown> = {
         model: effectiveModel,
         messages: options.messages,
@@ -712,6 +711,38 @@ function normalizeProviderResponse(
 // ============================================================================
 
 /**
+ * Get effective model capabilities, applying user overrides on top of auto-detected values.
+ * If a custom override is provided and valid, it takes precedence.
+ */
+export interface CustomModelOverrides {
+  customContextWindow?: number;
+  customMaxOutputTokens?: number;
+  customSupportsJSONMode?: boolean | null;
+}
+
+export function getEffectiveModelCapabilities(
+  provider: LLMProvider,
+  model: string,
+  overrides?: CustomModelOverrides,
+): ModelCapabilities {
+  const base = getModelCapabilities(provider, model);
+  if (!overrides) return base;
+
+  return {
+    contextWindow: (overrides.customContextWindow && overrides.customContextWindow > 0)
+      ? overrides.customContextWindow
+      : base.contextWindow,
+    maxOutputTokens: (overrides.customMaxOutputTokens && overrides.customMaxOutputTokens > 0)
+      ? overrides.customMaxOutputTokens
+      : base.maxOutputTokens,
+    supportsJSONMode: overrides.customSupportsJSONMode != null
+      ? overrides.customSupportsJSONMode
+      : base.supportsJSONMode,
+    supportsSystemMessages: base.supportsSystemMessages,
+  };
+}
+
+/**
  * Creates an LLM API client that routes requests through the CORS proxy.
  * All requests go through the proxy — no direct browser-to-provider calls.
  *
@@ -724,7 +755,10 @@ function normalizeProviderResponse(
  * Instead, we throw immediately on transport errors and let the higher layer
  * (audit-step.ts) decide whether to retry for logical reasons (invalid JSON, etc.).
  */
-export function createLLMClient(config: LLMClientConfig) {
+export function createLLMClient(
+  config: LLMClientConfig,
+  customOverrides?: CustomModelOverrides,
+) {
   const providerConfig = LLM_PROVIDERS[config.provider];
   const model = config.model || providerConfig.defaultModel;
 
@@ -748,7 +782,7 @@ export function createLLMClient(config: LLMClientConfig) {
     }
 
     // Build the request body in the provider's native format
-    const payload = buildProviderRequestBody(config.provider, options, effectiveModel);
+    const payload = buildProviderRequestBody(config.provider, options, effectiveModel, customOverrides);
 
     // Build the proxy request
     const proxyRequest: ProxyRequest = {
@@ -951,7 +985,7 @@ export function createLLMClient(config: LLMClientConfig) {
     }
 
     // Build the request body with stream: true injected
-    const rawPayload = buildProviderRequestBody(config.provider, options, effectiveModel);
+    const rawPayload = buildProviderRequestBody(config.provider, options, effectiveModel, customOverrides);
 
     // ── Preflight validation — catch missing fields before hitting the proxy ──
     if (!config.apiKey || config.apiKey.trim() === '') {

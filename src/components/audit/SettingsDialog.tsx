@@ -211,7 +211,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           { role: 'user', content: 'Ответь одним словом: работает' },
         ],
         max_tokens: 10,
-        maxRateLimitRetries: 0, // Deprecated but kept for type compatibility — no client-side retries
         signal: controller.signal, // Real fetch cancellation on timeout
         skipProxyRetry: true, // Tell proxy to skip server-side 429 retries
       });
@@ -582,7 +581,18 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 if (!instructions) return null;
                 return (
                   <ol className="list-decimal list-inside space-y-1">
-                    <li dangerouslySetInnerHTML={{ __html: instructions.step1 }} />
+                    <li>
+                      {instructions.step1Url ? (
+                        <>
+                          {instructions.step1Text}{' '}
+                          <a href={instructions.step1Url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                            {instructions.step1Url.replace(/https?:\/\//, '').split('/')[0]}
+                          </a>
+                        </>
+                      ) : (
+                        instructions.step1Text
+                      )}
+                    </li>
                     <li>{instructions.step2}</li>
                     {instructions.step3 && <li>{instructions.step3}</li>}
                   </ol>

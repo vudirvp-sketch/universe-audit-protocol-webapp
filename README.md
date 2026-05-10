@@ -1,6 +1,6 @@
 # Universe Audit Protocol v10.0
 
-AI-powered tool for auditing fictional worlds and narratives through a 12-step sequential pipeline with 4 hierarchical gate levels. No deployment, no downloads — just open the link, enter your API key, and start analyzing.
+AI-powered tool for auditing fictional worlds and narratives through a 5-block sequential pipeline with 4 hierarchical analysis levels. No deployment, no downloads — just open the link, enter your API key, and start analyzing.
 
 ## Quick Start
 
@@ -14,19 +14,24 @@ The CORS proxy is pre-configured. You don't need to deploy anything.
 
 ## What it does
 
-This tool analyzes narratives (novels, games, films, anime, series, TTRPGs) through a 12-step sequential pipeline with 4 hierarchical gate levels:
+This tool analyzes narratives (novels, games, films, anime, series, TTRPGs) through a 5-block sequential pipeline:
 
-| Level | Question | Focus |
-|-------|----------|-------|
-| **L1 (Mechanism)** | "Does the world work as a system?" | Thematic law, root trauma, hamartia, emotional engine |
-| **L2 (Body)** | "Is there embodiment and consequences?" | Pillars, prohibition, target experience, spatial memory |
-| **L3 (Psyche)** | "Does the world work as a symptom?" | Grief architecture, dominant stage, hard check (>=2 levels) |
-| **L4 (Meta)** | "Does it ask a question about the agent's real life?" | Three layers, cornelian dilemma, agent mirror, cult potential |
+| Block | Name | Level | Description |
+|-------|------|-------|-------------|
+| **1** | Orientation | — | Detect audit mode (Conflict/Kishō/Hybrid), author profile, concept skeleton, 7-question screening |
+| **2** | Mechanism | L1 | MDA+OT, 17 vitality criteria, connectedness, economic arrow, "A chtoby chto?" test (4 chunks) |
+| **3** | Body + Psyche | L2+L3 | 5-layer character model, hamartia, Mary Sue test, Sanderson test, Grief Architecture × 4 levels (2 chunks) |
+| **4** | Meta | L4 | Three reality layers, Cornelian dilemma, authorship ethics, agent mirror, misdirection, narrative debt (2 chunks) |
+| **5** | Synthesis + Recommendations | — | Patch decision tree, prioritized recommendations, final verdict (X/52) (2 chunks) |
 
-Each gate requires a mode-specific threshold score to proceed:
-- **Conflict mode**: >=60% per gate
-- **Kisho mode**: >=50% per gate
-- **Hybrid mode**: >=55% per gate
+### Pipeline Architecture
+
+- **Sequential execution**: All 5 blocks always run to completion (no gate blocking)
+- **Chunked requests**: Blocks 2-5 are split into sub-requests to stay within free-plan timeout limits
+- **RPM-aware delay**: Configurable delay between chunks (based on RPM limit setting, minimum 1 second)
+- **Single retry**: Transient errors (429, 502, 503) trigger one automatic retry with 5-second backoff
+- **Partial-text recovery**: If a streaming request fails after receiving some text, the partial text is preserved
+- **Non-blocking scoring**: After Block 5, a checklist scoring LLM call runs but does not block the pipeline on failure
 
 ## Supported LLM Providers
 
@@ -46,23 +51,6 @@ Each gate requires a mode-specific threshold score to proceed:
 | Together AI | Bearer token | - | Yes |
 | xAI | Bearer token | grok-beta | - |
 | Custom | Bearer token | - | - |
-
-## Pipeline Steps
-
-| Step | Phase | Description | LLM? |
-|------|-------|-------------|------|
-| 0 | `input_validation` | Validate input (50-50,000 chars) | No |
-| 1 | `mode_detection` | Detect audit mode (conflict/kisho/hybrid) | Yes |
-| 2 | `author_profile` | Determine author's working method | Yes |
-| 3 | `skeleton_extraction` | Extract structural elements (thematic law, root trauma, etc.) | Yes |
-| 4 | `screening` | 7-question screening with count-based logic | Yes |
-| 5 | `L1_evaluation` | Gate L1: Mechanism evaluation | Yes |
-| 6 | `L2_evaluation` | Gate L2: Body evaluation | Yes |
-| 7 | `L3_evaluation` | Gate L3: Psyche + Grief HARD CHECK | Yes |
-| 8 | `L4_evaluation` | Gate L4: Meta + Cult Potential | Yes |
-| 9 | `issue_generation` | Generate issues + "A chtoby chto?" chains | Yes |
-| 10 | `generative_modules` | Grief mapping (S9) + Dilemma (S12) | Yes |
-| 11 | `final_output` | Compute final score + classification | No |
 
 ## Architecture
 
@@ -192,30 +180,21 @@ All LLM prompts are in Russian. JSON keys and enum values are in English. User-f
 
 ## Test Coverage
 
-The test suite covers 267 tests across:
+The test suite covers error classification and SSE parsing:
 
-- **JSON sanitizer**: Balanced-brace extraction, markdown fences, edge cases
-- **Error handler**: All 8 `AuditErrorType` classifications, retry logic, Russian messages
-- **Step 0 (Validation)**: Input length bounds, gateCheck blocking, skipLLM pattern
-- **Step 1 (Mode Detection)**: Mode parsing, validation, default fallbacks
-- **Step 2 (Author Profile)**: Profile types, answer parsing, reduce state
-- **Step 3 (Skeleton)**: Complete/incomplete extraction, gateCheck blocking on missing elements
-- **Step 4 (Screening)**: Count-based recommendation (Section 0.6), LLM override, gate blocking
-- **Steps 5-8 (Gates)**: Mode-specific thresholds, Grief HARD CHECK (RULE_3), cult potential (Section 0.8)
-- **Steps 9-11**: Issue/chain generation, generative modules, final score classification
-- **Integration**: Step registry completeness, step order, interface compliance
+- **Error handler**: All `AuditErrorType` classifications, retry logic, Russian messages, abort handling
+- **Streaming**: SSE line parsing, provider-specific delta extraction (OpenAI, Anthropic, Google)
 
 ## Key Protocol Rules Implemented
 
 | Rule | Description |
 |------|-------------|
-| RULE_2 | "A chtoby chto?" chain BREAK at step <=4 = critical issue |
+| RULE_2 | "A chtoby chto?" chain BREAK at early stage = critical issue |
 | RULE_3 | Grief HARD CHECK - dominant stage must have >=2 levels |
-| RULE_8 | Gate output always includes block-level breakdown |
+| RULE_8 | Block output always includes level-based breakdown |
 | RULE_9 | ISSUE objects missing any field = invalid, regenerate |
 | RULE_10 | Generative templates activate automatically when inputs absent |
 | Section 0.6 | Count-based screening - code decides, not LLM |
-| Section 0.7 | Mode-specific gate thresholds |
 | Section 0.8 | Cult potential merged INTO L4 evaluation |
 
 ## License

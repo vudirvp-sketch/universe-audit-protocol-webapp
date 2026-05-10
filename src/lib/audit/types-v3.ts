@@ -33,6 +33,8 @@ export interface LLMConfig {
   proxyUrl?: string;
   customContextWindow?: number;
   customMaxOutputTokens?: number;
+  customSupportsJSONMode?: boolean | null;
+  rpmLimit?: number;
 }
 
 // ============================================================

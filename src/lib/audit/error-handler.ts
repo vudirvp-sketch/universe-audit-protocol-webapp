@@ -172,12 +172,22 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
+  // 7.5. User-initiated abort — NOT a transient error, NOT retryable
+  // Must be checked BEFORE the timeout/abort string matching block,
+  // because DOMException('Aborted', 'AbortError') would match 'abort' below.
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return {
+      type: 'network', // Non-retryable category
+      userMessage: 'Аудит отменён пользователем.',
+      retryable: false,
+    };
+  }
+
   // 8. Timeout errors (transient) — match both English "timeout" and Russian "таймаут" / "отменён"
   if (
     messageLower.includes('timeout') ||
     messageLower.includes('таймаут') ||
-    messageLower.includes('отменён по таймауту') ||
-    messageLower.includes('abort')
+    messageLower.includes('отменён по таймауту')
   ) {
     return {
       type: 'transient_error',
