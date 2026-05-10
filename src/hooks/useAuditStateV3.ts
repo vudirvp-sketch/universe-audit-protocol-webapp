@@ -13,6 +13,7 @@ import type {
   LLMConfig,
   MediaType,
   PipelinePhase,
+  ChecklistScoreResult,
 } from '../lib/audit/types-v3';
 
 // ============================================================
@@ -37,6 +38,7 @@ export interface AuditStateV3 {
   llmConfig: LLMConfig | null;
   inputText: string;
   mediaType: MediaType;
+  checklistScore: ChecklistScoreResult | null;
 
   // Actions
   startAudit: () => void;
@@ -50,6 +52,7 @@ export interface AuditStateV3 {
   setLlmConfig: (config: LLMConfig) => void;
   setInputText: (text: string) => void;
   setMediaType: (type: MediaType) => void;
+  setChecklistScore: (score: ChecklistScoreResult | null) => void;
   reset: () => void;
 }
 
@@ -74,6 +77,7 @@ const initialState = {
   llmConfig: null as LLMConfig | null,
   inputText: '',
   mediaType: 'narrative' as MediaType,
+  checklistScore: null as ChecklistScoreResult | null,
 };
 
 const AUDIT_STATE_V3_STORAGE_KEY = 'audit-state-v3';
@@ -102,6 +106,7 @@ export const useAuditStateV3 = create<AuditStateV3>()(
           meta: null,
           streamingText: '',
           error: null,
+          checklistScore: null,
         }),
 
       setBlockResult: (blockNumber, result) =>
@@ -145,6 +150,8 @@ export const useAuditStateV3 = create<AuditStateV3>()(
 
       setMediaType: (type) => set({ mediaType: type }),
 
+      setChecklistScore: (score) => set({ checklistScore: score }),
+
       reset: () => set({ ...initialState }),
     }),
     {
@@ -166,6 +173,7 @@ export const useAuditStateV3 = create<AuditStateV3>()(
         llmConfig: state.llmConfig,
         inputText: state.inputText,
         mediaType: state.mediaType,
+        checklistScore: state.checklistScore,
       }),
       onRehydrateStorage: () => {
         return (state) => {
@@ -185,6 +193,7 @@ export const useAuditStateV3 = create<AuditStateV3>()(
                 meta: null,
                 streamingText: '',
                 error: null,
+                checklistScore: null,
               });
             });
           }

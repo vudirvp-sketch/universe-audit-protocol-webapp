@@ -3,6 +3,7 @@
 /**
  * ChecklistScoreCard — detailed 52-item checklist with PASS/FAIL/INSUFFICIENT_DATA badges.
  * Supports filtering by level and status.
+ * Shows collapsible evidence column per plan Step 1.4.
  */
 
 import * as React from 'react';
@@ -35,6 +36,45 @@ function StatusBadge({ status }: { status: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA'
     <Badge variant="outline" className={`text-xs font-mono ${variants[status]}`}>
       {labels[status]}
     </Badge>
+  );
+}
+
+// ============================================================
+// Collapsible evidence row
+// ============================================================
+
+function ChecklistRow({ item }: { item: { id: string; text: string; level: string; status: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA'; evidence: string } }) {
+  const [expanded, setExpanded] = React.useState(false);
+  const hasEvidence = item.evidence.trim().length > 0;
+
+  return (
+    <>
+      <tr className="border-b hover:bg-muted/30">
+        <td className="py-1.5 px-1 font-mono text-xs">{item.id}</td>
+        <td className="py-1.5 px-1 text-xs">{item.text}</td>
+        <td className="py-1.5 px-1 text-xs text-muted-foreground">{item.level}</td>
+        <td className="py-1.5 px-1"><StatusBadge status={item.status} /></td>
+        <td className="py-1.5 px-1 text-xs">
+          {hasEvidence ? (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline decoration-dotted underline-offset-2"
+            >
+              {expanded ? 'скрыть' : 'показать'}
+            </button>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
+      </tr>
+      {expanded && hasEvidence && (
+        <tr className="border-b bg-muted/10">
+          <td colSpan={5} className="py-2 px-3 text-xs text-muted-foreground italic">
+            {item.evidence}
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -124,16 +164,12 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
                 <th className="text-left py-2 px-1">Критерий</th>
                 <th className="text-left py-2 px-1 w-14">Уровень</th>
                 <th className="text-left py-2 px-1 w-20">Статус</th>
+                <th className="text-left py-2 px-1 w-20">Доказательство</th>
               </tr>
             </thead>
             <tbody>
               {items.map(item => (
-                <tr key={item.id} className="border-b hover:bg-muted/30">
-                  <td className="py-1.5 px-1 font-mono text-xs">{item.id}</td>
-                  <td className="py-1.5 px-1 text-xs">{item.text}</td>
-                  <td className="py-1.5 px-1 text-xs text-muted-foreground">{item.level}</td>
-                  <td className="py-1.5 px-1"><StatusBadge status={item.status} /></td>
-                </tr>
+                <ChecklistRow key={item.id} item={item} />
               ))}
             </tbody>
           </table>

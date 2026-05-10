@@ -506,6 +506,26 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             )}
           </div>
 
+          {/* Audit Feature Flags */}
+          <div className="space-y-3 border rounded-lg p-3">
+            <p className="text-xs font-medium text-muted-foreground">Параметры аудита</p>
+            <div className="flex items-center gap-2">
+              <input
+                id="reference-comparison"
+                type="checkbox"
+                checked={useSettings((s) => s.referenceComparison)}
+                onChange={(e) => useSettings.getState().setReferenceComparison(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="reference-comparison" className="text-xs">
+                Сравнить с референсами (Disco Elysium, Expedition 33, Pathologic 2, Атака Титанов)
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Добавляет сравнение с эталонными примерами в финальный синтез (Блок 5)
+            </p>
+          </div>
+
           {/* Test Connection Button — fails fast (15s timeout, no retries) */}
           <div className="space-y-2">
             <Button

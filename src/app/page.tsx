@@ -16,7 +16,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
-import { exportV3ToMarkdown } from '@/lib/audit/export-utils';
+import { exportV3ToMarkdown, exportAuditJSON, exportAuditHTML } from '@/lib/audit/export-utils';
 import { extractOrientationContext } from '@/lib/audit/context-bridge';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
@@ -65,6 +65,7 @@ export default function Home() {
   const inputText = useAuditStateV3(s => s.inputText);
   const mediaType = useAuditStateV3(s => s.mediaType);
   const orientationContext = useAuditStateV3(s => s.orientationContext);
+  const checklistScore = useAuditStateV3(s => s.checklistScore);
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
@@ -127,6 +128,7 @@ export default function Home() {
         {
           text: input.text,
           mediaType: input.mediaType,
+          referenceComparison: useSettings.getState().referenceComparison,
         },
         {
           provider: currentProvider,
@@ -163,8 +165,13 @@ export default function Home() {
 
       if (result.error) {
         useAuditStateV3.getState().setError(result.error);
-      } else if (result.meta) {
-        useAuditStateV3.getState().setMeta(result.meta);
+      } else {
+        if (result.meta) {
+          useAuditStateV3.getState().setMeta(result.meta);
+        }
+        if (result.checklistScore) {
+          useAuditStateV3.getState().setChecklistScore(result.checklistScore);
+        }
       }
     } catch (err) {
       if (controller.signal.aborted) {
@@ -351,6 +358,8 @@ export default function Home() {
                   currentBlock={currentBlock}
                   streamingText={streamingText}
                   phase={phase}
+                  checklistScore={checklistScore}
+                  mediaType={mediaType}
                   onNewAudit={() => useAuditStateV3.getState().reset()}
                 />
               </div>
@@ -395,9 +404,49 @@ export default function Home() {
                   currentBlock={5}
                   streamingText=""
                   phase={phase}
+                  checklistScore={checklistScore}
+                  mediaType={mediaType}
                   onExportMD={() => {
                     const md = exportV3ToMarkdown(blocks);
                     downloadFile(md, 'audit-report.md', 'text/markdown');
+                  }}
+                  onExportJSON={() => {
+                    const state = useAuditStateV3.getState();
+                    const pipelineState = {
+                      phase: state.phase,
+                      currentBlock: state.currentBlock,
+                      block1: state.block1,
+                      block2: state.block2,
+                      block3: state.block3,
+                      block4: state.block4,
+                      block5: state.block5,
+                      orientationContext: state.orientationContext,
+                      accumulatedWeaknesses: [],
+                      checklistScore: state.checklistScore,
+                      meta: state.meta!,
+                      error: state.error,
+                    } as import('@/lib/audit/types-v3').PipelineStateV3;
+                    const json = exportAuditJSON(pipelineState, state.checklistScore);
+                    downloadFile(json, 'audit-report.json', 'application/json');
+                  }}
+                  onExportHTML={() => {
+                    const state = useAuditStateV3.getState();
+                    const pipelineState = {
+                      phase: state.phase,
+                      currentBlock: state.currentBlock,
+                      block1: state.block1,
+                      block2: state.block2,
+                      block3: state.block3,
+                      block4: state.block4,
+                      block5: state.block5,
+                      orientationContext: state.orientationContext,
+                      accumulatedWeaknesses: [],
+                      checklistScore: state.checklistScore,
+                      meta: state.meta!,
+                      error: state.error,
+                    } as import('@/lib/audit/types-v3').PipelineStateV3;
+                    const html = exportAuditHTML(pipelineState, state.checklistScore);
+                    downloadFile(html, 'audit-report.html', 'text/html');
                   }}
                   onNewAudit={() => useAuditStateV3.getState().reset()}
                 />

@@ -37,6 +37,8 @@ export interface AppSettings {
   customContextWindow: number | null;
   customMaxOutputTokens: number | null;
   customSupportsJSONMode: boolean | null;
+  // Audit feature flags
+  referenceComparison: boolean;
 }
 
 interface SettingsState extends AppSettings {
@@ -52,6 +54,7 @@ interface SettingsState extends AppSettings {
   setCustomContextWindow: (value: number | null) => void;
   setCustomMaxOutputTokens: (value: number | null) => void;
   setCustomSupportsJSONMode: (value: boolean | null) => void;
+  setReferenceComparison: (value: boolean) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   clearSettings: () => void;
 }
@@ -77,6 +80,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   customContextWindow: null,
   customMaxOutputTokens: null,
   customSupportsJSONMode: null,
+  referenceComparison: false,
 };
 
 export const useSettings = create<SettingsState>()(
@@ -125,6 +129,10 @@ export const useSettings = create<SettingsState>()(
         set({ customSupportsJSONMode });
       },
 
+      setReferenceComparison: (referenceComparison: boolean) => {
+        set({ referenceComparison });
+      },
+
       updateSettings: (settings: Partial<AppSettings>) => {
         set(settings);
       },
@@ -149,6 +157,7 @@ export const useSettings = create<SettingsState>()(
         customContextWindow: state.customContextWindow,
         customMaxOutputTokens: state.customMaxOutputTokens,
         customSupportsJSONMode: state.customSupportsJSONMode,
+        referenceComparison: state.referenceComparison,
       }),
       // After rehydration, mark as loaded and apply defaults for missing fields
       onRehydrateStorage: () => {

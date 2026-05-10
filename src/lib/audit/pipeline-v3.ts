@@ -193,6 +193,7 @@ export async function runAuditPipelineV3(
         state.accumulatedWeaknesses[1], // Block 3
         state.accumulatedWeaknesses[2], // Block 4
         state.block1?.markdown,
+        input.referenceComparison,
       ),
     );
     state.block5 = block5Result;

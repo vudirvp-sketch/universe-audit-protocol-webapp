@@ -20,6 +20,8 @@ export type AuthorProfileType = 'gardener' | 'hybrid' | 'architect';
 export interface AuditInput {
   text: string;
   mediaType: MediaType;
+  /** Whether to include reference comparison (Disco Elysium, Expedition 33, etc.) in Block 5 */
+  referenceComparison?: boolean;
 }
 
 /** LLM client configuration */

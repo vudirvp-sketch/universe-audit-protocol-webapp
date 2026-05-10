@@ -73,7 +73,7 @@ export const MASTER_CHECKLIST: LegacyChecklistItem[] = [
   { id: 'D7', block: 'D', text: 'Ни одного из трёх антипаттернов: Стагнация / Деградация интеллекта / Физическое решение психологической проблемы', tag: 'CORE', level: 'L1/L2', status: 'PENDING', applicable: true, applicableMedia: ['all'] },
 
   // Block E: Systems and Logic (6) - L1
-  { id: 'E1', block: 'E', text: 'Магия прошла тест Сандерсона (5 вопросов) + Бритву Оккама + Жёсткое правило: почему другие не делают то же самое?', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true, applicableMedia: ['game', 'ttrpg'] },
+  { id: 'E1', block: 'E', text: 'Магия прошла тест Сандерсона (5 вопросов) + Бритву Оккама + Жёсткое правило: почему другие не делают то же самое?', tag: 'GAME', level: 'L1', status: 'PENDING', applicable: true, applicableMedia: ['game', 'ttrpg'] },
   { id: 'E2', block: 'E', text: 'Эквивалентный обмен (победа без цены невозможна)', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true, applicableMedia: ['all'] },
   { id: 'E3', block: 'E', text: 'Система связана с историей, политикой, бытом (5 проверок: изменила историю до начала, фракции по-разному, люди относятся обыденно, злоупотребление имело последствия, создаёт неравенство)', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true, applicableMedia: ['all'] },
   { id: 'E4', block: 'E', text: '7 типов логических дыр проверены (мотивация, компетентность, масштаб, ресурсы, память, идеология, время)', tag: 'CORE', level: 'L1', status: 'PENDING', applicable: true, applicableMedia: ['all'] },
