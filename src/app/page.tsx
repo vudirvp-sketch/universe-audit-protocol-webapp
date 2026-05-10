@@ -271,7 +271,7 @@ export default function Home() {
         <main className="container py-6">
           {phase === 'idle' ? (
             /* ===== Input Form ===== */
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-5xl mx-auto">
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold mb-2">Universe Audit Protocol</h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto">
@@ -329,39 +329,19 @@ export default function Home() {
             </div>
           ) : phase === 'running' ? (
             /* ===== Running — Progress + Progressive Report ===== */
-            <div className="max-w-5xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
-                {/* Left sidebar — progress + controls */}
-                <div className="space-y-4">
+            <div className="max-w-7xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
+                {/* Left sidebar — progress + controls (sticky on desktop) */}
+                <div className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
                   <AuditProgressV3
                     currentBlock={currentBlock}
                     onCancel={cancelAudit}
                     currentBlockTotalChunks={currentBlockTotalChunks || undefined}
                     currentChunkIndex={currentChunkIndex || undefined}
+                    blocks={blocks}
+                    phase={phase}
+                    orientationContext={orientationContext}
                   />
-
-                  {/* Quick info card */}
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm">Конфигурация</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Медиа:</span>
-                        <span>{mediaType}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Символов:</span>
-                        <span>{inputText.length}</span>
-                      </div>
-                      {orientationContext?.auditMode && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Режим:</span>
-                          <span>{orientationContext.auditMode}</span>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
                 </div>
 
                 {/* Right panel — progressive report */}
@@ -376,20 +356,52 @@ export default function Home() {
               </div>
             </div>
           ) : (
-            /* ===== Done — Full Report Only ===== */
-            <div className="max-w-5xl mx-auto">
-              <AuditReportViewV3
-                blocks={blocks}
-                meta={meta}
-                currentBlock={currentBlock}
-                streamingText=""
-                phase={phase}
-                onExportMD={() => {
-                  const md = exportV3ToMarkdown(blocks);
-                  downloadFile(md, 'audit-report.md', 'text/markdown');
-                }}
-                onNewAudit={() => useAuditStateV3.getState().reset()}
-              />
+            /* ===== Done — Sidebar Navigation + Full Report ===== */
+            <div className="max-w-7xl mx-auto">
+              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
+                {/* Left sidebar — pipeline navigation */}
+                <div className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
+                  <AuditProgressV3
+                    currentBlock={5}
+                    onCancel={() => {}}
+                    blocks={blocks}
+                    phase={phase}
+                    orientationContext={orientationContext}
+                  />
+                  {/* Summary card with meta info */}
+                  {meta && (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Сводка</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Токены:</span>
+                          <span>{meta.tokensUsed.total.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Время:</span>
+                          <span>{(meta.elapsedMs / 1000).toFixed(1)}с</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+
+                {/* Right panel — full report */}
+                <AuditReportViewV3
+                  blocks={blocks}
+                  meta={meta}
+                  currentBlock={5}
+                  streamingText=""
+                  phase={phase}
+                  onExportMD={() => {
+                    const md = exportV3ToMarkdown(blocks);
+                    downloadFile(md, 'audit-report.md', 'text/markdown');
+                  }}
+                  onNewAudit={() => useAuditStateV3.getState().reset()}
+                />
+              </div>
             </div>
           )}
         </main>

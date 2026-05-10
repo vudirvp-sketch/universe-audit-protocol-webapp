@@ -58,7 +58,7 @@ export function AuditReportViewV3({
   const isDone = phase === 'done';
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto">
+    <div className="space-y-4">
       {/* 5 block sections */}
       {([1, 2, 3, 4, 5] as const).map((blockNum) => {
         const result = blocks[blockNum] ?? null;
@@ -155,7 +155,7 @@ function AuditBlockSection({
   const displayText = isStreaming ? streamingText : (result?.markdown ?? '');
 
   return (
-    <div className="border rounded-lg">
+    <div id={`block-${blockNumber}`} className="border rounded-lg">
       {/* Header — always visible, clickable */}
       <button
         className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors"
@@ -178,7 +178,9 @@ function AuditBlockSection({
       {isOpen && (
         <div
           ref={contentRef}
-          className="px-4 pb-4 max-h-[600px] overflow-y-auto prose prose-sm dark:prose-invert max-w-none"
+          className={`px-4 pb-4 overflow-y-auto prose prose-sm dark:prose-invert max-w-none ${
+            isStreaming ? 'max-h-[600px]' : 'max-h-[2000px]'
+          }`}
         >
           {displayText ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
