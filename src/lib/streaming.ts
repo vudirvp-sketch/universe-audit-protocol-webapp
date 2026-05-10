@@ -160,10 +160,11 @@ export function extractDelta(provider: LLMProvider, eventData: string): { text: 
 }
 
 /** Default timeout for streaming requests (milliseconds).
- * 2 minutes — streaming requests should be long-lived, but we need a safety net
- * to prevent infinite hangs if the proxy/provider stops sending data.
+ * 5 minutes — streaming requests should be long-lived. The proxy now has a
+ * matching 300s timeout (previously 25s). This safety net prevents infinite
+ * hangs if the proxy/provider stops sending data without closing the connection.
  */
-const STREAMING_TIMEOUT_MS = 120_000;
+const STREAMING_TIMEOUT_MS = 300_000;
 
 // ============================================================================
 // STREAMING CLIENT

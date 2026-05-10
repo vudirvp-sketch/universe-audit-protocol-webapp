@@ -794,14 +794,13 @@ export function createLLMClient(config: LLMClientConfig) {
     // ── Single request attempt ──────────────────────────────────────────
     // The proxy already retries 429/503 server-side. We do NOT retry here
     // to avoid the exponential cascade (client_retry × proxy_retry).
-    // Client-side timeout: 120 seconds default if no signal provided.
-    // Increased from 60s because complex audit prompts (Step 1: mode+profile+
-    // skeleton+screening, Step 2: 50+ criteria) can take 90-120s on slower models.
-    // NOTE: The Cloudflare Worker proxy has its own timeout (25s on free plan,
-    // configurable on paid plans). The client timeout should be longer to allow
-    // for proxy overhead and retries.
+    // Client-side timeout: 300 seconds default if no signal provided.
+    // Increased from 120s because complex audit prompts on slow free-tier models
+    // (e.g. nvidia/nemotron on OpenRouter) can take 120-180s per request.
+    // The Cloudflare Worker proxy now also has a 300s timeout (previously 25s),
+    // so the client timeout should match or slightly exceed the proxy timeout.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120_000);
+    const timeoutId = setTimeout(() => controller.abort(), 300_000);
     const signal = options.signal
       ? AbortSignal.any([options.signal, controller.signal])
       : controller.signal;

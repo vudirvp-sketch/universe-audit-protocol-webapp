@@ -92,19 +92,20 @@ const DEFAULT_MAX_REQUESTS_PER_MINUTE = 60;
 const DEFAULT_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Timeout for buffered (non-streaming) requests to provider.
-// IMPORTANT: Cloudflare Workers free plan has undocumented but empirically
-// observed wall-clock limits. Setting this to 25s ensures the Worker can
-// send a graceful 504 response before being killed. On paid plans, increase
-// PROVIDER_TIMEOUT_MS in wrangler.toml [vars] (e.g., "55000" for 55 seconds).
-const DEFAULT_PROVIDER_TIMEOUT_MS = 25_000;
+// Cloudflare Workers free plan has NO hard wall-clock timeout for HTTP requests.
+// The Worker stays alive as long as the client is connected. The 10ms CPU time
+// limit does NOT apply to I/O wait (fetch, stream reading) — proxy requests
+// are overwhelmingly I/O, not CPU. Setting this to 300s (5 minutes) allows
+// even the slowest free-tier models (e.g. nvidia/nemotron on OpenRouter) to
+// respond without the proxy killing the connection prematurely.
+const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 
 // Timeout for streaming requests before we consider the upstream unresponsive.
-// IMPORTANT: Cloudflare Workers free plan has undocumented but empirically
-// observed wall-clock limits. This 25s timeout gives us a chance to send a
-// graceful error SSE event before Cloudflare kills the Worker. On paid plans,
-// streaming can run much longer — increase PROVIDER_STREAMING_TIMEOUT_MS
-// in wrangler.toml [vars] (e.g., "120000" for 2 minutes).
-const DEFAULT_STREAMING_TIMEOUT_MS = 25_000;
+// Same rationale as PROVIDER_TIMEOUT_MS — no hard wall-clock limit on free plan.
+// Once the upstream sends headers (200 OK + Content-Type: text/event-stream),
+// the HTTP connection is established and Cloudflare will not kill the Worker.
+// 300s gives streaming models ample time even with slow token generation.
+const DEFAULT_STREAMING_TIMEOUT_MS = 300_000;
 
 // Known provider domains for targetUrl validation
 const KNOWN_PROVIDER_DOMAINS = [
@@ -497,7 +498,7 @@ export default {
         // Handle AbortError (timeout)
         if (fetchError.name === 'AbortError') {
           console.error(
-            `[Proxy Timeout] Provider ${provider} did not respond within ${providerTimeoutMs}ms (free plan limit) — key: ${maskApiKey(apiKey)}`
+            `[Proxy Timeout] Provider ${provider} did not respond within ${providerTimeoutMs}ms — key: ${maskApiKey(apiKey)}`
           );
           return new Response(
             JSON.stringify({
@@ -541,10 +542,10 @@ export default {
         console.log(`[Proxy Stream] ${provider} — streaming started in ${elapsedMs}ms (upstream CT: ${upstreamContentType || 'unknown'}) — key: ${maskApiKey(apiKey)}`);
 
         // v7 BUGFIX: Add streaming timeout so we can send a graceful error
-        // event instead of the Worker being killed abruptly by Cloudflare.
-        // On free plan: Worker dies at ~30s. On paid plan: can run much longer.
-        // We set a timeout slightly before the Worker's wall-clock limit,
-        // and when it fires, we inject an SSE error event into the stream.
+        // event if the upstream stops sending data. Cloudflare Workers free plan
+        // has NO hard wall-clock limit — the Worker stays alive while data flows.
+        // This timeout is a safety net for unresponsive upstreams, not a platform
+        // limit. When it fires, we inject an SSE error event into the stream.
         let streamTimedOut = false;
         const streamTimeoutId = setTimeout(() => {
           streamTimedOut = true;

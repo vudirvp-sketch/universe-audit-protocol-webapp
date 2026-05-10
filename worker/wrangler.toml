@@ -7,8 +7,11 @@ compatibility_date = "2024-01-01"
 
 # NOTE: [limits] cpu_ms is NOT supported on the Cloudflare Free plan.
 # The Free plan has a default CPU limit of 10ms per invocation, which is
-# sufficient for a pass-through proxy. If you upgrade to a paid plan,
-# you can uncomment the following to increase the CPU limit for streaming:
+# sufficient for a pass-through proxy (I/O wait does NOT count as CPU time).
+# Cloudflare Workers free plan has NO hard wall-clock timeout for HTTP requests —
+# the Worker stays alive as long as the client is connected.
+# If you upgrade to a paid plan, you can uncomment the following to increase
+# the CPU limit for streaming:
 # [limits]
 # cpu_ms = 50000
 
@@ -17,14 +20,13 @@ compatibility_date = "2024-01-01"
 [vars]
 MAX_REQUESTS_PER_MINUTE = "60"
 MAX_BODY_SIZE_BYTES = "2097152"
-# Provider timeout in milliseconds. Default: 25000 (25s) for Cloudflare free plan.
-# On paid Workers Standard/Unbound plan, increase to "55000" (55s) for longer responses.
-# IMPORTANT: Cloudflare Workers free plan has undocumented but empirically
-# observed wall-clock limits. Setting this to 25s ensures the Worker can
-# send a graceful 504 response before being killed. On paid plans, increase
-# PROVIDER_TIMEOUT_MS (e.g., "55000" for 55 seconds).
-PROVIDER_TIMEOUT_MS = "25000"
-# Streaming timeout in milliseconds. Same rationale as PROVIDER_TIMEOUT_MS —
-# 25s ensures the Worker sends a graceful timeout SSE event before Cloudflare
-# kills the invocation. On paid plans, increase (e.g., "120000" for 2 minutes).
-PROVIDER_STREAMING_TIMEOUT_MS = "25000"
+# Provider timeout in milliseconds.
+# Cloudflare Workers free plan has NO hard wall-clock limit for HTTP requests.
+# The 10ms CPU limit does NOT apply to I/O wait (fetch, stream reading).
+# 300s (5 minutes) allows even the slowest free-tier models to respond.
+# Previously set to 25s based on incorrect assumption about free plan limits.
+PROVIDER_TIMEOUT_MS = "300000"
+# Streaming timeout in milliseconds. Same rationale as PROVIDER_TIMEOUT_MS.
+# Once upstream sends headers, the HTTP connection is established and CF will
+# not kill the Worker. 300s is a safety net for unresponsive upstreams.
+PROVIDER_STREAMING_TIMEOUT_MS = "300000"

@@ -6,8 +6,9 @@
  * No structured parsing. Minimal context bridge between blocks.
  *
  * v2 (F3): Blocks 2-3 are split into sub-requests (chunks) that each
- * complete within the 25s proxy timeout on Cloudflare Workers free plan.
- * Block 1, 4, 5 remain single requests.
+ * complete within the 300s proxy timeout on Cloudflare Workers free plan.
+ * Blocks 4-5 are also chunked into 2 sub-requests each.
+ * 3s delay between sub-requests avoids rate limits on free-tier models.
  */
 
 import type {
@@ -149,7 +150,7 @@ export async function runAuditPipelineV3(
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block3Result.markdown));
 
     // ============================================================
-    // Block 4: Meta (L4) — single request
+    // Block 4: Meta (L4) — chunked into 2 sub-requests
     // ============================================================
     const block4Result = await executeChunkedBlock(
       4,
@@ -172,7 +173,7 @@ export async function runAuditPipelineV3(
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block4Result.markdown));
 
     // ============================================================
-    // Block 5: Synthesis + Recommendations — single request
+    // Block 5: Synthesis + Recommendations — chunked into 2 sub-requests
     // ============================================================
     const block5Result = await executeChunkedBlock(
       5,
@@ -292,6 +293,11 @@ async function executeChunkedBlock(
     };
     subResults.push(subResult);
     fullMarkdown += (fullMarkdown ? '\n\n---\n\n' : '') + subResult.markdown;
+
+    // Delay between sub-requests to avoid rate limits on free models
+    if (i < subPrompts.length - 1) {
+      await abortAwareSleep(3_000, abortSignal); // 3s pause between chunks
+    }
 
     // Check abort between sub-requests
     if (abortSignal?.aborted) {
