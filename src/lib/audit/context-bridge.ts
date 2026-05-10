@@ -75,10 +75,10 @@ function extractSkeletonSummary(text: string): string | null {
   const elements = [
     { keys: ['Тематический Закон', 'Тематический закон', 'Thematic Law'], label: 'Тематический Закон' },
     { keys: ['Корневая Травма', 'Корневая травма', 'Root Trauma'], label: 'Корневая Травма' },
-    { keys: ['Хамартия', 'Hamartia'], label: 'Хамартия' },
+    { keys: ['Гамартия', 'Хамартия', 'Hamartia'], label: 'Гамартия' },
     { keys: ['Столпы', 'Pillars'], label: 'Столпы' },
     { keys: ['Эмоциональный Двигатель', 'Эмоциональный двигатель', 'Emotional Engine'], label: 'Эмоциональный Двигатель' },
-    { keys: ['Авторский Запрет', 'Авторский запрет', 'Author Prohibition'], label: 'Авторский Запрет' },
+    { keys: ['Авторский Запрет', 'Запрет Автора', 'Авторский запрет', 'Author Prohibition'], label: 'Запрет Автора' },
     { keys: ['Целевой Опыт', 'Целевой опыт', 'Target Experience'], label: 'Целевой Опыт' },
     { keys: ['Центральный Вопрос', 'Центральный вопрос', 'Central Question'], label: 'Центральный Вопрос' },
   ];
