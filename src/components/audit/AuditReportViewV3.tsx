@@ -8,11 +8,13 @@
 'use client';
 
 import * as React from 'react';
-import type { BlockResult, PipelineMeta, PipelinePhase } from '@/lib/audit/types-v3';
+import type { BlockResult, PipelineMeta, PipelinePhase, ChecklistScoreResult } from '@/lib/audit/types-v3';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AuditScoreCard } from './AuditScoreCard';
+import { ChecklistScoreCard } from './ChecklistScoreCard';
 
 // ============================================================
 // Props
@@ -24,7 +26,11 @@ interface AuditReportViewV3Props {
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
   streamingText: string;
   phase: PipelinePhase;
+  checklistScore?: ChecklistScoreResult | null;
+  mediaType?: 'narrative' | 'game' | 'visual' | 'ttrpg';
   onExportMD?: () => void;
+  onExportJSON?: () => void;
+  onExportHTML?: () => void;
   onNewAudit?: () => void;
 }
 
@@ -51,7 +57,11 @@ export function AuditReportViewV3({
   currentBlock,
   streamingText,
   phase,
+  checklistScore,
+  mediaType,
   onExportMD,
+  onExportJSON,
+  onExportHTML,
   onNewAudit,
 }: AuditReportViewV3Props) {
   const isRunning = phase === 'running';
@@ -59,6 +69,14 @@ export function AuditReportViewV3({
 
   return (
     <div className="space-y-4">
+      {/* Score cards — visible only when audit is done and score exists */}
+      {isDone && checklistScore && mediaType && (
+        <>
+          <AuditScoreCard score={checklistScore} mediaType={mediaType} />
+          <ChecklistScoreCard score={checklistScore} />
+        </>
+      )}
+
       {/* 5 block sections */}
       {([1, 2, 3, 4, 5] as const).map((blockNum) => {
         const result = blocks[blockNum] ?? null;
@@ -101,6 +119,16 @@ export function AuditReportViewV3({
           {onExportMD && (
             <Button variant="outline" onClick={onExportMD}>
               Скачать MD
+            </Button>
+          )}
+          {onExportJSON && (
+            <Button variant="outline" onClick={onExportJSON}>
+              Скачать JSON
+            </Button>
+          )}
+          {onExportHTML && (
+            <Button variant="outline" onClick={onExportHTML}>
+              Скачать HTML
             </Button>
           )}
           {onNewAudit && (

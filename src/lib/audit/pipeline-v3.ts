@@ -37,6 +37,7 @@ import {
   extractWeaknessesSummary,
 } from './context-bridge';
 import { classifyLLMError } from './error-handler';
+import { runChecklistScoring } from './scoring';
 
 // Re-export for consumers
 export type { StreamingCallbacksV3 } from './types-v3';
@@ -78,6 +79,7 @@ export async function runAuditPipelineV3(
     block5: null,
     orientationContext: null,
     accumulatedWeaknesses: [],
+    checklistScore: null,
     meta: {
       inputText: input.text,
       mediaType: input.mediaType,
@@ -194,6 +196,24 @@ export async function runAuditPipelineV3(
       ),
     );
     state.block5 = block5Result;
+
+    // ============================================================
+    // Run final checklist scoring (non-blocking — audit always completes)
+    // ============================================================
+    const allMarkdowns = [
+      state.block1?.markdown,
+      state.block2?.markdown,
+      state.block3?.markdown,
+      state.block4?.markdown,
+      state.block5?.markdown,
+    ].filter(Boolean) as string[];
+
+    try {
+      state.checklistScore = await runChecklistScoring(allMarkdowns, input.mediaType, llmConfig, abortSignal);
+    } catch (scoringError) {
+      // Scoring failure must not break the pipeline
+      console.warn('Checklist scoring failed (non-blocking):', scoringError);
+    }
 
     // ============================================================
     // Done

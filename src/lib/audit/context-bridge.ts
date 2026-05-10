@@ -6,7 +6,7 @@
  * This bridge NEVER breaks the UI. It only enriches subsequent prompts.
  */
 
-import type { OrientationContext } from './types-v3';
+import type { OrientationContext, ScreeningResult } from './types-v3';
 
 // ============================================================
 // Block 1 → Blocks 2-5: Orientation context extraction
@@ -23,6 +23,7 @@ export function extractOrientationContext(block1Markdown: string): OrientationCo
     authorProfileType: extractAuthorProfileType(block1Markdown),
     authorProfilePercentage: extractAuthorProfilePercentage(block1Markdown),
     skeletonSummary: extractSkeletonSummary(block1Markdown),
+    screeningResults: extractScreeningResults(block1Markdown),
   };
 }
 
@@ -164,6 +165,51 @@ export function extractWeaknessesSummary(markdown: string): string {
 
   // Final fallback: last 500 characters
   return markdown.slice(-500).trim();
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+// ============================================================
+// Block 1 screening results extraction (7 YES/NO checks)
+// ============================================================
+
+/**
+ * Extract screening results from Block 1 quick screening section.
+ * Looks for the 7 screening questions and their ДА/НЕТ answers.
+ * Returns null if no screening section is found.
+ */
+export function extractScreeningResults(block1Markdown: string): ScreeningResult[] | null {
+  const screeningQuestions = [
+    { question: 'Тему мира можно сформулировать как правило', sectionRef: '§0, §1.4' },
+    { question: 'Мир продолжит жить без протагониста', sectionRef: '§3, §4' },
+    { question: 'Есть сцена с телесностью', sectionRef: '§1.5, §5' },
+    { question: 'Ключевая черта = сила и гибель', sectionRef: '§6' },
+    { question: 'Правильный выбор имеет цену', sectionRef: '§2, §16' },
+    { question: 'Антагонист действует по понятной логике', sectionRef: '§6, §8' },
+    { question: 'Финал нельзя переписать на хэппи-энд', sectionRef: '§16' },
+  ];
+
+  const results: ScreeningResult[] = [];
+  let foundAny = false;
+
+  for (const sq of screeningQuestions) {
+    // Look for the screening section — try multiple patterns
+    const keywords = sq.question.split(' ').slice(0, 3).join(' ');
+    const escapedKeywords = escapeRegex(keywords);
+
+    // Pattern 1: "1. Тему мира... → ДА/НЕТ" or "1) Тему мира... ДА/НЕТ"
+    const regex = new RegExp(`\\d[.)]\\s*${escapedKeywords}[^\\n]*(?:ДА|НЕТ|YES|NO|✓|✗)`, 'i');
+    const match = block1Markdown.match(regex);
+    if (match) {
+      const isNo = /НЕТ|NO|✗/i.test(match[0]);
+      results.push({ question: sq.question, answer: !isNo, sectionRef: sq.sectionRef });
+      foundAny = true;
+    }
+  }
+
+  return foundAny ? results : null;
 }
 
 // ============================================================

@@ -88,12 +88,20 @@ export interface BlockMeta {
 /** Structured context extracted from Block 1 output via regex.
  *  All fields are optional — if extraction fails, the raw markdown
  *  of Block 1 is used as context instead. */
+export interface ScreeningResult {
+  question: string;
+  answer: boolean;  // true = YES, false = NO
+  sectionRef: string;  // which sections to audit if NO
+}
+
 export interface OrientationContext {
   auditMode: AuditMode | null;
   authorProfileType: AuthorProfileType | null;
   authorProfilePercentage: number | null;
   /** Skeleton as a short text summary (key: value lines) */
   skeletonSummary: string | null;
+  /** Screening results from Block 1 quick screening (7 YES/NO checks) */
+  screeningResults: ScreeningResult[] | null;
 }
 
 // ============================================================
@@ -118,6 +126,8 @@ export interface PipelineStateV3 {
   orientationContext: OrientationContext | null;
   /** Accumulated weaknesses summaries from Blocks 2-4 (for Block 5 input) */
   accumulatedWeaknesses: string[];
+  /** Checklist score result (set after Block 5 completes via scoring LLM call) */
+  checklistScore: ChecklistScoreResult | null;
   /** Pipeline-level metadata */
   meta: PipelineMeta;
   /** Error message (non-null only in 'error' phase) */
@@ -171,6 +181,28 @@ export const BLOCK_TEMPERATURES: Record<1 | 2 | 3 | 4 | 5, number> = {
   4: 0.45,  // Balance: philosophical depth + rigor
   5: 0.6,   // Creativity: synthesis + recommendations
 };
+
+// ============================================================
+// Checklist scoring result
+// ============================================================
+
+export interface ChecklistScoreItem {
+  id: string;
+  block: string;
+  text: string;
+  level: string;
+  status: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA';
+  evidence: string;
+  applicable: boolean;
+}
+
+export interface ChecklistScoreResult {
+  items: ChecklistScoreItem[];
+  totalApplicable: number;
+  fulfilled: number;
+  scorePercent: number;
+  byLevel: Record<string, { applicable: number; fulfilled: number; percent: number }>;
+}
 
 // ============================================================
 // Checklist item (used only for prompt construction)

@@ -16,7 +16,7 @@
  *    thresholds, tests, and examples, not just abstract labels.
  */
 
-import type { MediaType, OrientationContext, PromptSet } from './types-v3';
+import type { MediaType, OrientationContext, PromptSet, ScreeningResult } from './types-v3';
 
 // ============================================================
 // Criteria groups for Block 2 chunking (F3)
@@ -303,6 +303,44 @@ const MEDIA_ADAPTATION: Record<MediaType, string> = {
 };
 
 // ============================================================
+// Priority override builder (from orientation screening results)
+// ============================================================
+
+/**
+ * Build priority override text based on author profile and screening results.
+ * This text is injected into Blocks 2-5 prompts to emphasize specific audit areas
+ * WITHOUT blocking the pipeline. All 5 blocks always run to completion.
+ */
+function buildPriorityOverrideBlock(orientationContext: OrientationContext): string {
+  const parts: string[] = [];
+
+  // Author profile priorities
+  if (orientationContext.authorProfileType) {
+    const priorities: Record<string, string> = {
+      gardener: `ПРИОРИТЕТ АУДИТА (профиль Садовник): Усиль проверку Разделов 3 (связанность, матрица N×N) и 8 (логические дыры) — риск: дыры масштаба, ресурсов, времени; фракции-декорации. Уделяй больше внимания экономической стреле и логистике.`,
+      hybrid: `ПРИОРИТЕТ АУДИТА (профиль Гибрид): Усиль проверку Раздела 1.6 (согласованность MDA+OT) — риск: рассинхрон уровней. Проверяй, не противоречат ли механика и онтология друг другу.`,
+      architect: `ПРИОРИТЕТ АУДИТА (профиль Архитектор): Усиль проверку Разделов 6 (персонажи) и 8 (логические дыры) — риск: персонажи действуют против природы, стагнация, дыры компетентности. Проверяй, не глупеют ли умные персонажи ради сюжета.`,
+    };
+    const key = orientationContext.authorProfileType;
+    if (priorities[key]) parts.push(priorities[key]);
+  }
+
+  // Screening-based emphasis (NOT blocking — just adds urgency to specific sections)
+  if (orientationContext.screeningResults) {
+    const noAnswers = orientationContext.screeningResults.filter(s => !s.answer);
+    const noCount = noAnswers.length;
+    if (noCount >= 4) {
+      parts.push(`КРИТИЧЕСКОЕ ПРЕДУПРЕЖДЕНИЕ: Быстрый скрининг дал ${noCount}/7 ответов NO. Скелет существенно неполон. Сфокусируйся на Стадии 0 — извлечении и проверке структурных элементов (Тематический Закон, Корневая Травма, Гамартия, Столпы). Аудит продолжается полностью, но с повышенным вниманием к фундаментальным проблемам.`);
+    } else if (noCount >= 2) {
+      const failedSections = noAnswers.map(s => s.sectionRef);
+      parts.push(`ВНИМАНИЕ: Быстрый скрининг дал ${noCount}/7 ответов NO. Обязателен углублённый аудит разделов: ${failedSections.join(', ')}.`);
+    }
+  }
+
+  return parts.length > 0 ? parts.join('\n\n') : '';
+}
+
+// ============================================================
 // Orientation context block builder
 // ============================================================
 
@@ -317,12 +355,14 @@ function buildOrientationContextBlock(
     const profileLabel = authorProfileType ?? 'не определён';
     const profilePct = authorProfilePercentage !== null ? ` ${authorProfilePercentage}%` : '';
     const skeletonBlock = skeletonSummary ?? '(скелет не извлечён)';
+    const priorityOverride = buildPriorityOverrideBlock(orientationContext);
 
     return `КОНТЕКСТ ИЗ ПРЕДЫДУЩЕГО ЭТАПА:
 Режим аудита: ${modeLabel}
 Профиль автора: ${profileLabel}${profilePct}
 Скелет концепта:
-${skeletonBlock}`;
+${skeletonBlock}
+${priorityOverride}`;
   }
 
   return `КОНТЕКСТ ИЗ ПРЕДЫДУЩЕГО ЭТАПА (сырой текст):
