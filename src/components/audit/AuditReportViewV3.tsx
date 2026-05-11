@@ -1,20 +1,21 @@
 /**
- * AuditReportViewV3 — 5 collapsible sections with react-markdown rendering.
+ * AuditReportViewV3 — Continuous document-style report renderer.
  *
- * Each block's output is rendered as free-form markdown via ReactMarkdown.
- * No structured card rendering, no emoji verdicts, no criterion assessments.
+ * All 5 blocks render as continuous sections in a single scrollable document.
+ * No collapsible toggles, no max-height restrictions.
+ * Markdown rendered with custom components (callouts, code blocks).
  */
 
 'use client';
 
 import * as React from 'react';
 import type { BlockResult, PipelineMeta, PipelinePhase, ChecklistScoreResult } from '@/lib/audit/types-v3';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { AuditScoreCard } from './AuditScoreCard';
 import { ChecklistScoreCard } from './ChecklistScoreCard';
+import { BlockSectionHeader } from './BlockSectionHeader';
+import { markdownComponents } from '@/lib/markdown-components';
 
 // ============================================================
 // Props
@@ -28,10 +29,6 @@ interface AuditReportViewV3Props {
   phase: PipelinePhase;
   checklistScore?: ChecklistScoreResult | null;
   mediaType?: 'narrative' | 'game' | 'visual' | 'ttrpg';
-  onExportMD?: () => void;
-  onExportJSON?: () => void;
-  onExportHTML?: () => void;
-  onNewAudit?: () => void;
 }
 
 // ============================================================
@@ -48,6 +45,19 @@ const BLOCK_LABELS = [
 ] as const;
 
 // ============================================================
+// Streaming placeholder
+// ============================================================
+
+function StreamingPlaceholder() {
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground py-4">
+      <span className="inline-block h-2 w-2 rounded-full bg-severity-streaming animate-pulse" />
+      <span className="text-sm">Генерация ответа...</span>
+    </div>
+  );
+}
+
+// ============================================================
 // Main component
 // ============================================================
 
@@ -59,16 +69,21 @@ export function AuditReportViewV3({
   phase,
   checklistScore,
   mediaType,
-  onExportMD,
-  onExportJSON,
-  onExportHTML,
-  onNewAudit,
 }: AuditReportViewV3Props) {
   const isRunning = phase === 'running';
   const isDone = phase === 'done';
 
+  // Auto-scroll during streaming
+  const streamEndRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (isRunning && streamEndRef.current) {
+      streamEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [streamingText, isRunning]);
+
   return (
-    <div className="space-y-4">
+    <article className="max-w-[84ch] mx-auto">
       {/* Score cards — visible only when audit is done and score exists */}
       {isDone && checklistScore && mediaType && (
         <>
@@ -77,148 +92,43 @@ export function AuditReportViewV3({
         </>
       )}
 
-      {/* 5 block sections */}
+      {/* 5 block sections — continuous document */}
       {([1, 2, 3, 4, 5] as const).map((blockNum) => {
         const result = blocks[blockNum] ?? null;
         const isStreamingThis = isRunning && currentBlock === blockNum;
-        const isStreamingAny = isRunning && currentBlock >= blockNum;
         const shouldShow = result !== null || isStreamingThis;
-
-        if (!shouldShow && !isStreamingAny) return null;
+        if (!shouldShow) return null;
 
         return (
-          <AuditBlockSection
+          <section
             key={blockNum}
-            blockNumber={blockNum}
-            label={BLOCK_LABELS[blockNum]}
-            result={result}
-            isStreaming={isStreamingThis}
-            streamingText={isStreamingThis ? streamingText : ''}
-          />
+            id={`block-${blockNum}`}
+            className="scroll-mt-16 py-6 first:pt-0"
+          >
+            <BlockSectionHeader
+              blockNumber={blockNum}
+              label={BLOCK_LABELS[blockNum]}
+              result={result}
+              isStreaming={isStreamingThis}
+            />
+            <div className="prose prose-lg dark:prose-invert max-w-none">
+              {isStreamingThis && streamingText ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {streamingText}
+                </ReactMarkdown>
+              ) : result?.markdown ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                  {result.markdown}
+                </ReactMarkdown>
+              ) : isStreamingThis ? (
+                <StreamingPlaceholder />
+              ) : null}
+            </div>
+            {/* Scroll anchor for streaming auto-scroll */}
+            {isStreamingThis && <div ref={streamEndRef} />}
+          </section>
         );
       })}
-
-      {/* Meta info */}
-      {meta && isDone && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Мета</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm text-muted-foreground space-y-1">
-              <div>Токены: prompt={meta.tokensUsed.prompt}, completion={meta.tokensUsed.completion}, total={meta.tokensUsed.total}</div>
-              <div>Время: {(meta.elapsedMs / 1000).toFixed(1)}с</div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Export + New audit buttons */}
-      {isDone && (
-        <div className="flex flex-wrap gap-3 justify-center py-4">
-          {onExportMD && (
-            <Button variant="outline" onClick={onExportMD}>
-              Скачать MD
-            </Button>
-          )}
-          {onExportJSON && (
-            <Button variant="outline" onClick={onExportJSON}>
-              Скачать JSON
-            </Button>
-          )}
-          {onExportHTML && (
-            <Button variant="outline" onClick={onExportHTML}>
-              Скачать HTML
-            </Button>
-          )}
-          {onNewAudit && (
-            <Button variant="default" onClick={onNewAudit}>
-              Новый аудит
-            </Button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================
-// AuditBlockSection — collapsible block with markdown rendering
-// ============================================================
-
-function AuditBlockSection({
-  blockNumber,
-  label,
-  result,
-  isStreaming,
-  streamingText,
-}: {
-  blockNumber: 1 | 2 | 3 | 4 | 5;
-  label: string;
-  result: BlockResult | null;
-  isStreaming: boolean;
-  streamingText: string;
-}) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const contentRef = React.useRef<HTMLDivElement>(null);
-
-  // Auto-expand when streaming starts
-  React.useEffect(() => {
-    if (isStreaming) setIsOpen(true);
-  }, [isStreaming]);
-
-  // Auto-scroll during streaming
-  React.useEffect(() => {
-    if (isStreaming && contentRef.current) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight;
-    }
-  }, [streamingText, isStreaming]);
-
-  const statusIcon = result
-    ? '✅'
-    : isStreaming
-    ? '🔄'
-    : '⬜';
-
-  const displayText = isStreaming ? streamingText : (result?.markdown ?? '');
-
-  return (
-    <div id={`block-${blockNumber}`} className="border rounded-lg">
-      {/* Header — always visible, clickable */}
-      <button
-        className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-lg">{statusIcon}</span>
-          <span className="font-semibold">БЛОК {blockNumber}: {label}</span>
-        </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {result?.meta?.elapsedMs && (
-            <span>{(result.meta.elapsedMs / 1000).toFixed(1)}с</span>
-          )}
-          {isStreaming && <span className="animate-pulse">стримится...</span>}
-          <span>{isOpen ? '▲' : '▼'}</span>
-        </div>
-      </button>
-
-      {/* Content — collapsible */}
-      {isOpen && (
-        <div
-          ref={contentRef}
-          className={`px-4 pb-4 overflow-y-auto prose prose-sm dark:prose-invert max-w-none ${
-            isStreaming ? 'max-h-[600px]' : 'max-h-[2000px]'
-          }`}
-        >
-          {displayText ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {displayText}
-            </ReactMarkdown>
-          ) : (
-            <p className="text-muted-foreground italic">Ожидание...</p>
-          )}
-        </div>
-      )}
-    </div>
+    </article>
   );
 }

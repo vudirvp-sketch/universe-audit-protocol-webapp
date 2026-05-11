@@ -3,11 +3,11 @@
 /**
  * AuditScoreCard — visual score summary component.
  * Displays overall score percent, verdict, and per-level circular progress indicators.
+ * Uses semantic severity color tokens (Section 11.3).
  */
 
 import * as React from 'react';
 import type { ChecklistScoreResult, MediaType } from '@/lib/audit/types-v3';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface AuditScoreCardProps {
   score: ChecklistScoreResult;
@@ -15,21 +15,17 @@ interface AuditScoreCardProps {
 }
 
 // ============================================================
-// Verdict logic
+// Verdict logic — uses severity color tokens
 // ============================================================
 
 function getVerdict(score: ChecklistScoreResult): { text: string; color: string } {
-  // Use overall scorePercent for verdict — the 13/17 threshold from v10.0
-  // refers specifically to criterion C1's "17 критериев живого мира", not to
-  // the L1 grouping in byLevel (which contains ~25 items). scorePercent is
-  // the correct proxy: 13/17 ≈ 76%, 10/17 ≈ 59%.
-  if (score.scorePercent >= 75) return { text: 'Мир жив', color: 'text-green-600 dark:text-green-400' };
-  if (score.scorePercent >= 50) return { text: 'Требует доработки', color: 'text-yellow-600 dark:text-yellow-400' };
-  return { text: 'Фундаментальный редизайн', color: 'text-red-600 dark:text-red-400' };
+  if (score.scorePercent >= 75) return { text: 'Мир жив', color: 'text-severity-success' };
+  if (score.scorePercent >= 50) return { text: 'Требует доработки', color: 'text-severity-warning' };
+  return { text: 'Фундаментальный редизайн', color: 'text-severity-critical' };
 }
 
 // ============================================================
-// Circular progress component
+// Circular progress component — uses severity stroke tokens
 // ============================================================
 
 function CircularProgress({
@@ -51,9 +47,9 @@ function CircularProgress({
   const offset = circumference - (percent / 100) * circumference;
 
   const colorClass =
-    percent >= 75 ? 'stroke-green-500' :
-    percent >= 50 ? 'stroke-yellow-500' :
-    'stroke-red-500';
+    percent >= 75 ? 'stroke-severity-success' :
+    percent >= 50 ? 'stroke-severity-warning' :
+    'stroke-severity-critical';
 
   return (
     <div className="flex flex-col items-center gap-1">
@@ -83,8 +79,8 @@ function CircularProgress({
       <div className="text-center -mt-[calc(50%+8px)] mb-[calc(50%-8px)] flex flex-col items-center justify-center" style={{ width: size, height: size, marginTop: -size, position: 'relative', zIndex: 1 }}>
         <span className="text-lg font-bold">{percent}%</span>
       </div>
-      <span className="text-xs font-medium">{label}</span>
-      <span className="text-xs text-muted-foreground">{fulfilled}/{applicable}</span>
+      <span className="text-sm font-medium">{label}</span>
+      <span className="text-sm text-muted-foreground">{fulfilled}/{applicable}</span>
     </div>
   );
 }
@@ -98,44 +94,40 @@ export function AuditScoreCard({ score, mediaType }: AuditScoreCardProps) {
   const levels = ['L1', 'L2', 'L3', 'L4'] as const;
 
   return (
-    <Card className="border-2">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center justify-between">
-          <span>Оценка аудита</span>
-          <span className="text-sm font-normal text-muted-foreground">
-            {mediaType === 'narrative' ? 'Нарратив' : mediaType === 'game' ? 'Игра' : mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ'}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col items-center gap-4">
-          {/* Overall score */}
-          <div className="text-center">
-            <div className={`text-4xl font-bold ${verdict.color}`}>{score.scorePercent}%</div>
-            <div className={`text-lg font-semibold mt-1 ${verdict.color}`}>{verdict.text}</div>
-            <div className="text-sm text-muted-foreground mt-1">
-              {score.fulfilled} из {score.totalApplicable} критериев пройдено
-            </div>
-          </div>
-
-          {/* Per-level breakdown */}
-          <div className="flex gap-4 flex-wrap justify-center">
-            {levels.map(level => {
-              const data = score.byLevel[level];
-              if (!data) return null;
-              return (
-                <CircularProgress
-                  key={level}
-                  percent={data.percent}
-                  label={level}
-                  fulfilled={data.fulfilled}
-                  applicable={data.applicable}
-                />
-              );
-            })}
+    <div className="border-2 rounded-lg p-6">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-base font-semibold">Оценка аудита</span>
+        <span className="text-sm font-normal text-muted-foreground">
+          {mediaType === 'narrative' ? 'Нарратив' : mediaType === 'game' ? 'Игра' : mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ'}
+        </span>
+      </div>
+      <div className="flex flex-col items-center gap-4">
+        {/* Overall score */}
+        <div className="text-center">
+          <div className={`text-4xl font-bold ${verdict.color}`}>{score.scorePercent}%</div>
+          <div className={`text-lg font-semibold mt-1 ${verdict.color}`}>{verdict.text}</div>
+          <div className="text-base text-muted-foreground mt-1">
+            {score.fulfilled} из {score.totalApplicable} критериев пройдено
           </div>
         </div>
-      </CardContent>
-    </Card>
+
+        {/* Per-level breakdown */}
+        <div className="flex gap-4 flex-wrap justify-center">
+          {levels.map(level => {
+            const data = score.byLevel[level];
+            if (!data) return null;
+            return (
+              <CircularProgress
+                key={level}
+                percent={data.percent}
+                label={level}
+                fulfilled={data.fulfilled}
+                applicable={data.applicable}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }

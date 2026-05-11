@@ -116,10 +116,10 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
               disabled={isLoading}
             />
             <div className="flex flex-col gap-1">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 {localInput.length} символов
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Введите концепт — от пары предложений до целого рассказа. Длинные тексты обрабатываются автоматически.
               </p>
             </div>
@@ -164,7 +164,7 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
         <Button
           type="submit"
           disabled={!localInput.trim() || isLoading}
-          className="min-w-[150px]"
+          className="min-w-[180px]"
         >
           {isLoading ? (
             <>

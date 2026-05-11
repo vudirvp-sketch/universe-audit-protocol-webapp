@@ -354,7 +354,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             </div>
             {!inputKey.trim() && (
               <Alert className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900">
-                <AlertDescription className="text-red-700 dark:text-red-300 text-xs">
+                <AlertDescription className="text-red-700 dark:text-red-300 text-sm">
                   API-ключ обязателен для запуска аудита. Без ключа запросы к LLM вернут ошибку 400.
                 </AlertDescription>
               </Alert>
@@ -380,7 +380,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               <div className="px-3 pb-3 space-y-4">
                 {/* Proxy URL */}
                 <div className="space-y-2">
-                  <Label htmlFor="proxy-url" className="flex items-center gap-2 text-xs">
+                  <Label htmlFor="proxy-url" className="flex items-center gap-2 text-sm">
                     <Server className="h-3 w-3" />
                     {t.settings.proxyUrl}
                   </Label>
@@ -390,14 +390,14 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                     placeholder="https://audit-proxy.your-subdomain.workers.dev"
                     value={inputProxyUrl}
                     onChange={(e) => setInputProxyUrl(e.target.value)}
-                    className="text-xs h-8"
+                    className="text-sm h-8"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {t.settings.proxyUrlHintAdvanced}
                   </p>
                   {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
                     <Alert className="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900">
-                      <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-xs">
+                      <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-sm">
                         {t.settings.proxyUrlPlaceholder}
                       </AlertDescription>
                     </Alert>
@@ -407,7 +407,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 {/* Base URL for Custom Provider */}
                 {provider === 'custom' && (
                   <div className="space-y-2">
-                    <Label htmlFor="base-url" className="flex items-center gap-2 text-xs">
+                    <Label htmlFor="base-url" className="flex items-center gap-2 text-sm">
                       <Globe className="h-3 w-3" />
                       Base URL провайдера
                     </Label>
@@ -417,9 +417,9 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                       placeholder="https://api.example.com/v1"
                       value={inputBaseUrl}
                       onChange={(e) => setInputBaseUrl(e.target.value)}
-                      className="text-xs h-8"
+                      className="text-sm h-8"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       Базовый URL API для кастомного провайдера (без /chat/completions)
                     </p>
                   </div>
@@ -427,7 +427,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
                 {/* RPM Limit */}
                 <div className="space-y-2">
-                  <Label htmlFor="rpm-limit" className="flex items-center gap-2 text-xs">
+                  <Label htmlFor="rpm-limit" className="flex items-center gap-2 text-sm">
                     <Zap className="h-3 w-3" />
                     {t.settings.rpmLimit}
                   </Label>
@@ -439,20 +439,20 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                     placeholder={String(rpmLimit || 10)}
                     value={inputRpmLimit}
                     onChange={(e) => setInputRpmLimit(e.target.value)}
-                    className="text-xs h-8"
+                    className="text-sm h-8"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {t.settings.rpmLimitHint}
                   </p>
                 </div>
 
                 {/* Model Capabilities Override (11.2) */}
                 <div className="space-y-3 pt-2 border-t">
-                  <p className="text-xs text-muted-foreground font-medium">
+                  <p className="text-sm text-muted-foreground font-medium">
                     {t.settings.capabilitiesHint}
                   </p>
                   <div className="space-y-2">
-                    <Label htmlFor="context-window" className="text-xs">
+                    <Label htmlFor="context-window" className="text-sm">
                       {t.settings.contextWindow}
                     </Label>
                     <Input
@@ -462,14 +462,14 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                       placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').contextWindow)}
                       value={inputContextWindow}
                       onChange={(e) => setInputContextWindow(e.target.value)}
-                      className="text-xs h-8"
+                      className="text-sm h-8"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {t.settings.contextWindowHint}
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="max-output-tokens" className="text-xs">
+                    <Label htmlFor="max-output-tokens" className="text-sm">
                       {t.settings.maxOutputTokens}
                     </Label>
                     <Input
@@ -479,9 +479,9 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                       placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').maxOutputTokens)}
                       value={inputMaxOutputTokens}
                       onChange={(e) => setInputMaxOutputTokens(e.target.value)}
-                      className="text-xs h-8"
+                      className="text-sm h-8"
                     />
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-sm text-muted-foreground">
                       {t.settings.maxOutputTokensHint}
                     </p>
                   </div>
@@ -493,11 +493,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                       onChange={(e) => setCustomSupportsJSONMode(e.target.checked)}
                       className="rounded border-gray-300"
                     />
-                    <Label htmlFor="json-mode" className="text-xs">
+                    <Label htmlFor="json-mode" className="text-sm">
                       {t.settings.supportsJSONMode}
                     </Label>
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     {t.settings.supportsJSONModeHint}
                   </p>
                 </div>
@@ -507,7 +507,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
           {/* Audit Feature Flags */}
           <div className="space-y-3 border rounded-lg p-3">
-            <p className="text-xs font-medium text-muted-foreground">Параметры аудита</p>
+            <p className="text-sm font-medium text-muted-foreground">Параметры аудита</p>
             <div className="flex items-center gap-2">
               <input
                 id="reference-comparison"
@@ -516,11 +516,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 onChange={(e) => useSettings.getState().setReferenceComparison(e.target.checked)}
                 className="rounded border-gray-300"
               />
-              <Label htmlFor="reference-comparison" className="text-xs">
+              <Label htmlFor="reference-comparison" className="text-sm">
                 Сравнить с референсами (Disco Elysium, Expedition 33, Pathologic 2, Атака Титанов)
               </Label>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Добавляет сравнение с эталонными примерами в финальный синтез (Блок 5)
             </p>
           </div>
@@ -552,12 +552,12 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               )}
             </Button>
             {testConnection.loading && (
-              <p className="text-xs text-muted-foreground text-center">
+              <p className="text-sm text-muted-foreground text-center">
                 Проверяем подключение (таймаут 15 сек)...
               </p>
             )}
             {testConnection.error && (
-              <p className="text-xs text-red-500">{testConnection.error}</p>
+              <p className="text-sm text-red-500">{testConnection.error}</p>
             )}
           </div>
 
@@ -600,7 +600,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               })()}
             </div>
 
-            <p className="text-xs text-muted-foreground pt-2 border-t">
+            <p className="text-sm text-muted-foreground pt-2 border-t">
               {t.settings.keySecurityNote}
             </p>
           </div>

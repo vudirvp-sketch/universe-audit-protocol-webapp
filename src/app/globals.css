@@ -42,6 +42,24 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Typography tokens (Section 1.1) */
+  --font-size-body: 1.0625rem;     /* 17px — base body text */
+  --line-height-body: 1.75;        /* comfortable reading */
+  --font-size-body-sm: 0.9375rem;  /* 15px — secondary text */
+  --line-height-body-sm: 1.6;
+
+  /* Severity color tokens — mapped to Tailwind (Section 11) */
+  --color-severity-critical: var(--severity-critical);
+  --color-severity-critical-foreground: var(--severity-critical-foreground);
+  --color-severity-warning: var(--severity-warning);
+  --color-severity-warning-foreground: var(--severity-warning-foreground);
+  --color-severity-recommendation: var(--severity-recommendation);
+  --color-severity-recommendation-foreground: var(--severity-recommendation-foreground);
+  --color-severity-success: var(--severity-success);
+  --color-severity-success-foreground: var(--severity-success-foreground);
+  --color-severity-streaming: var(--severity-streaming);
+  --color-severity-streaming-foreground: var(--severity-streaming-foreground);
 }
 
 :root {
@@ -77,6 +95,18 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Severity colors — light mode (Section 11.1) */
+  --severity-critical: oklch(0.577 0.245 27.325);
+  --severity-critical-foreground: oklch(0.985 0 0);
+  --severity-warning: oklch(0.769 0.188 70.08);
+  --severity-warning-foreground: oklch(0.205 0 0);
+  --severity-recommendation: oklch(0.6 0.118 184.704);
+  --severity-recommendation-foreground: oklch(0.985 0 0);
+  --severity-success: oklch(0.627 0.194 149.214);
+  --severity-success-foreground: oklch(0.205 0 0);
+  --severity-streaming: oklch(0.7 0.15 200);
+  --severity-streaming-foreground: oklch(0.985 0 0);
 }
 
 .dark {
@@ -111,6 +141,18 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* Severity colors — dark mode (Section 11.1) */
+  --severity-critical: oklch(0.704 0.191 22.216);
+  --severity-critical-foreground: oklch(0.985 0 0);
+  --severity-warning: oklch(0.828 0.189 84.429);
+  --severity-warning-foreground: oklch(0.205 0 0);
+  --severity-recommendation: oklch(0.696 0.17 162.48);
+  --severity-recommendation-foreground: oklch(0.205 0 0);
+  --severity-success: oklch(0.723 0.219 142.496);
+  --severity-success-foreground: oklch(0.205 0 0);
+  --severity-streaming: oklch(0.78 0.17 195);
+  --severity-streaming-foreground: oklch(0.205 0 0);
 }
 
 @layer base {
@@ -119,5 +161,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-body);
   }
 }

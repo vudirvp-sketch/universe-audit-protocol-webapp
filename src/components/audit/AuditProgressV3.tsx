@@ -1,9 +1,11 @@
 'use client';
 
 import * as React from 'react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { StatusIndicator, type BlockStatus } from './StatusIndicator';
 import type { BlockResult, OrientationContext, PipelinePhase } from '@/lib/audit/types-v3';
 
 interface AuditProgressV3Props {
@@ -30,22 +32,11 @@ function getBlockStatus(
   blockIndex: number,
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5,
   phase: PipelinePhase,
-): 'waiting' | 'in_progress' | 'completed' {
+): BlockStatus {
   if (phase === 'done') return 'completed';
   if (blockIndex < currentBlock) return 'completed';
   if (blockIndex === currentBlock) return 'in_progress';
   return 'waiting';
-}
-
-function StatusIcon({ status }: { status: 'waiting' | 'in_progress' | 'completed' }) {
-  switch (status) {
-    case 'in_progress':
-      return <span className="text-lg leading-none animate-pulse" role="img" aria-label="В процессе">⏳</span>;
-    case 'completed':
-      return <span className="text-lg leading-none" role="img" aria-label="Завершено">✅</span>;
-    case 'waiting':
-      return <span className="text-lg leading-none" role="img" aria-label="Ожидание">⬜</span>;
-  }
 }
 
 export function AuditProgressV3({
@@ -58,7 +49,6 @@ export function AuditProgressV3({
   orientationContext,
 }: AuditProgressV3Props) {
   // Progress: show completed blocks / total, not current block / total
-  // In 'done' phase all 5 blocks are completed → 100%
   const completedBlocks = phase === 'done'
     ? 5
     : BLOCKS.filter(b => b.index < currentBlock).length;
@@ -75,7 +65,7 @@ export function AuditProgressV3({
       ? ` (${totalChunks} частей)`
       : '';
 
-  // Title changes based on phase (Task 10.3)
+  // Title changes based on phase
   const cardTitle = phase === 'done' ? 'Навигация по отчёту' : 'Прогресс аудита v3';
 
   return (
@@ -86,14 +76,14 @@ export function AuditProgressV3({
       <CardContent className="space-y-4">
         {/* Progress bar */}
         <div className="space-y-2">
-          <div className="flex justify-between text-xs text-muted-foreground">
+          <div className="flex justify-between text-sm text-muted-foreground">
             <span>Прогресс</span>
             <span>{phase === 'done' ? 'Завершено' : currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${chunkDisplay}` : 'Подготовка...'}</span>
           </div>
           <Progress value={progressPercent} className="h-2" />
         </div>
 
-        {/* Block indicators — with timing, tokens, and click-to-scroll (Tasks 4.2, 5b, 9) */}
+        {/* Block indicators — with timing, tokens, and click-to-scroll */}
         <div className="space-y-1">
           {BLOCKS.map((block) => {
             const status = getBlockStatus(block.index, currentBlock, phase);
@@ -102,12 +92,10 @@ export function AuditProgressV3({
             const chunkLabel = isChunked ? ` (${block.defaultChunks} части)` : '';
             const blockResult = blocks[block.index];
 
-            // Elapsed time label (Task 4.2)
             const elapsedLabel = blockResult?.meta?.elapsedMs
-              ? `${(blockResult.meta.elapsedMs / 1000).toFixed(1)}s`
+              ? `${(blockResult.meta.elapsedMs / 1000).toFixed(1)}с`
               : '';
 
-            // Token label (Task 9)
             const tokenLabel = blockResult?.meta?.tokensUsed
               ? `${blockResult.meta.tokensUsed.total.toLocaleString()} tok`
               : '';
@@ -117,11 +105,11 @@ export function AuditProgressV3({
             return (
               <div
                 key={block.index}
-                className={`flex items-center gap-3 p-2 rounded-md transition-colors ${
-                  isClickable ? 'cursor-pointer hover:bg-accent/50' : ''
-                } ${
-                  isActive ? 'bg-accent' : status === 'completed' ? 'opacity-70' : 'opacity-50'
-                }`}
+                className={cn(
+                  'flex items-center gap-3 p-2 rounded-md transition-colors',
+                  isClickable ? 'cursor-pointer hover:bg-accent/50' : '',
+                  isActive ? 'bg-accent' : status === 'completed' ? 'opacity-70' : 'opacity-50',
+                )}
                 onClick={() => {
                   if (isClickable) {
                     const el = document.getElementById(`block-${block.index}`);
@@ -137,31 +125,31 @@ export function AuditProgressV3({
                   }
                 }}
               >
-                <StatusIcon status={status} />
+                <StatusIndicator status={status} size="sm" />
                 <span className="text-sm font-medium flex-1">{block.label}{chunkLabel}</span>
                 {elapsedLabel && (
-                  <span className="text-xs text-muted-foreground">{elapsedLabel}</span>
+                  <span className="text-sm text-muted-foreground">{elapsedLabel}</span>
                 )}
                 {tokenLabel && (
-                  <span className="text-xs text-muted-foreground">{tokenLabel}</span>
+                  <span className="text-sm text-muted-foreground">{tokenLabel}</span>
                 )}
               </div>
             );
           })}
         </div>
 
-        {/* Orientation context section (Task 6b) */}
+        {/* Orientation context section */}
         {orientationContext && (
           <div className="pt-2 border-t space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Контекст аудита</p>
+            <p className="text-sm font-medium text-muted-foreground">Контекст аудита</p>
             {orientationContext.auditMode && (
-              <div className="flex justify-between text-xs">
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Режим:</span>
                 <span>{orientationContext.auditMode}</span>
               </div>
             )}
             {orientationContext.authorProfileType && (
-              <div className="flex justify-between text-xs">
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Профиль:</span>
                 <span>{orientationContext.authorProfileType}</span>
               </div>
@@ -169,7 +157,7 @@ export function AuditProgressV3({
           </div>
         )}
 
-        {/* Cancel button — only during running phase (Task 5d) */}
+        {/* Cancel button — only during running phase */}
         {isAuditing && (
           <div className="flex justify-end">
             <Button variant="destructive" size="sm" onClick={onCancel}>

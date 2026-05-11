@@ -39,6 +39,8 @@ export interface AppSettings {
   customSupportsJSONMode: boolean | null;
   // Audit feature flags
   referenceComparison: boolean;
+  // UI state
+  sidebarCollapsed: boolean;
 }
 
 interface SettingsState extends AppSettings {
@@ -55,6 +57,7 @@ interface SettingsState extends AppSettings {
   setCustomMaxOutputTokens: (value: number | null) => void;
   setCustomSupportsJSONMode: (value: boolean | null) => void;
   setReferenceComparison: (value: boolean) => void;
+  setSidebarCollapsed: (value: boolean) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   clearSettings: () => void;
 }
@@ -81,6 +84,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   customMaxOutputTokens: null,
   customSupportsJSONMode: null,
   referenceComparison: false,
+  sidebarCollapsed: false,
 };
 
 export const useSettings = create<SettingsState>()(
@@ -133,6 +137,10 @@ export const useSettings = create<SettingsState>()(
         set({ referenceComparison });
       },
 
+      setSidebarCollapsed: (sidebarCollapsed: boolean) => {
+        set({ sidebarCollapsed });
+      },
+
       updateSettings: (settings: Partial<AppSettings>) => {
         set(settings);
       },
@@ -158,6 +166,7 @@ export const useSettings = create<SettingsState>()(
         customMaxOutputTokens: state.customMaxOutputTokens,
         customSupportsJSONMode: state.customSupportsJSONMode,
         referenceComparison: state.referenceComparison,
+        sidebarCollapsed: state.sidebarCollapsed,
       }),
       // After rehydration, mark as loaded and apply defaults for missing fields
       onRehydrateStorage: () => {

@@ -3,10 +3,11 @@
 import * as React from 'react';
 import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { AuditFormV2 } from '@/components/audit/AuditFormV2';
-import { AuditProgressV3 } from '@/components/audit/AuditProgressV3';
 import { AuditReportViewV3 } from '@/components/audit/AuditReportViewV3';
+import { LeftRail, MobileProgressFAB } from '@/components/layout/LeftRail';
+import { InspectorDrawer } from '@/components/layout/InspectorDrawer';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   BookOpen,
   Moon,
@@ -14,15 +15,40 @@ import {
   Sparkles,
   RotateCcw,
   AlertTriangle,
+  PanelRight,
+  Sidebar,
 } from 'lucide-react';
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { exportV3ToMarkdown, exportAuditJSON, exportAuditHTML } from '@/lib/audit/export-utils';
 import { extractOrientationContext } from '@/lib/audit/context-bridge';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import type { MediaType } from '@/lib/audit/types-v3';
+import type { MediaType, PipelineStateV3 } from '@/lib/audit/types-v3';
+import type { AuditStateV3 } from '@/hooks/useAuditStateV3';
 import { t } from '@/lib/i18n/ru';
+
+// ============================================================
+// Helper: build PipelineStateV3 from AuditStateV3
+// ============================================================
+
+function buildPipelineState(state: AuditStateV3): PipelineStateV3 {
+  return {
+    phase: state.phase,
+    currentBlock: state.currentBlock,
+    block1: state.block1,
+    block2: state.block2,
+    block3: state.block3,
+    block4: state.block4,
+    block5: state.block5,
+    orientationContext: state.orientationContext,
+    accumulatedWeaknesses: [],
+    checklistScore: state.checklistScore,
+    meta: state.meta!,
+    error: state.error,
+  };
+}
 
 export default function Home() {
   // =========================================================================
@@ -72,6 +98,26 @@ export default function Home() {
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const { provider, apiKey, model, proxyUrl, baseUrl } = useSettings();
   const [proxyUnavailable, setProxyUnavailable] = React.useState(false);
+
+  // New state: inspector drawer + sidebar collapse
+  const [inspectorOpen, setInspectorOpen] = React.useState(false);
+  const sidebarCollapsed = useSettings(s => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettings(s => s.setSidebarCollapsed);
+
+  const toggleSidebar = React.useCallback(() => {
+    setSidebarCollapsed(!sidebarCollapsed);
+  }, [sidebarCollapsed, setSidebarCollapsed]);
+
+  const closeInspector = React.useCallback(() => {
+    setInspectorOpen(false);
+  }, []);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    phase,
+    toggleSidebar,
+    closeInspector,
+  });
 
   // ── Health-check ────
   React.useEffect(() => {
@@ -145,7 +191,6 @@ export default function Home() {
         {
           onBlockStart: (blockNum, totalChunks, chunkIndex) => {
             useAuditStateV3.getState().clearStreamingText();
-            // Update chunk progress for UI
             if (totalChunks !== undefined && chunkIndex !== undefined) {
               useAuditStateV3.getState().setChunkProgress(totalChunks, chunkIndex);
             }
@@ -155,7 +200,6 @@ export default function Home() {
           },
           onBlockComplete: (blockNum, result) => {
             useAuditStateV3.getState().setBlockResult(blockNum, result);
-            // Sync orientation context after Block 1 so the sidebar shows mode/profile immediately
             if (blockNum === 1) {
               const ctx = extractOrientationContext(result.markdown);
               useAuditStateV3.getState().setOrientationContext(ctx);
@@ -180,7 +224,6 @@ export default function Home() {
       }
     } catch (err) {
       if (controller.signal.aborted) {
-        // User cancelled — clean reset, no error screen
         useAuditStateV3.getState().reset();
       } else {
         const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
@@ -212,6 +255,26 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
+  // Export handlers (passed to InspectorDrawer)
+  const exportHandlers = React.useMemo(() => ({
+    onExportMD: () => {
+      const md = exportV3ToMarkdown(blocks);
+      downloadFile(md, 'audit-report.md', 'text/markdown');
+    },
+    onExportJSON: () => {
+      const state = useAuditStateV3.getState();
+      const pipelineState = buildPipelineState(state);
+      const json = exportAuditJSON(pipelineState, state.checklistScore);
+      downloadFile(json, 'audit-report.json', 'application/json');
+    },
+    onExportHTML: () => {
+      const state = useAuditStateV3.getState();
+      const pipelineState = buildPipelineState(state);
+      const html = exportAuditHTML(pipelineState, state.checklistScore);
+      downloadFile(html, 'audit-report.html', 'text/html');
+    },
+  }), [block1, block2, block3, block4, block5]);
+
   // =========================================================================
   // Hydration guard
   // =========================================================================
@@ -227,6 +290,7 @@ export default function Home() {
   }
 
   const blocks = [null, block1, block2, block3, block4, block5];
+  const showRailButtons = phase === 'running' || phase === 'done';
 
   // =========================================================================
   // Render
@@ -236,51 +300,105 @@ export default function Home() {
       <div className="min-h-screen bg-background text-foreground">
         {/* Proxy health-check banner */}
         {proxyUnavailable && (
-          <div className="bg-amber-600/90 text-white text-center py-2 px-4 text-sm font-medium">
+          <div className="bg-severity-warning/90 text-white text-center py-2 px-4 text-sm font-medium">
             Прокси недоступен — проверьте интернет или настройки прокси
           </div>
         )}
 
-        {/* Header */}
+        {/* Header / Topbar */}
         <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container flex h-16 items-center justify-between">
+          <div className="flex h-14 items-center justify-between px-4 md:px-6">
             <div className="flex items-center gap-3">
               <Sparkles className="h-6 w-6 text-amber-500" />
               <div>
                 <h1 className="text-xl font-bold">Universe Audit Protocol</h1>
-                <p className="text-xs text-muted-foreground">{t.app.version}</p>
+                <p className="text-sm text-muted-foreground">{t.app.version}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              >
-                {theme === 'dark' ? (
-                  <Sun className="h-5 w-5" />
-                ) : (
-                  <Moon className="h-5 w-5" />
-                )}
-              </Button>
-              <SettingsDialog />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => useAuditStateV3.getState().reset()}
-                disabled={phase === 'running'}
-              >
-                <RotateCcw className="h-5 w-5" />
-              </Button>
+            <div className="flex items-center gap-1">
+              {/* Rail toggle — only during running/done */}
+              {showRailButtons && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={toggleSidebar}
+                    >
+                      <Sidebar className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Навигация</TooltipContent>
+                </Tooltip>
+              )}
+
+              {/* Inspector button — only during running/done */}
+              {showRailButtons && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setInspectorOpen(true)}
+                    >
+                      <PanelRight className="h-5 w-5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Инспектор</TooltipContent>
+                </Tooltip>
+              )}
+
+              {/* Theme toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  >
+                    {theme === 'dark' ? (
+                      <Sun className="h-5 w-5" />
+                    ) : (
+                      <Moon className="h-5 w-5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Сменить тему</TooltipContent>
+              </Tooltip>
+
+              {/* Settings */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <SettingsDialog />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Настройки</TooltipContent>
+              </Tooltip>
+
+              {/* New Audit / Reset */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => useAuditStateV3.getState().reset()}
+                    disabled={phase === 'running'}
+                  >
+                    <RotateCcw className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Новый аудит</TooltipContent>
+              </Tooltip>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="container py-6">
-          {phase === 'idle' ? (
-            /* ===== Input Form ===== */
-            <div className="max-w-5xl mx-auto">
+        {phase === 'idle' ? (
+          /* ===== Input Form (idle state) ===== */
+          <main className="container py-6">
+            <div className="max-w-4xl mx-auto">
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold mb-2">Universe Audit Protocol</h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto">
@@ -289,23 +407,20 @@ export default function Home() {
                 </p>
               </div>
 
-              {/* Protocol Overview Cards */}
+              {/* Protocol Overview Cards (Section 4.1) */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {[
-                  { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', icon: '\u2699\uFE0F' },
-                  { level: 'L2+L3', name: 'Тело + Психика', question: 'Есть ли телесность и последствия?', icon: '\uD83E\uDEC0' },
-                  { level: 'L4', name: 'Мета', question: 'Задаёт ли вопрос реальной жизни?', icon: '\uD83E\uDE9E' },
-                  { level: 'Блок 5', name: 'Синтез', question: 'Что конкретно исправить?', icon: '\uD83D\uDD27' },
+                  { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', detail: '17 критериев живого мира', icon: '\u2699\uFE0F' },
+                  { level: 'L2+L3', name: 'Тело + Психика', question: 'Есть ли телесность и последствия?', detail: '5 слоёв персонажа, Архитектура Горя', icon: '\uD83E\uDEC0' },
+                  { level: 'L4', name: 'Мета', question: 'Задаёт ли вопрос реальной жизни?', detail: 'Корнелианская дилемма, зеркало агента', icon: '\uD83E\uDE9E' },
+                  { level: 'Блок 5', name: 'Синтез', question: 'Что конкретно исправить?', detail: 'Дерево решений, приоритеты, патчи', icon: '\uD83D\uDD27' },
                 ].map((item) => (
-                  <Card key={item.level} className="text-center">
-                    <CardHeader className="pb-2">
-                      <div className="text-2xl mb-1">{item.icon}</div>
-                      <CardTitle className="text-sm">{item.level}: {item.name}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <p className="text-xs text-muted-foreground">{item.question}</p>
-                    </CardContent>
-                  </Card>
+                  <div key={item.level} className="text-center p-6 rounded-lg border bg-card hover:border-amber-500/30 transition-colors">
+                    <div className="text-4xl mb-2">{item.icon}</div>
+                    <div className="text-base font-semibold mb-1">{item.level}: {item.name}</div>
+                    <p className="text-sm text-muted-foreground mb-1">{item.question}</p>
+                    <p className="text-xs text-muted-foreground/70">{item.detail}</p>
+                  </div>
                 ))}
               </div>
 
@@ -314,8 +429,10 @@ export default function Home() {
                 isLoading={false}
               />
             </div>
-          ) : phase === 'error' ? (
-            /* ===== Error Screen ===== */
+          </main>
+        ) : phase === 'error' ? (
+          /* ===== Error Screen ===== */
+          <main className="container py-6">
             <div className="max-w-2xl mx-auto text-center space-y-6 py-12">
               <AlertTriangle className="h-16 w-16 text-destructive mx-auto" />
               <h2 className="text-2xl font-bold">Ошибка аудита</h2>
@@ -336,126 +453,60 @@ export default function Home() {
                 </Button>
               </div>
             </div>
-          ) : phase === 'running' ? (
-            /* ===== Running — Progress + Progressive Report ===== */
-            <div className="max-w-7xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
-                {/* Left sidebar — progress + controls (sticky on desktop) */}
-                <div className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-                  <AuditProgressV3
-                    currentBlock={currentBlock}
-                    onCancel={cancelAudit}
-                    currentBlockTotalChunks={currentBlockTotalChunks || undefined}
-                    currentChunkIndex={currentChunkIndex || undefined}
-                    blocks={blocks}
-                    phase={phase}
-                    orientationContext={orientationContext}
-                  />
-                </div>
+          </main>
+        ) : (
+          /* ===== Running / Done — Three-Panel Layout ===== */
+          <div className="flex min-h-[calc(100vh-3.5rem)]">
+            <LeftRail
+              currentBlock={currentBlock}
+              onCancel={cancelAudit}
+              currentBlockTotalChunks={currentBlockTotalChunks || undefined}
+              currentChunkIndex={currentChunkIndex || undefined}
+              blocks={blocks}
+              phase={phase}
+              orientationContext={orientationContext}
+              collapsed={sidebarCollapsed}
+              onToggleCollapse={toggleSidebar}
+            />
+            <main className="flex-1 min-w-0 py-6 px-4 md:px-8">
+              <AuditReportViewV3
+                blocks={blocks}
+                meta={meta}
+                currentBlock={currentBlock}
+                streamingText={streamingText}
+                phase={phase}
+                checklistScore={checklistScore}
+                mediaType={mediaType}
+              />
+            </main>
+          </div>
+        )}
 
-                {/* Right panel — progressive report */}
-                <AuditReportViewV3
-                  blocks={blocks}
-                  meta={meta}
-                  currentBlock={currentBlock}
-                  streamingText={streamingText}
-                  phase={phase}
-                  checklistScore={checklistScore}
-                  mediaType={mediaType}
-                  onNewAudit={() => useAuditStateV3.getState().reset()}
-                />
-              </div>
-            </div>
-          ) : (
-            /* ===== Done — Sidebar Navigation + Full Report ===== */
-            <div className="max-w-7xl mx-auto">
-              <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
-                {/* Left sidebar — pipeline navigation */}
-                <div className="space-y-4 md:sticky md:top-20 md:self-start md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
-                  <AuditProgressV3
-                    currentBlock={5}
-                    onCancel={() => {}}
-                    blocks={blocks}
-                    phase={phase}
-                    orientationContext={orientationContext}
-                  />
-                  {/* Summary card with meta info */}
-                  {meta && (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Сводка</CardTitle>
-                      </CardHeader>
-                      <CardContent className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Токены:</span>
-                          <span>{meta.tokensUsed.total.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Время:</span>
-                          <span>{(meta.elapsedMs / 1000).toFixed(1)}с</span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
+        {/* Mobile FAB — only during running/done */}
+        {(phase === 'running' || phase === 'done') && (
+          <MobileProgressFAB
+            currentBlock={currentBlock}
+            blocks={blocks}
+            phase={phase}
+            onCancel={cancelAudit}
+            currentBlockTotalChunks={currentBlockTotalChunks || undefined}
+            currentChunkIndex={currentChunkIndex || undefined}
+            orientationContext={orientationContext}
+          />
+        )}
 
-                {/* Right panel — full report */}
-                <AuditReportViewV3
-                  blocks={blocks}
-                  meta={meta}
-                  currentBlock={5}
-                  streamingText=""
-                  phase={phase}
-                  checklistScore={checklistScore}
-                  mediaType={mediaType}
-                  onExportMD={() => {
-                    const md = exportV3ToMarkdown(blocks);
-                    downloadFile(md, 'audit-report.md', 'text/markdown');
-                  }}
-                  onExportJSON={() => {
-                    const state = useAuditStateV3.getState();
-                    const pipelineState = {
-                      phase: state.phase,
-                      currentBlock: state.currentBlock,
-                      block1: state.block1,
-                      block2: state.block2,
-                      block3: state.block3,
-                      block4: state.block4,
-                      block5: state.block5,
-                      orientationContext: state.orientationContext,
-                      accumulatedWeaknesses: [],
-                      checklistScore: state.checklistScore,
-                      meta: state.meta!,
-                      error: state.error,
-                    } as import('@/lib/audit/types-v3').PipelineStateV3;
-                    const json = exportAuditJSON(pipelineState, state.checklistScore);
-                    downloadFile(json, 'audit-report.json', 'application/json');
-                  }}
-                  onExportHTML={() => {
-                    const state = useAuditStateV3.getState();
-                    const pipelineState = {
-                      phase: state.phase,
-                      currentBlock: state.currentBlock,
-                      block1: state.block1,
-                      block2: state.block2,
-                      block3: state.block3,
-                      block4: state.block4,
-                      block5: state.block5,
-                      orientationContext: state.orientationContext,
-                      accumulatedWeaknesses: [],
-                      checklistScore: state.checklistScore,
-                      meta: state.meta!,
-                      error: state.error,
-                    } as import('@/lib/audit/types-v3').PipelineStateV3;
-                    const html = exportAuditHTML(pipelineState, state.checklistScore);
-                    downloadFile(html, 'audit-report.html', 'text/html');
-                  }}
-                  onNewAudit={() => useAuditStateV3.getState().reset()}
-                />
-              </div>
-            </div>
-          )}
-        </main>
+        {/* Inspector Drawer */}
+        <InspectorDrawer
+          open={inspectorOpen}
+          onOpenChange={setInspectorOpen}
+          meta={meta}
+          blocks={blocks}
+          checklistScore={checklistScore ?? null}
+          mediaType={mediaType}
+          onExportMD={exportHandlers.onExportMD}
+          onExportJSON={exportHandlers.onExportJSON}
+          onExportHTML={exportHandlers.onExportHTML}
+        />
 
         {/* Footer */}
         <footer className="border-t py-4">

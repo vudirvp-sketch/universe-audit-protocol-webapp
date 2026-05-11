@@ -281,7 +281,9 @@ export const t = {
     block5: 'Синтез + Рекомендации',
     // Status labels
     waiting: 'Ожидание...',
-    streaming: 'стримится...',
+    streaming: 'стрим',
+    streamingFull: 'стримится...',
+    generating: 'Генерация ответа...',
     completed: 'Завершено',
     // Meta info
     tokens: 'Токены',
@@ -294,6 +296,18 @@ export const t = {
     // Download
     downloadMarkdown: 'Скачать MD',
     newAudit: 'Новый аудит',
+    // Inspector labels
+    inspector: 'Инспектор',
+    navigation: 'Навигация',
+    changeTheme: 'Сменить тему',
+    session: 'Сессия',
+    export: 'Экспорт',
+    pipeline: 'Пайплайн',
+    assessment: 'Оценка',
+    criteria: 'критериев',
+    provider: 'Провайдер',
+    media: 'Медиа',
+    progress: 'Прогресс аудита',
   },
 
   // Home page description
