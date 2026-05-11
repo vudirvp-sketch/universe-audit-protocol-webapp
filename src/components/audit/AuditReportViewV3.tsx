@@ -16,6 +16,7 @@ import { AuditScoreCard } from './AuditScoreCard';
 import { ChecklistScoreCard } from './ChecklistScoreCard';
 import { BlockSectionHeader } from './BlockSectionHeader';
 import { markdownComponents } from '@/lib/markdown-components';
+import { t } from '@/lib/i18n/ru';
 
 // ============================================================
 // Props
@@ -37,11 +38,11 @@ interface AuditReportViewV3Props {
 
 const BLOCK_LABELS = [
   '', // index 0 unused
-  'ОРИЕНТАЦИЯ',
-  'МЕХАНИЗМ (L1)',
-  'ТЕЛО + ПСИХИКА (L2+L3)',
-  'МЕТА (L4)',
-  'СИНТЕЗ + РЕКОМЕНДАЦИИ',
+  t.app.block1Label,
+  t.app.block2Label,
+  t.app.block3Label,
+  t.app.block4Label,
+  t.app.block5Label,
 ] as const;
 
 // ============================================================
@@ -52,7 +53,7 @@ function StreamingPlaceholder() {
   return (
     <div className="flex items-center gap-2 text-muted-foreground py-4">
       <span className="inline-block h-2 w-2 rounded-full bg-severity-streaming animate-pulse" />
-      <span className="text-sm">Генерация ответа...</span>
+      <span className="text-sm">{t.app.streamingInProgress}</span>
     </div>
   );
 }

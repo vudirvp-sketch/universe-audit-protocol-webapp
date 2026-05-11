@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PanelRight, Check } from 'lucide-react';
 import type { BlockResult, PipelineMeta, ChecklistScoreResult, MediaType } from '@/lib/audit/types-v3';
 import { useSettings } from '@/hooks/useSettings';
+import { t } from '@/lib/i18n/ru';
 
 // ============================================================
 // Props
@@ -73,36 +74,37 @@ export function InspectorDrawer({
     scorePercent >= 50 ? 'text-severity-warning' :
     'text-severity-critical';
 
+  const mediaLabel =
+    mediaType === 'narrative' ? 'Нарратив' :
+    mediaType === 'game' ? 'Игра' :
+    mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ';
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[320px] sm:max-w-[320px] p-0 flex flex-col">
         <SheetHeader className="px-4 pt-4 pb-2 border-b shrink-0">
           <SheetTitle className="flex items-center gap-2">
             <PanelRight className="h-4 w-4" />
-            Инспектор
+            {t.report.inspector}
           </SheetTitle>
         </SheetHeader>
         <ScrollArea className="flex-1">
           <div className="p-4 space-y-4">
             {/* Session section */}
-            <InspectorSection title="Сессия">
-              <MetaRow label="Модель" value={blocks[5]?.meta?.model || blocks[4]?.meta?.model || blocks[3]?.meta?.model || blocks[2]?.meta?.model || blocks[1]?.meta?.model} />
-              <MetaRow label="Провайдер" value={provider} />
-              <MetaRow label="Медиа" value={
-                mediaType === 'narrative' ? 'Нарратив' :
-                mediaType === 'game' ? 'Игра' :
-                mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ'
-              } />
+            <InspectorSection title={t.report.session}>
+              <MetaRow label={t.report.model} value={blocks[5]?.meta?.model || blocks[4]?.meta?.model || blocks[3]?.meta?.model || blocks[2]?.meta?.model || blocks[1]?.meta?.model} />
+              <MetaRow label={t.report.provider} value={provider} />
+              <MetaRow label={t.report.media} value={mediaLabel} />
               {meta?.tokensUsed && (
-                <MetaRow label="Токены" value={`${meta.tokensUsed.total.toLocaleString()}`} />
+                <MetaRow label={t.report.tokens} value={`${meta.tokensUsed.total.toLocaleString()}`} />
               )}
               {meta?.elapsedMs != null && (
-                <MetaRow label="Время" value={`${(meta.elapsedMs / 1000).toFixed(1)}с`} />
+                <MetaRow label={t.report.time} value={`${(meta.elapsedMs / 1000).toFixed(1)}с`} />
               )}
             </InspectorSection>
 
             {/* Export section */}
-            <InspectorSection title="Экспорт">
+            <InspectorSection title={t.report.export}>
               <div className="flex flex-col gap-2">
                 <Button variant="outline" size="sm" onClick={onExportMD}>Markdown</Button>
                 <Button variant="outline" size="sm" onClick={onExportJSON}>JSON</Button>
@@ -111,12 +113,12 @@ export function InspectorDrawer({
             </InspectorSection>
 
             {/* Pipeline section */}
-            <InspectorSection title="Пайплайн">
+            <InspectorSection title={t.report.pipeline}>
               {([1, 2, 3, 4, 5] as const).map(i => {
                 const block = blocks[i];
                 return (
                   <div key={i} className="flex items-center justify-between text-sm py-1">
-                    <span className="text-muted-foreground">Блок {i}</span>
+                    <span className="text-muted-foreground">{t.app.block1Label ? `Блок ${i}` : `Block ${i}`}</span>
                     <div className="flex items-center gap-2">
                       {block?.meta?.tokensUsed && (
                         <span className="text-xs text-muted-foreground">
@@ -141,13 +143,13 @@ export function InspectorDrawer({
 
             {/* Checklist score summary */}
             {checklistScore && (
-              <InspectorSection title="Оценка">
+              <InspectorSection title={t.report.assessment}>
                 <div className="text-center py-2">
                   <span className={cn('text-3xl font-bold', verdictColor)}>
                     {checklistScore.scorePercent}%
                   </span>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {checklistScore.fulfilled}/{checklistScore.totalApplicable} критериев
+                    {checklistScore.fulfilled}/{checklistScore.totalApplicable} {t.report.criteria}
                   </p>
                 </div>
               </InspectorSection>

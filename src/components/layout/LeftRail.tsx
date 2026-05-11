@@ -8,6 +8,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
 import type { BlockResult, OrientationContext, PipelinePhase } from '@/lib/audit/types-v3';
 import { StatusIndicator, type BlockStatus } from '@/components/audit/StatusIndicator';
+import { t } from '@/lib/i18n/ru';
 
 // ============================================================
 // Types
@@ -30,11 +31,11 @@ interface LeftRailProps {
 // ============================================================
 
 const BLOCKS = [
-  { index: 1, label: 'Ориентация', defaultChunks: 1 },
-  { index: 2, label: 'Механизм (L1)', defaultChunks: 4 },
-  { index: 3, label: 'Тело + Психика (L2+L3)', defaultChunks: 2 },
-  { index: 4, label: 'Мета (L4)', defaultChunks: 1 },
-  { index: 5, label: 'Синтез + Рекомендации', defaultChunks: 1 },
+  { index: 1, label: t.app.block1Label, defaultChunks: 1 },
+  { index: 2, label: t.app.block2Label, defaultChunks: 4 },
+  { index: 3, label: t.app.block3Label, defaultChunks: 2 },
+  { index: 4, label: t.app.block4Label, defaultChunks: 1 },
+  { index: 5, label: t.app.block5Label, defaultChunks: 1 },
 ] as const;
 
 // ============================================================
@@ -143,7 +144,7 @@ function CollapsedContent({
                   el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
               }}
-              title={`Блок ${block.index}: ${block.label}`}
+              title={`${t.report.blockPrefix || 'БЛОК'} ${block.index}: ${block.label}`}
             >
               <StatusIndicator status={status} size="md" />
             </button>
@@ -155,7 +156,7 @@ function CollapsedContent({
 }
 
 // ============================================================
-// Expanded content (reuses AuditProgressV3 logic without Card wrapper)
+// Expanded content (progress bar, block list, orientation context, cancel button)
 // ============================================================
 
 function ExpandedContent({
@@ -177,18 +178,24 @@ function ExpandedContent({
   const totalChunks = currentBlockTotalChunks ?? currentBlockInfo?.defaultChunks ?? 1;
   const showChunks = totalChunks > 1 && currentBlock > 0;
   const chunkDisplay = showChunks && currentChunkIndex !== undefined
-    ? ` (часть ${currentChunkIndex + 1}/${totalChunks})`
+    ? ` (${t.rail.partOf.replace('{current}', String(currentChunkIndex + 1)).replace('{total}', String(totalChunks))})`
     : showChunks
-      ? ` (${totalChunks} частей)`
+      ? ` (${t.rail.parts.replace('{count}', String(totalChunks))})`
       : '';
+
+  const progressLabel = phase === 'done'
+    ? t.phases.complete
+    : currentBlock > 0
+      ? `${t.rail.blockOf.replace('{current}', String(Math.min(currentBlock, 5))).replace('{total}', '5')}${chunkDisplay}`
+      : t.rail.preparing;
 
   return (
     <div className="space-y-4">
       {/* Progress bar */}
       <div className="space-y-2">
         <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Прогресс</span>
-          <span>{phase === 'done' ? 'Завершено' : currentBlock > 0 ? `Блок ${Math.min(currentBlock, 5)} из 5${chunkDisplay}` : 'Подготовка...'}</span>
+          <span>{t.progress.progress}</span>
+          <span>{progressLabel}</span>
         </div>
         <Progress value={progressPercent} className="h-2" />
       </div>
@@ -200,7 +207,7 @@ function ExpandedContent({
           const isActive = status === 'in_progress';
           const blockResult = blocks[block.index];
           const isChunked = block.defaultChunks > 1;
-          const chunkLabel = isChunked ? ` (${block.defaultChunks} части)` : '';
+          const chunkLabel = isChunked ? ` (${t.rail.parts.replace('{count}', String(block.defaultChunks))})` : '';
           const elapsedLabel = blockResult?.meta?.elapsedMs
             ? `${(blockResult.meta.elapsedMs / 1000).toFixed(1)}с`
             : '';
@@ -242,16 +249,16 @@ function ExpandedContent({
       {/* Orientation context */}
       {orientationContext && (
         <div className="pt-2 border-t space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">Контекст аудита</p>
+          <p className="text-sm font-medium text-muted-foreground">{t.rail.auditContext}</p>
           {orientationContext.auditMode && (
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Режим:</span>
+              <span className="text-muted-foreground">{t.rail.mode}:</span>
               <span>{orientationContext.auditMode}</span>
             </div>
           )}
           {orientationContext.authorProfileType && (
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Профиль:</span>
+              <span className="text-muted-foreground">{t.rail.profile}:</span>
               <span>{orientationContext.authorProfileType}</span>
             </div>
           )}
@@ -262,7 +269,7 @@ function ExpandedContent({
       {isAuditing && (
         <div className="flex justify-end">
           <Button variant="destructive" size="sm" onClick={onCancel}>
-            Отменить аудит
+            {t.app.cancelAudit}
           </Button>
         </div>
       )}
@@ -300,8 +307,8 @@ export function LeftRail({
           <>
             <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
             <div className="min-w-0">
-              <p className="text-sm font-bold truncate">Universe Audit</p>
-              <p className="text-xs text-muted-foreground truncate">PROTOCOL</p>
+              <p className="text-sm font-bold truncate">{t.rail.brandName}</p>
+              <p className="text-xs text-muted-foreground truncate">{t.rail.brandSub}</p>
             </div>
           </>
         )}
@@ -376,7 +383,7 @@ export function MobileProgressFAB({
         ) : (
           <StatusIndicator status="completed" size="sm" />
         )}
-        <span className="text-sm font-medium">Блок {currentBlock}/5</span>
+        <span className="text-sm font-medium">{t.rail.blockShort.replace('{current}', String(currentBlock))}</span>
         <span className="text-xs text-muted-foreground">{progressPercent}%</span>
       </button>
 
@@ -385,7 +392,7 @@ export function MobileProgressFAB({
           <SheetHeader className="px-4 pt-4 pb-2 border-b">
             <SheetTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-amber-500" />
-              Прогресс аудита
+              {t.report.progress}
             </SheetTitle>
           </SheetHeader>
           <div className="p-4 overflow-y-auto max-h-[60vh]">

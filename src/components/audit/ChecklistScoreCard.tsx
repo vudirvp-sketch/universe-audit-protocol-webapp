@@ -10,6 +10,7 @@
 import * as React from 'react';
 import type { ChecklistScoreResult } from '@/lib/audit/types-v3';
 import { Badge } from '@/components/ui/badge';
+import { t } from '@/lib/i18n/ru';
 
 interface ChecklistScoreCardProps {
   score: ChecklistScoreResult;
@@ -60,7 +61,7 @@ function ChecklistRow({ item }: { item: { id: string; text: string; level: strin
               onClick={() => setExpanded(!expanded)}
               className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline decoration-dotted underline-offset-2"
             >
-              {expanded ? 'скрыть' : 'показать'}
+              {expanded ? t.score.evidenceHide : t.score.evidenceShow}
             </button>
           ) : (
             <span className="text-muted-foreground">—</span>
@@ -109,7 +110,7 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
 
   return (
     <div className="border rounded-lg p-6">
-      <div className="text-base font-semibold mb-3">Чеклист ({score.fulfilled}/{score.totalApplicable})</div>
+      <div className="text-base font-semibold mb-3">{t.score.checklist} ({score.fulfilled}/{score.totalApplicable})</div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -125,7 +126,7 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
                   : 'bg-muted hover:bg-muted/80'
               }`}
             >
-              {level === 'all' ? 'Все' : level}
+              {level === 'all' ? t.score.filterAll : level}
             </button>
           ))}
         </div>
@@ -158,10 +159,10 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
           <thead>
             <tr className="border-b">
               <th className="text-left py-2 px-1 w-12 text-sm font-medium">ID</th>
-              <th className="text-left py-2 px-1 text-sm font-medium">Критерий</th>
-              <th className="text-left py-2 px-1 w-14 text-sm font-medium">Уровень</th>
-              <th className="text-left py-2 px-1 w-20 text-sm font-medium">Статус</th>
-              <th className="text-left py-2 px-1 w-20 text-sm font-medium">Доказательство</th>
+              <th className="text-left py-2 px-1 text-sm font-medium">{t.score.criteriaCol}</th>
+              <th className="text-left py-2 px-1 w-14 text-sm font-medium">{t.score.levelCol}</th>
+              <th className="text-left py-2 px-1 w-20 text-sm font-medium">{t.score.statusCol}</th>
+              <th className="text-left py-2 px-1 w-20 text-sm font-medium">{t.score.evidenceCol}</th>
             </tr>
           </thead>
           <tbody>
@@ -174,7 +175,7 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
 
       {items.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-4">
-          Нет элементов для выбранных фильтров
+          {t.score.noItems}
         </p>
       )}
     </div>

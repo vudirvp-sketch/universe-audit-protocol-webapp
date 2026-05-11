@@ -514,7 +514,7 @@ export default function Home() {
             <p>{`Universe Audit Protocol ${t.app.version}`}</p>
             <div className="flex items-center gap-4">
               <BookOpen className="h-4 w-4" />
-              <span>5 блоков | 4 уровня</span>
+              <span>{t.app.footerStats}</span>
             </div>
           </div>
         </footer>

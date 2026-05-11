@@ -3,6 +3,7 @@
 import * as React from 'react';
 import type { BlockResult } from '@/lib/audit/types-v3';
 import { StatusIndicator, type BlockStatus } from './StatusIndicator';
+import { t } from '@/lib/i18n/ru';
 
 function getBlockStatus(result: BlockResult | null, isStreaming: boolean): BlockStatus {
   if (result) return 'completed';
@@ -14,7 +15,7 @@ function StreamingIndicator() {
   return (
     <span className="inline-flex items-center gap-1.5 text-severity-streaming">
       <span className="inline-block h-2 w-2 rounded-full bg-severity-streaming animate-pulse" />
-      <span className="text-sm">стрим</span>
+      <span className="text-sm">{t.report.streaming}</span>
     </span>
   );
 }
@@ -35,7 +36,7 @@ export function BlockSectionHeader({ blockNumber, label, result, isStreaming }: 
         <div className="flex items-center gap-3">
           <StatusIndicator status={status} />
           <h2 className="text-xl font-semibold">
-            БЛОК {blockNumber}: {label}
+            {t.report.blockPrefix || 'БЛОК'} {blockNumber}: {label}
           </h2>
         </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">

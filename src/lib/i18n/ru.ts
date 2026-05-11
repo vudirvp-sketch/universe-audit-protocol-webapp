@@ -285,6 +285,7 @@ export const t = {
     streamingFull: 'стримится...',
     generating: 'Генерация ответа...',
     completed: 'Завершено',
+    blockPrefix: 'БЛОК',
     // Meta info
     tokens: 'Токены',
     time: 'Время',
@@ -308,6 +309,38 @@ export const t = {
     provider: 'Провайдер',
     media: 'Медиа',
     progress: 'Прогресс аудита',
+  },
+
+  // Rail / sidebar strings
+  rail: {
+    brandName: 'Universe Audit',
+    brandSub: 'PROTOCOL',
+    preparing: 'Подготовка...',
+    auditContext: 'Контекст аудита',
+    mode: 'Режим',
+    profile: 'Профиль',
+    blockOf: 'Блок {current} из {total}',
+    blockShort: 'Блок {current}/5',
+    parts: '{count} частей',
+    partOf: 'часть {current}/{total}',
+  },
+
+  // Score card strings
+  score: {
+    title: 'Оценка аудита',
+    verdictAlive: 'Мир жив',
+    verdictNeedsWork: 'Требует доработки',
+    verdictRedesign: 'Фундаментальный редизайн',
+    criteriaPassed: '{fulfilled} из {total} критериев пройдено',
+    checklist: 'Чеклист',
+    noItems: 'Нет элементов для выбранных фильтров',
+    evidenceShow: 'показать',
+    evidenceHide: 'скрыть',
+    filterAll: 'Все',
+    criteriaCol: 'Критерий',
+    levelCol: 'Уровень',
+    statusCol: 'Статус',
+    evidenceCol: 'Доказательство',
   },
 
   // Home page description

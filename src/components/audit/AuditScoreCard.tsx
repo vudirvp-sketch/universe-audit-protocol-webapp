@@ -8,6 +8,7 @@
 
 import * as React from 'react';
 import type { ChecklistScoreResult, MediaType } from '@/lib/audit/types-v3';
+import { t } from '@/lib/i18n/ru';
 
 interface AuditScoreCardProps {
   score: ChecklistScoreResult;
@@ -19,9 +20,9 @@ interface AuditScoreCardProps {
 // ============================================================
 
 function getVerdict(score: ChecklistScoreResult): { text: string; color: string } {
-  if (score.scorePercent >= 75) return { text: 'Мир жив', color: 'text-severity-success' };
-  if (score.scorePercent >= 50) return { text: 'Требует доработки', color: 'text-severity-warning' };
-  return { text: 'Фундаментальный редизайн', color: 'text-severity-critical' };
+  if (score.scorePercent >= 75) return { text: t.score.verdictAlive, color: 'text-severity-success' };
+  if (score.scorePercent >= 50) return { text: t.score.verdictNeedsWork, color: 'text-severity-warning' };
+  return { text: t.score.verdictRedesign, color: 'text-severity-critical' };
 }
 
 // ============================================================
@@ -93,12 +94,17 @@ export function AuditScoreCard({ score, mediaType }: AuditScoreCardProps) {
   const verdict = getVerdict(score);
   const levels = ['L1', 'L2', 'L3', 'L4'] as const;
 
+  const mediaLabel =
+    mediaType === 'narrative' ? 'Нарратив' :
+    mediaType === 'game' ? 'Игра' :
+    mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ';
+
   return (
     <div className="border-2 rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
-        <span className="text-base font-semibold">Оценка аудита</span>
+        <span className="text-base font-semibold">{t.score.title}</span>
         <span className="text-sm font-normal text-muted-foreground">
-          {mediaType === 'narrative' ? 'Нарратив' : mediaType === 'game' ? 'Игра' : mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ'}
+          {mediaLabel}
         </span>
       </div>
       <div className="flex flex-col items-center gap-4">
@@ -107,7 +113,7 @@ export function AuditScoreCard({ score, mediaType }: AuditScoreCardProps) {
           <div className={`text-4xl font-bold ${verdict.color}`}>{score.scorePercent}%</div>
           <div className={`text-lg font-semibold mt-1 ${verdict.color}`}>{verdict.text}</div>
           <div className="text-base text-muted-foreground mt-1">
-            {score.fulfilled} из {score.totalApplicable} критериев пройдено
+            {t.score.criteriaPassed.replace('{fulfilled}', String(score.fulfilled)).replace('{total}', String(score.totalApplicable))}
           </div>
         </div>
 

@@ -265,7 +265,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                     <div className="flex items-center gap-2">
                       <span>{p.name}</span>
                       {p.hasFreeTier && (
-                        <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 px-1.5 py-0.5 rounded">
+                        <span className="text-xs bg-severity-success/10 text-severity-success px-1.5 py-0.5 rounded">
                           {t.settings.freeTier}
                         </span>
                       )}
@@ -275,7 +275,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               </SelectContent>
             </Select>
             {hasFreeTier && (
-              <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+              <p className="text-sm text-severity-success flex items-center gap-1">
                 <Zap className="h-3 w-3" />
                 {t.settings.freeTierAvailable}
               </p>
@@ -302,11 +302,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 ))}
               </datalist>
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
             </p>
             {currentProvider?.modelDocsUrl && (
-              <p className="text-xs">
+              <p className="text-sm">
                 <a
                   href={currentProvider.modelDocsUrl}
                   target="_blank"
@@ -353,8 +353,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               </Button>
             </div>
             {!inputKey.trim() && (
-              <Alert className="bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900">
-                <AlertDescription className="text-red-700 dark:text-red-300 text-sm">
+              <Alert className="bg-severity-critical/10 border-severity-critical/30">
+                <AlertDescription className="text-severity-critical text-sm">
                   API-ключ обязателен для запуска аудита. Без ключа запросы к LLM вернут ошибку 400.
                 </AlertDescription>
               </Alert>
@@ -396,8 +396,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                     {t.settings.proxyUrlHintAdvanced}
                   </p>
                   {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
-                    <Alert className="bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-900">
-                      <AlertDescription className="text-yellow-700 dark:text-yellow-300 text-sm">
+                    <Alert className="bg-severity-warning/10 border-severity-warning/30">
+                      <AlertDescription className="text-severity-warning text-sm">
                         {t.settings.proxyUrlPlaceholder}
                       </AlertDescription>
                     </Alert>
@@ -540,7 +540,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 </>
               ) : testConnection.success ? (
                 <>
-                  <Check className="h-4 w-4 mr-2 text-green-500" />
+                  <Check className="h-4 w-4 mr-2 text-severity-success" />
                   {t.settings.testSuccess}
                 </>
               ) : testConnection.error ? (
@@ -557,15 +557,15 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               </p>
             )}
             {testConnection.error && (
-              <p className="text-sm text-red-500">{testConnection.error}</p>
+              <p className="text-sm text-severity-critical">{testConnection.error}</p>
             )}
           </div>
 
           {/* Status indicator */}
           {hasKey && !testConnection.loading && (
-            <Alert className="bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-900">
-              <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
-              <AlertDescription className="text-green-700 dark:text-green-300 text-sm">
+            <Alert className="bg-severity-success/10 border-severity-success/30">
+              <Check className="h-4 w-4 text-severity-success" />
+              <AlertDescription className="text-severity-success text-sm">
                 {t.settings.apiKeyConfigured.replace('{provider}', currentProvider?.name || '')}
               </AlertDescription>
             </Alert>

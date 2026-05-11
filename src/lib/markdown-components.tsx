@@ -37,7 +37,7 @@ function removeCalloutPrefix(children: React.ReactNode, prefixLength: number): R
     if (React.isValidElement(node)) {
       const props = node.props as { children?: React.ReactNode };
       if (props.children) {
-        return React.cloneElement(node, { ...props, children: strip(props.children) });
+        return React.cloneElement(node, {} as Record<string, unknown>, strip(props.children));
       }
     }
     return node;
