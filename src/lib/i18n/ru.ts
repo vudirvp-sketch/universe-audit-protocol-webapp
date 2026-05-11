@@ -59,6 +59,10 @@ export const t = {
     characterCount: '{count} символов | Минимум 100 символов рекомендуется',
     mediaType: 'Тип медиа',
     mediaTypeSelect: 'Выберите тип медиа',
+    mediaNarrative: 'Нарратив',
+    mediaGame: 'Игра',
+    mediaVisual: 'Визуальное',
+    mediaTtrpg: 'ТВРПГ',
     minCharsWarning: 'Минимум 50 символов для запуска аудита',
     uploadFile: 'Загрузить файл',
     supportedFormats: 'Поддерживаемые форматы: .txt, .md, .docx, .pdf',
@@ -309,6 +313,18 @@ export const t = {
     provider: 'Провайдер',
     media: 'Медиа',
     progress: 'Прогресс аудита',
+    debug: 'Отладка',
+    rawMarkdown: 'Raw Markdown',
+    noData: 'Нет данных',
+  },
+
+  // Tooltip labels (used in page.tsx header)
+  tooltips: {
+    navigation: 'Навигация',
+    inspector: 'Инспектор',
+    changeTheme: 'Сменить тему',
+    settings: 'Настройки',
+    newAudit: 'Новый аудит',
   },
 
   // Rail / sidebar strings

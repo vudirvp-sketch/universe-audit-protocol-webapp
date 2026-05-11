@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { PanelRight, Check } from 'lucide-react';
+import { PanelRight, Check, FileText, Code } from 'lucide-react';
 import type { BlockResult, PipelineMeta, ChecklistScoreResult, MediaType } from '@/lib/audit/types-v3';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n/ru';
@@ -21,6 +21,8 @@ interface InspectorDrawerProps {
   blocks: (BlockResult | null)[];
   checklistScore: ChecklistScoreResult | null;
   mediaType: MediaType;
+  currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
+  streamingText: string;
   onExportMD: () => void;
   onExportJSON: () => void;
   onExportHTML: () => void;
@@ -61,11 +63,16 @@ export function InspectorDrawer({
   blocks,
   checklistScore,
   mediaType,
+  currentBlock,
+  streamingText,
   onExportMD,
   onExportJSON,
   onExportHTML,
 }: InspectorDrawerProps) {
   const provider = useSettings(s => s.provider);
+
+  // Debug section state
+  const [showRawMarkdown, setShowRawMarkdown] = React.useState(false);
 
   // Verdict color for score display
   const scorePercent = checklistScore?.scorePercent ?? 0;
@@ -75,9 +82,9 @@ export function InspectorDrawer({
     'text-severity-critical';
 
   const mediaLabel =
-    mediaType === 'narrative' ? 'Нарратив' :
-    mediaType === 'game' ? 'Игра' :
-    mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ';
+    mediaType === 'narrative' ? t.form.mediaNarrative :
+    mediaType === 'game' ? t.form.mediaGame :
+    mediaType === 'visual' ? t.form.mediaVisual : t.form.mediaTtrpg;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -118,7 +125,7 @@ export function InspectorDrawer({
                 const block = blocks[i];
                 return (
                   <div key={i} className="flex items-center justify-between text-sm py-1">
-                    <span className="text-muted-foreground">{t.app.block1Label ? `Блок ${i}` : `Block ${i}`}</span>
+                    <span className="text-muted-foreground">{t.report.blockPrefix} {i}</span>
                     <div className="flex items-center gap-2">
                       {block?.meta?.tokensUsed && (
                         <span className="text-xs text-muted-foreground">
@@ -139,6 +146,30 @@ export function InspectorDrawer({
                   </div>
                 );
               })}
+            </InspectorSection>
+
+            {/* Debug section */}
+            <InspectorSection title={t.report.debug}>
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant={showRawMarkdown ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowRawMarkdown(!showRawMarkdown)}
+                  className="flex items-center gap-2"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  {t.report.rawMarkdown}
+                </Button>
+              </div>
+              {showRawMarkdown && (
+                <div className="mt-2 rounded-lg bg-muted/50 p-3 overflow-x-auto max-h-[40vh] overflow-y-auto">
+                  <pre className="text-xs font-mono whitespace-pre-wrap break-words text-muted-foreground">
+                    {currentBlock > 0 && currentBlock <= 5
+                      ? streamingText || blocks[currentBlock]?.markdown || t.report.noData
+                      : t.report.noData}
+                  </pre>
+                </div>
+              )}
             </InspectorSection>
 
             {/* Checklist score summary */}

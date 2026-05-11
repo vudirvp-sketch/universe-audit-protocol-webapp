@@ -36,7 +36,7 @@ export function BlockSectionHeader({ blockNumber, label, result, isStreaming }: 
         <div className="flex items-center gap-3">
           <StatusIndicator status={status} />
           <h2 className="text-xl font-semibold">
-            {t.report.blockPrefix || 'БЛОК'} {blockNumber}: {label}
+            {t.report.blockPrefix} {blockNumber}: {label}
           </h2>
         </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground">

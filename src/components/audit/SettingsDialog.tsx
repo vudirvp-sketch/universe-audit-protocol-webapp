@@ -614,7 +614,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     return (
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" title={t.app.settings}>
+          <Button variant="ghost" size="icon">
             <Settings className="h-5 w-5" />
           </Button>
         </SheetTrigger>
@@ -664,7 +664,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" title={t.app.settings}>
+        <Button variant="ghost" size="icon">
           <Settings className="h-5 w-5" />
         </Button>
       </DialogTrigger>

@@ -95,9 +95,9 @@ export function AuditScoreCard({ score, mediaType }: AuditScoreCardProps) {
   const levels = ['L1', 'L2', 'L3', 'L4'] as const;
 
   const mediaLabel =
-    mediaType === 'narrative' ? 'Нарратив' :
-    mediaType === 'game' ? 'Игра' :
-    mediaType === 'visual' ? 'Визуальное' : 'ТВРПГ';
+    mediaType === 'narrative' ? t.form.mediaNarrative :
+    mediaType === 'game' ? t.form.mediaGame :
+    mediaType === 'visual' ? t.form.mediaVisual : t.form.mediaTtrpg;
 
   return (
     <div className="border-2 rounded-lg p-6">

@@ -328,7 +328,7 @@ export default function Home() {
                       <Sidebar className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Навигация</TooltipContent>
+                  <TooltipContent>{t.tooltips.navigation}</TooltipContent>
                 </Tooltip>
               )}
 
@@ -344,7 +344,7 @@ export default function Home() {
                       <PanelRight className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Инспектор</TooltipContent>
+                  <TooltipContent>{t.tooltips.inspector}</TooltipContent>
                 </Tooltip>
               )}
 
@@ -363,7 +363,7 @@ export default function Home() {
                     )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Сменить тему</TooltipContent>
+                <TooltipContent>{t.tooltips.changeTheme}</TooltipContent>
               </Tooltip>
 
               {/* Settings */}
@@ -373,7 +373,7 @@ export default function Home() {
                     <SettingsDialog />
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>Настройки</TooltipContent>
+                <TooltipContent>{t.tooltips.settings}</TooltipContent>
               </Tooltip>
 
               {/* New Audit / Reset */}
@@ -388,7 +388,7 @@ export default function Home() {
                     <RotateCcw className="h-5 w-5" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Новый аудит</TooltipContent>
+                <TooltipContent>{t.tooltips.newAudit}</TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -503,6 +503,8 @@ export default function Home() {
           blocks={blocks}
           checklistScore={checklistScore ?? null}
           mediaType={mediaType}
+          currentBlock={currentBlock}
+          streamingText={streamingText}
           onExportMD={exportHandlers.onExportMD}
           onExportJSON={exportHandlers.onExportJSON}
           onExportHTML={exportHandlers.onExportHTML}
