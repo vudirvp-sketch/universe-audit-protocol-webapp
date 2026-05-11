@@ -38,19 +38,21 @@ This tool analyzes narratives (novels, games, films, anime, series, TTRPGs) thro
 | Provider | Auth Method | Default Model | Free Tier? |
 |----------|-------------|---------------|------------|
 | Z.AI | Bearer token | default | - |
-| OpenAI | Bearer token | gpt-4o-mini | - |
-| Anthropic | x-api-key | claude-3-5-sonnet-20241022 | - |
-| Google Gemini | Query string | gemini-2.0-flash | Yes |
+| OpenAI | Bearer token | gpt-4.1-mini | - |
+| Anthropic | x-api-key | claude-sonnet-4-6 | - |
+| Google Gemini | Query string | gemini-2.5-flash | Yes |
 | Mistral | Bearer token | mistral-large-latest | - |
 | DeepSeek | Bearer token | deepseek-chat | - |
 | Qwen | Bearer token | qwen-turbo | - |
 | Kimi | Bearer token | moonshot-v1-8k | - |
 | Groq | Bearer token | llama-3.3-70b-versatile | Yes |
-| OpenRouter | Bearer token | anthropic/claude-3.5-sonnet | Yes |
+| OpenRouter | Bearer token | anthropic/claude-sonnet-4 | Yes |
 | HuggingFace | Bearer token | - | Yes |
 | Together AI | Bearer token | - | Yes |
-| xAI | Bearer token | grok-beta | - |
+| xAI | Bearer token | grok-3-mini-fast | - |
 | Custom | Bearer token | - | - |
+
+> **Note**: Default models are synced with `src/lib/llm-client.ts` (`LLM_PROVIDERS`). If a model becomes deprecated, it is automatically migrated in `src/hooks/useSettings.ts` via rehydration logic.
 
 ## Architecture
 

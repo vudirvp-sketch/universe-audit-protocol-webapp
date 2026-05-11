@@ -107,6 +107,8 @@ export interface ModelCapabilities {
   supportsJSONMode: boolean;
   /** Whether system role messages are supported */
   supportsSystemMessages: boolean;
+  /** If true, the model is deprecated and scheduled for retirement. UI should warn users. */
+  deprecated?: boolean;
 }
 
 /**
@@ -169,11 +171,12 @@ const KNOWN_MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
   'openai/o4-mini':                 { contextWindow: 200_000,   maxOutputTokens: 100_000, supportsJSONMode: false, supportsSystemMessages: true },
 
   // --- Anthropic Claude ---
-  'anthropic/claude-sonnet-4-20250514': { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true },
-  'anthropic/claude-opus-4':            { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true },
-  'anthropic/claude-3-5-sonnet':        { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true },
-  'anthropic/claude-3-5-haiku':         { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true },
-  'anthropic/claude-3-haiku':           { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-sonnet-4-6':            { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-sonnet-4-20250514':     { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true, deprecated: true },  // Deprecated: retirement 2026-06-15
+  'anthropic/claude-opus-4':                { contextWindow: 200_000, maxOutputTokens: 16384,  supportsJSONMode: false, supportsSystemMessages: true },
+  'anthropic/claude-3-5-sonnet':            { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true, deprecated: true },  // Legacy model
+  'anthropic/claude-3-5-haiku':             { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true, deprecated: true },  // Legacy model
+  'anthropic/claude-3-haiku':               { contextWindow: 200_000, maxOutputTokens: 8192,   supportsJSONMode: false, supportsSystemMessages: true, deprecated: true },  // Legacy model
 
   // --- DeepSeek ---
   'deepseek/deepseek-chat':         { contextWindow: 128_000,   maxOutputTokens: 8192,   supportsJSONMode: true,  supportsSystemMessages: true },
@@ -289,7 +292,7 @@ export function resolveMaxOutputTokens(
 export const PREFERRED_MODELS: Record<LLMProvider, string[]> = {
   zai:         ['default'],
   openai:      ['gpt-4.1-mini', 'gpt-4o-mini'],
-  anthropic:   ['claude-sonnet-4-20250514', 'claude-3-5-sonnet', 'claude-3-5-haiku'],
+  anthropic:   ['claude-sonnet-4-6', 'claude-sonnet-4-20250514', 'claude-3-5-haiku'],
   google:      ['gemini-2.5-flash', 'gemini-2.0-flash'],
   mistral:     ['mistral-large-latest'],
   deepseek:    ['deepseek-chat', 'deepseek-reasoner'],
@@ -355,7 +358,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     name: 'Anthropic (Claude)',
     baseUrl: 'https://api.anthropic.com/v1',
     apiKeyPrefix: 'sk-ant-',
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: 'claude-sonnet-4-6',
     modelDocsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
   },
 

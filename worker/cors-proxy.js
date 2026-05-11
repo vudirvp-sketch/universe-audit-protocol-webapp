@@ -53,7 +53,7 @@ const PROVIDER_CONFIGS = {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
+          'anthropic-version': '2024-10-22',  // Updated from 2023-06-01 for claude-sonnet-4-6+ support (extended thinking, etc.)
         },
         body: parsed.payload,
       };
@@ -116,7 +116,7 @@ const KNOWN_PROVIDER_DOMAINS = [
 ];
 
 // Proxy version for health-check
-const PROXY_VERSION = 'v7';
+const PROXY_VERSION = 'v8';
 
 // Proxy start time for uptime calculation
 const PROXY_START_TIME = Date.now();

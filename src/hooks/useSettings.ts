@@ -3,6 +3,7 @@
 // to prevent React hydration mismatch in static-export Next.js apps.
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { LLM_PROVIDERS } from '@/lib/llm-client';
 import type { LLMProvider } from '@/lib/llm-client';
 
 const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
@@ -73,10 +74,18 @@ export function isProxyUrlPlaceholder(url: string): boolean {
   return url.includes(PROXY_URL_PLACEHOLDER);
 }
 
+/**
+ * Get the default model for a given provider.
+ * Single source of truth — always reads from LLM_PROVIDERS.
+ */
+function getDefaultModelForProvider(provider: LLMProvider): string {
+  return LLM_PROVIDERS[provider]?.defaultModel || 'default';
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   provider: 'google',
   apiKey: null,
-  model: 'gemini-2.0-flash',
+  model: getDefaultModelForProvider('google'),  // gemini-2.5-flash — synced with LLM_PROVIDERS
   proxyUrl: PROXY_URL_DEFAULT,
   rpmLimit: PROVIDER_RPM_DEFAULTS.google,
   baseUrl: null,
@@ -96,7 +105,7 @@ export const useSettings = create<SettingsState>()(
       setProvider: (provider: LLMProvider) => {
         set({
           provider,
-          model: null, // Reset model when provider changes
+          model: getDefaultModelForProvider(provider), // Auto-set from LLM_PROVIDERS
           rpmLimit: PROVIDER_RPM_DEFAULTS[provider] || get().rpmLimit,
         });
       },
@@ -179,6 +188,19 @@ export const useSettings = create<SettingsState>()(
             // Apply provider-specific RPM if rpmLimit is 0 or missing
             if (!state.rpmLimit || state.rpmLimit <= 0) {
               state.rpmLimit = PROVIDER_RPM_DEFAULTS[state.provider] || PROVIDER_RPM_DEFAULTS.zai;
+            }
+            // Migration: auto-upgrade outdated default models
+            // gemini-2.0-flash → gemini-2.5-flash (Google's recommended default)
+            if (state.provider === 'google' && state.model === 'gemini-2.0-flash') {
+              state.model = 'gemini-2.5-flash';
+            }
+            // claude-3-5-sonnet-20241022 → claude-sonnet-4-6 (Anthropic's recommended default)
+            if (state.provider === 'anthropic' && (state.model === 'claude-3-5-sonnet-20241022' || state.model === 'claude-3-5-sonnet')) {
+              state.model = 'claude-sonnet-4-6';
+            }
+            // If model is null, set from provider's defaultModel
+            if (!state.model) {
+              state.model = getDefaultModelForProvider(state.provider);
             }
             state.isLoaded = true;
           }
