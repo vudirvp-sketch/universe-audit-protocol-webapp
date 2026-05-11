@@ -4,7 +4,8 @@ import * as React from 'react';
 import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { AuditFormV2 } from '@/components/audit/AuditFormV2';
 import { AuditReportViewV3 } from '@/components/audit/AuditReportViewV3';
-import { LeftRail, MobileProgressFAB } from '@/components/layout/LeftRail';
+import { LeftRail } from '@/components/layout/LeftRail';
+import { MobileProgressFAB } from '@/components/layout/MobileProgressFAB';
 import { InspectorDrawer } from '@/components/layout/InspectorDrawer';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -419,7 +420,7 @@ export default function Home() {
                     <div className="text-4xl mb-2">{item.icon}</div>
                     <div className="text-base font-semibold mb-1">{item.level}: {item.name}</div>
                     <p className="text-sm text-muted-foreground mb-1">{item.question}</p>
-                    <p className="text-xs text-muted-foreground/70">{item.detail}</p>
+                    <p className="text-sm text-muted-foreground/70">{item.detail}</p>
                   </div>
                 ))}
               </div>

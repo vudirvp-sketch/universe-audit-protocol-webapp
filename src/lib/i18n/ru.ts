@@ -47,6 +47,12 @@ export const t = {
     verdictInsufficientData: 'Недостаточно данных',
     apiKeyInvalid: 'API-ключ не прошёл валидацию',
     inputHint: 'Введите концепт — от пары предложений до целого рассказа. Длинные тексты обрабатываются автоматически.',
+    // Inspector / Navigation (Section 13)
+    inspector: 'Инспектор',
+    navigation: 'Навигация',
+    toggleNavigation: 'Панель навигации',
+    toggleInspector: 'Панель инспектора',
+    scrollToBlock: 'Перейти к блоку {n}',
   },
 
   form: {

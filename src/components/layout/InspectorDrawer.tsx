@@ -128,19 +128,19 @@ export function InspectorDrawer({
                     <span className="text-muted-foreground">{t.report.blockPrefix} {i}</span>
                     <div className="flex items-center gap-2">
                       {block?.meta?.tokensUsed && (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs font-mono text-muted-foreground">
                           {block.meta.tokensUsed.total.toLocaleString()} tok
                         </span>
                       )}
                       {block?.meta?.elapsedMs && (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs font-mono text-muted-foreground">
                           {(block.meta.elapsedMs / 1000).toFixed(1)}с
                         </span>
                       )}
                       {block ? (
                         <Check className="h-3 w-3 text-severity-success" />
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs font-mono text-muted-foreground">—</span>
                       )}
                     </div>
                   </div>

@@ -4,7 +4,6 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
 import type { BlockResult, OrientationContext, PipelinePhase } from '@/lib/audit/types-v3';
 import { StatusIndicator, type BlockStatus } from '@/components/audit/StatusIndicator';
@@ -27,10 +26,10 @@ interface LeftRailProps {
 }
 
 // ============================================================
-// Constants
+// Constants (shared with MobileProgressFAB)
 // ============================================================
 
-const BLOCKS = [
+export const BLOCKS = [
   { index: 1, label: t.app.block1Label, defaultChunks: 1 },
   { index: 2, label: t.app.block2Label, defaultChunks: 4 },
   { index: 3, label: t.app.block3Label, defaultChunks: 2 },
@@ -157,9 +156,10 @@ function CollapsedContent({
 
 // ============================================================
 // Expanded content (progress bar, block list, orientation context, cancel button)
+// Exported for reuse by MobileProgressFAB.
 // ============================================================
 
-function ExpandedContent({
+export function ExpandedContent({
   currentBlock,
   onCancel,
   currentBlockTotalChunks,
@@ -338,76 +338,5 @@ export function LeftRail({
         </Button>
       </div>
     </div>
-  );
-}
-
-// ============================================================
-// Mobile FAB (floating action button)
-// ============================================================
-
-interface MobileProgressFABProps {
-  currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
-  blocks: (BlockResult | null)[];
-  phase: PipelinePhase;
-  onCancel: () => void;
-  currentBlockTotalChunks?: number;
-  currentChunkIndex?: number;
-  orientationContext?: OrientationContext | null;
-}
-
-export function MobileProgressFAB({
-  currentBlock,
-  blocks,
-  phase,
-  onCancel,
-  currentBlockTotalChunks,
-  currentChunkIndex,
-  orientationContext,
-}: MobileProgressFABProps) {
-  const [open, setOpen] = React.useState(false);
-
-  const completedBlocks = phase === 'done'
-    ? 5
-    : BLOCKS.filter(b => b.index < currentBlock).length;
-  const progressPercent = Math.round((completedBlocks / 5) * 100);
-  const isRunning = phase === 'running';
-
-  return (
-    <>
-      <button
-        className="fixed bottom-4 left-4 z-40 md:hidden flex items-center gap-2 bg-card border rounded-full px-3 py-2 shadow-lg"
-        onClick={() => setOpen(true)}
-      >
-        {isRunning ? (
-          <span className="inline-block h-2 w-2 rounded-full bg-severity-streaming animate-pulse" />
-        ) : (
-          <StatusIndicator status="completed" size="sm" />
-        )}
-        <span className="text-sm font-medium">{t.rail.blockShort.replace('{current}', String(currentBlock))}</span>
-        <span className="text-xs text-muted-foreground">{progressPercent}%</span>
-      </button>
-
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="rounded-t-xl p-0 max-h-[70vh]">
-          <SheetHeader className="px-4 pt-4 pb-2 border-b">
-            <SheetTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-amber-500" />
-              {t.report.progress}
-            </SheetTitle>
-          </SheetHeader>
-          <div className="p-4 overflow-y-auto max-h-[60vh]">
-            <ExpandedContent
-              currentBlock={currentBlock}
-              onCancel={() => { onCancel(); setOpen(false); }}
-              currentBlockTotalChunks={currentBlockTotalChunks}
-              currentChunkIndex={currentChunkIndex}
-              blocks={blocks}
-              phase={phase}
-              orientationContext={orientationContext}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
-    </>
   );
 }
