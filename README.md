@@ -111,6 +111,18 @@ The capability frontier (§22) is always reported: demonstrated / under-proven /
 - **Non-blocking verdict extraction**: the machine-readable §27 JSON block is parsed after Block 5; if it is missing or invalid, the qualitative bands are recovered from the report markdown, so a verdict failure never breaks the audit
 - **Block summaries as context**: each block emits a short weaknesses summary that is passed to the following blocks
 
+### Why a run takes minutes — and how to watch it
+
+A full audit is **13 sequential requests** (Block 1: 1, Block 2: 4, Block 3: 3, Block 4: 3, Block 5: 2). Nothing runs in parallel, and between the sub-requests of one block the client pauses for `60 / RPM` seconds (minimum 1 s, e.g. 6 s at the default 10 RPM) so a free tier does not answer 429. A single request may legitimately stream for minutes; the client ceiling is 300 s per request.
+
+Because a quiet request and a dead request look identical, every boundary is reported in a timestamped **pipeline journal**:
+
+- a live status line above the report shows elapsed time, the last event, and a «тишина N с» warning when nothing has happened for 10+ seconds;
+- while a request is in flight, a heartbeat line appears every 10 s: `Блок 2, часть 1/4: ещё выполняется — 30 с, получено 120 символов`;
+- the Inspector («Журнал пайплайна») keeps the full list — run start with provider/model/RPM pause, each request with its `max_tokens`, its duration and character count, every rate-limit pause, truncation warnings, retries, block totals — with a copy button for bug reports.
+
+«Отменить аудит» stops the run immediately: the aborted stream is not "recovered" as partial text, the pipeline unwinds, and the form returns without any background requests.
+
 ### Exports
 
 - **Markdown** — protocol identity, author framing (guided fields, artefact labels with text length), qualitative verdict table (bands, confidence, counts, frontier, closing statement), all five block markdowns, session metadata

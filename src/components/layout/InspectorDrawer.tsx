@@ -12,6 +12,7 @@ import type {
   OrientationContext,
   PipelineMeta,
   MediaType,
+  PipelineLogEntry,
 } from '@/lib/audit/types-v3';
 import {
   bandSeverity,
@@ -20,6 +21,7 @@ import {
   severityTextClass,
 } from '@/lib/audit/verdict-display';
 import { useSettings } from '@/hooks/useSettings';
+import { PipelineLogSection } from '@/components/audit/PipelineLog';
 import { t } from '@/lib/i18n/ru';
 
 // ============================================================
@@ -36,6 +38,8 @@ interface InspectorDrawerProps {
   mediaType: MediaType;
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
   streamingText: string;
+  /** Timestamped pipeline events — request boundaries, pauses, retries */
+  log?: PipelineLogEntry[];
   onExportMD: () => void;
   onExportJSON: () => void;
   onExportHTML: () => void;
@@ -79,6 +83,7 @@ export function InspectorDrawer({
   mediaType,
   currentBlock,
   streamingText,
+  log = [],
   onExportMD,
   onExportJSON,
   onExportHTML,
@@ -136,6 +141,11 @@ export function InspectorDrawer({
                 <Button variant="outline" size="sm" onClick={onExportJSON}>JSON</Button>
                 <Button variant="outline" size="sm" onClick={onExportHTML}>HTML</Button>
               </div>
+            </InspectorSection>
+
+            {/* Pipeline journal — what actually happened, second by second */}
+            <InspectorSection title="Журнал">
+              <PipelineLogSection entries={log} />
             </InspectorSection>
 
             {/* Pipeline section */}

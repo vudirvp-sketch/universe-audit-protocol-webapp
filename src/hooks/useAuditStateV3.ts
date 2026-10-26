@@ -18,6 +18,7 @@ import type {
   AuditVerdict,
   AuditMaterial,
   GuidedContext,
+  PipelineLogEntry,
 } from '../lib/audit/types-v3';
 
 // ============================================================
@@ -48,6 +49,10 @@ export interface AuditStateV3 {
   materials: AuditMaterial[];
   /** Qualitative verdict (v16 §26.S) — replaces the legacy checklist score */
   verdict: AuditVerdict | null;
+  /** Timestamped pipeline events — answers "is it stuck?" without a debugger */
+  log: PipelineLogEntry[];
+  /** Epoch ms when the current run started (for the live elapsed timer) */
+  pipelineStartedAt: number | null;
   /**
    * Last persistence failure (localStorage quota, blocked storage).
    * Non-null means the draft on screen is no longer being saved.
@@ -72,6 +77,8 @@ export interface AuditStateV3 {
   setGuided: (partial: Partial<GuidedContext>) => void;
   setMaterials: (materials: AuditMaterial[]) => void;
   setVerdict: (verdict: AuditVerdict | null) => void;
+  /** Append one progress event; the list is capped so a long run cannot grow unbounded */
+  appendLog: (entry: PipelineLogEntry) => void;
   reset: () => void;
 }
 
@@ -99,6 +106,8 @@ const initialState = {
   guided: {} as GuidedContext,
   materials: [] as AuditMaterial[],
   verdict: null as AuditVerdict | null,
+  log: [] as PipelineLogEntry[],
+  pipelineStartedAt: null as number | null,
   storageError: null as string | null,
 };
 
@@ -140,9 +149,13 @@ export const useAuditStateV3 = create<AuditStateV3>()(
           streamingText: '',
           error: null,
           verdict: null,
+          log: [],
+          pipelineStartedAt: Date.now(),
         }),
 
-      // Cancelling must not destroy the draft the author typed: only the run is dropped.
+      // Cancelling must not destroy the draft the author typed: only the run is
+      // dropped. The journal is kept — it is the evidence of what happened
+      // before the cancel and is cleared on the next start or reset.
       abortAudit: () =>
         set({
           phase: 'idle',
@@ -209,6 +222,13 @@ export const useAuditStateV3 = create<AuditStateV3>()(
 
       setVerdict: (verdict) => set({ verdict }),
 
+      appendLog: (entry) =>
+        set((state) => ({
+          // Cap keeps the persisted state (and the panel) bounded on long runs:
+          // heartbeats alone add a line every 10 s per in-flight request.
+          log: state.log.length >= 400 ? [...state.log.slice(-399), entry] : [...state.log, entry],
+        })),
+
       reset: () => set({ ...initialState }),
     }),
     {
@@ -236,6 +256,8 @@ export const useAuditStateV3 = create<AuditStateV3>()(
         guided: state.guided,
         materials: state.materials,
         verdict: state.verdict,
+        log: state.log,
+        pipelineStartedAt: state.pipelineStartedAt,
       }),
       onRehydrateStorage: () => {
         return (state) => {

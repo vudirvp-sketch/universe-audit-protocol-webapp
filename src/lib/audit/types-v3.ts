@@ -258,6 +258,25 @@ export interface PipelineMeta {
 // ============================================================
 
 /** Callbacks for streaming pipeline execution */
+export type PipelineLogLevel = 'info' | 'warn' | 'error';
+
+/**
+ * One observable pipeline event. Everything that can make an audit feel stuck —
+ * a long request, the rate-limit pause between chunks, a retry, a truncated
+ * answer — is reported here with a relative timestamp, so the UI can show what
+ * is actually happening instead of an indefinite spinner.
+ */
+export interface PipelineLogEntry {
+  /** Milliseconds since the pipeline started */
+  at: number;
+  level: PipelineLogLevel;
+  /** Stable event tag, e.g. 'run:start', 'chunk:done', 'rate:wait' */
+  kind: string;
+  /** Human-readable Russian line shown in the log panel */
+  message: string;
+  block?: 1 | 2 | 3 | 4 | 5;
+}
+
 export interface StreamingCallbacksV3 {
   /** Called when a block starts executing, and again for each sub-chunk within a chunked block.
    *  - chunkIndex: 0-based index of the current sub-chunk (only when totalChunks > 1) */
@@ -268,6 +287,8 @@ export interface StreamingCallbacksV3 {
   onBlockComplete: (blockNumber: 1 | 2 | 3 | 4 | 5, result: BlockResult) => void;
   /** Called on fatal error */
   onError: (message: string) => void;
+  /** Optional progress log — request boundaries, pauses, retries, truncation. */
+  onLog?: (entry: PipelineLogEntry) => void;
 }
 
 // ============================================================

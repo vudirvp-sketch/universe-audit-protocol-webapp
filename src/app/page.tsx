@@ -28,6 +28,7 @@ import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { exportV3ToMarkdown, exportAuditJSON, exportAuditHTML } from '@/lib/audit/export-utils';
 import { extractOrientationContext } from '@/lib/audit/context-bridge';
 import { SettingsDialog } from '@/components/audit/SettingsDialog';
+import { PipelineStatusLine } from '@/components/audit/PipelineLog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -119,6 +120,8 @@ export default function Home() {
   const orientationContext = useAuditStateV3(s => s.orientationContext);
   const verdict = useAuditStateV3(s => s.verdict);
   const storageError = useAuditStateV3(s => s.storageError);
+  const pipelineLog = useAuditStateV3(s => s.log);
+  const pipelineStartedAt = useAuditStateV3(s => s.pipelineStartedAt);
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
@@ -246,9 +249,20 @@ export default function Home() {
           onError: (message) => {
             useAuditStateV3.getState().setError(message);
           },
+          onLog: (entry) => {
+            useAuditStateV3.getState().appendLog(entry);
+          },
         },
         controller.signal,
       );
+
+      // Cancel wins over everything the pipeline returned: the run was stopped
+      // on purpose, so the UI must leave the running state instead of waiting
+      // for a result the user already abandoned.
+      if (controller.signal.aborted) {
+        useAuditStateV3.getState().abortAudit();
+        return;
+      }
 
       if (result.error) {
         useAuditStateV3.getState().setError(result.error);
@@ -524,6 +538,11 @@ export default function Home() {
               onToggleCollapse={toggleSidebar}
             />
             <main className="flex-1 min-w-0 py-6 px-4 md:px-8">
+              <PipelineStatusLine
+                entries={pipelineLog}
+                startedAt={pipelineStartedAt}
+                phase={phase}
+              />
               <AuditReportViewV3
                 blocks={[...blocks]}
                 meta={meta}
@@ -561,6 +580,7 @@ export default function Home() {
           mediaType={mediaType}
           currentBlock={currentBlock}
           streamingText={streamingText}
+          log={pipelineLog}
           onExportMD={exportHandlers.onExportMD}
           onExportJSON={exportHandlers.onExportJSON}
           onExportHTML={exportHandlers.onExportHTML}

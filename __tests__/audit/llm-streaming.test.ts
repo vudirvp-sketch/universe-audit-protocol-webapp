@@ -216,6 +216,23 @@ describe('callLLMStreaming — ProxyTimeoutError', () => {
     const result = await callLLMStreaming(makeOptions());
     expect(result.text).toBe('Got some');
   });
+
+  it('rethrows a user cancel even when partial text arrived', async () => {
+    // Cancelling must stop the audit: recovering a partial answer here would
+    // keep every remaining block running after the user pressed «Отменить».
+    mockChatCompletionStream.mockImplementation(
+      async (_options: unknown, onDelta: (text: string, delta: string) => void) => {
+        onDelta('Partial', 'Partial');
+        throw new DOMException('Aborted', 'AbortError');
+      }
+    );
+
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(callLLMStreaming(makeOptions({ abortSignal: controller.signal })))
+      .rejects.toThrow();
+  });
 });
 
 // ============================================================

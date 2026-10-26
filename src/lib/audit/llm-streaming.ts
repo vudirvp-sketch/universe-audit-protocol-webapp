@@ -148,6 +148,13 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
 
     return { text: fullText, usage: extractUsage(response), finishReason };
   } catch (streamError) {
+    // A user cancel is not a partial answer: stop immediately and let the
+    // pipeline unwind. Recovering here would keep the audit running after the
+    // user pressed «Отменить аудит».
+    if (abortSignal?.aborted) {
+      throw streamError;
+    }
+
     // Partial text recovery — if we got ANY text before the error, use it
     if (streamingAccumulated.trim().length > 0) {
       console.warn(

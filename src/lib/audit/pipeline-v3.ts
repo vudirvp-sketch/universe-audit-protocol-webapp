@@ -20,6 +20,7 @@ import type {
   BlockResult,
   SubBlockResult,
   OrientationContext,
+  PipelineLogLevel,
 } from './types-v3';
 import { BLOCK_TEMPERATURES } from './types-v3';
 import { getModelCapabilities, getEffectiveModelCapabilities } from '../llm-client';
@@ -72,6 +73,16 @@ export async function runAuditPipelineV3(
   abortSignal?: AbortSignal,
 ): Promise<PipelineStateV3> {
   const pipelineStart = Date.now();
+  // Every observable event is timestamped relative to this instant, so the log
+  // panel can answer "is it stuck?" without guessing.
+  const emitLog = (
+    level: PipelineLogLevel,
+    kind: string,
+    message: string,
+    block?: 1 | 2 | 3 | 4 | 5,
+  ): void => {
+    callbacks.onLog?.({ at: Date.now() - pipelineStart, level, kind, message, block });
+  };
   const state: PipelineStateV3 = {
     phase: 'running',
     currentBlock: 0,
@@ -106,6 +117,14 @@ export async function runAuditPipelineV3(
     // Calculate RPM-based delay between chunks (FIX-07)
     // Default: 3 RPM → 20s delay; 60 RPM → 1s delay; minimum 1 second
     const rpmDelayMs = Math.max(1_000, Math.floor(60_000 / (llmConfig.rpmLimit || 3)));
+    const totalRequests = 13;
+    emitLog(
+      'info',
+      'run:start',
+      `Старт: ${llmConfig.provider} / ${llmConfig.model || '(модель по умолчанию)'} — ` +
+        `${totalRequests} запросов подряд, пауза ${(rpmDelayMs / 1000).toFixed(1)} с между частями ` +
+        `(лимит ${llmConfig.rpmLimit || 3} запросов/мин). Один запрос может идти минуты — это нормально.`,
+    );
 
     // v16 §2 — author framing (guided mode) and additional artefacts
     // (material-aware mode). Rendered once and injected into every request.
@@ -128,6 +147,7 @@ export async function runAuditPipelineV3(
       callbacks,
       abortSignal,
       () => [buildBlock1Prompt(input.text, input.mediaType, extraContext, detectedMode)],
+      emitLog,
       rpmDelayMs,
     );
     state.block1 = block1Result;
@@ -149,6 +169,7 @@ export async function runAuditPipelineV3(
       callbacks,
       abortSignal,
       () => buildBlock2SubPrompts(input.text, input.mediaType, state.orientationContext!, state.block1?.markdown, extraContext),
+      emitLog,
       rpmDelayMs,
     );
     state.block2 = block2Result;
@@ -174,6 +195,7 @@ export async function runAuditPipelineV3(
         state.block1?.markdown,
         extraContext,
       ),
+      emitLog,
       rpmDelayMs,
     );
     state.block3 = block3Result;
@@ -200,6 +222,7 @@ export async function runAuditPipelineV3(
         state.block1?.markdown,
         extraContext,
       ),
+      emitLog,
       rpmDelayMs,
     );
     state.block4 = block4Result;
@@ -229,6 +252,7 @@ export async function runAuditPipelineV3(
         input.referenceComparison,
         extraContext,
       ),
+      emitLog,
       rpmDelayMs,
     );
     state.block5 = block5Result;
@@ -252,16 +276,25 @@ export async function runAuditPipelineV3(
     // ============================================================
     state.meta.elapsedMs = Date.now() - pipelineStart;
     state.phase = 'done';
+    emitLog(
+      'info',
+      'run:done',
+      `Аудит завершён за ${(state.meta.elapsedMs / 1000).toFixed(1)} с; ` +
+        `токенов: ${state.meta.tokensUsed.total}` +
+        `${state.meta.tokensUsed.total === 0 ? ' (провайдер не сообщает расход при стриминге)' : ''}`,
+    );
     return state;
 
   } catch (error: unknown) {
     // User cancellation — do NOT call onError, let page.tsx handle the reset
     if (abortSignal?.aborted) {
+      emitLog('info', 'run:cancelled', `Аудит отменён пользователем через ${((Date.now() - pipelineStart) / 1000).toFixed(1)} с`);
       state.phase = 'idle';
       state.currentBlock = 0;
       return state;
     }
     const classified = classifyLLMError(error);
+    emitLog('error', 'run:error', `Ошибка: ${classified.userMessage}`);
     state.phase = 'error';
     state.error = classified.userMessage;
     callbacks.onError(classified.userMessage);
@@ -280,6 +313,8 @@ type BlockNumber = 1 | 2 | 3 | 4 | 5;
  * Each sub-request is a separate LLM call with its own streaming callback.
  * Results are concatenated with `---` separators.
  */
+type EmitLog = (level: PipelineLogLevel, kind: string, message: string, block?: 1 | 2 | 3 | 4 | 5) => void;
+
 async function executeChunkedBlock(
   blockNumber: BlockNumber,
   state: PipelineStateV3,
@@ -289,6 +324,7 @@ async function executeChunkedBlock(
   callbacks: StreamingCallbacksV3,
   abortSignal: AbortSignal | undefined,
   buildSubPrompts: () => Array<{ system: string; user: string }>,
+  emitLog: EmitLog,
   rpmDelayMs: number = 3_000,
 ): Promise<BlockResult> {
   state.currentBlock = blockNumber;
@@ -296,6 +332,12 @@ async function executeChunkedBlock(
 
   // Notify UI about the block starting (with total chunks for progress display)
   callbacks.onBlockStart(blockNumber, subPrompts.length > 1 ? subPrompts.length : undefined, 0);
+  emitLog(
+    'info',
+    'block:start',
+    `Блок ${blockNumber}: старт — ${subPrompts.length} ${subPrompts.length === 1 ? 'запрос' : 'части'} подряд`,
+    blockNumber,
+  );
 
   const blockStart = Date.now();
   const subResults: SubBlockResult[] = [];
@@ -321,32 +363,71 @@ async function executeChunkedBlock(
     const temperature = BLOCK_TEMPERATURES[blockNumber];
 
     let accumulatedText = '';
+    const chunkStart = Date.now();
+    const chunkLabel = subPrompts.length > 1
+      ? `Блок ${blockNumber}, часть ${i + 1}/${subPrompts.length}`
+      : `Блок ${blockNumber}`;
+    emitLog('info', 'chunk:start', `${chunkLabel}: запрос отправлен (max_tokens=${maxTokens})`, blockNumber);
 
-    const result = await callWithRetry(
-      () => callLLMStreaming({
-        prompt,
-        llmConfig,
-        onChunk: (text) => {
-          accumulatedText += text;
-          callbacks.onChunk(blockNumber, text);
-        },
-        maxTokens,
+    // Heartbeat: a single audit request can legitimately run for minutes with
+    // almost no output. Without this line the UI looks frozen during that window.
+    const heartbeat = setInterval(() => {
+      emitLog(
+        'info',
+        'chunk:wait',
+        `${chunkLabel}: ещё выполняется — ${Math.round((Date.now() - chunkStart) / 1000)} с, ` +
+          `получено ${accumulatedText.length} символов`,
+        blockNumber,
+      );
+    }, 10_000);
+
+    let result: LLMStreamingResult;
+    try {
+      result = await callWithRetry(
+        () => callLLMStreaming({
+          prompt,
+          llmConfig,
+          onChunk: (text) => {
+            accumulatedText += text;
+            callbacks.onChunk(blockNumber, text);
+          },
+          maxTokens,
+          abortSignal,
+          responseFormat: 'markdown',
+          temperature,
+        }),
+        () => accumulatedText,
+        blockNumber,
         abortSignal,
-        responseFormat: 'markdown',
-        temperature,
-      }),
-      () => accumulatedText,
-      blockNumber,
-      abortSignal,
-    );
+        emitLog,
+      );
+    } finally {
+      clearInterval(heartbeat);
+    }
 
     const raw = typeof result === 'string' ? result : result.text;
     const usage = typeof result === 'string' ? null : result.usage;
     const finishReason = typeof result === 'string' ? null : result.finishReason;
     const incomplete = typeof result === 'string' ? false : result.incomplete === true;
+    const chunkDurationMs = Date.now() - chunkStart;
 
     if (incomplete || isTruncatedFinishReason(finishReason)) {
       partial = true;
+      emitLog(
+        'warn',
+        'chunk:truncated',
+        `${chunkLabel}: ответ обрезан (${finishReason ?? 'поток прерван'}), получено ${raw.length} символов за ` +
+          `${(chunkDurationMs / 1000).toFixed(1)} с`,
+        blockNumber,
+      );
+    } else {
+      emitLog(
+        'info',
+        'chunk:done',
+        `${chunkLabel}: готово за ${(chunkDurationMs / 1000).toFixed(1)} с — ${raw.length} символов` +
+          `${usage ? `, токенов ${usage.total}` : ''}`,
+        blockNumber,
+      );
     }
 
     if (usage) {
@@ -365,6 +446,12 @@ async function executeChunkedBlock(
 
     // Delay between sub-requests to avoid rate limits on free models
     if (i < subPrompts.length - 1) {
+      emitLog(
+        'info',
+        'rate:wait',
+        `${chunkLabel}: пауза ${(rpmDelayMs / 1000).toFixed(1)} с по лимиту запросов (RPM) перед следующей частью`,
+        blockNumber,
+      );
       await abortAwareSleep(rpmDelayMs, abortSignal); // RPM-based pause between chunks
     }
 
@@ -387,6 +474,13 @@ async function executeChunkedBlock(
     },
   };
 
+  emitLog(
+    partial ? 'warn' : 'info',
+    'block:done',
+    `Блок ${blockNumber}: завершён за ${(blockResult.meta.elapsedMs / 1000).toFixed(1)} с — ` +
+      `${blockResult.meta.completionStatus}, ${fullMarkdown.length} символов`,
+    blockNumber,
+  );
   callbacks.onBlockComplete(blockNumber, blockResult);
   return blockResult;
 }
@@ -400,13 +494,21 @@ async function callWithRetry(
   getAccumulatedText: () => string,
   blockNumber: BlockNumber,
   abortSignal?: AbortSignal,
+  emitLog?: EmitLog,
 ): Promise<LLMStreamingResult> {
+  const log = emitLog ?? (() => undefined);
   try {
     return await fn();
   } catch (error: unknown) {
     const partial = getAccumulatedText();
     if (partial.trim().length > 0) {
       console.warn(`Block ${blockNumber}: error after streaming, using partial text (${partial.length} chars)`);
+      log(
+        'warn',
+        'chunk:partial',
+        `Блок ${blockNumber}: поток прерван ошибкой, использую уже полученные ${partial.length} символов`,
+        blockNumber,
+      );
       return { text: partial, usage: null, finishReason: null, incomplete: true };
     }
 
@@ -414,19 +516,33 @@ async function callWithRetry(
     if (error instanceof Error && error.name === 'ProxyTimeoutError') {
       // Throw immediately — the pipeline should handle this by reducing chunk size
       // or reporting a clear error to the user
+      log('error', 'chunk:timeout', `Блок ${blockNumber}: таймаут запроса — провайдер не прислал данные`, blockNumber);
       throw error;
     }
 
     if (isTransientError(error)) {
       console.warn(`Block ${blockNumber}: transient error, retrying in 5s...`);
+      log(
+        'warn',
+        'chunk:retry',
+        `Блок ${blockNumber}: временная ошибка провайдера — повтор через 5 с`,
+        blockNumber,
+      );
       await abortAwareSleep(5_000, abortSignal);
       try {
         return await fn();
       } catch (retryError) {
         const partialAfterRetry = getAccumulatedText();
         if (partialAfterRetry.trim().length > 0) {
+          log(
+            'warn',
+            'chunk:partial',
+            `Блок ${blockNumber}: повтор тоже прерван, использую ${partialAfterRetry.length} символов`,
+            blockNumber,
+          );
           return { text: partialAfterRetry, usage: null, finishReason: null, incomplete: true };
         }
+        log('error', 'chunk:failed', `Блок ${blockNumber}: повторная попытка не удалась`, blockNumber);
         throw new Error(`LLM не ответил на блоке ${blockNumber} после повторной попытки`);
       }
     }
