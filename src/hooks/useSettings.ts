@@ -101,6 +101,13 @@ interface SettingsState extends AppSettings {
 export const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
 const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
 
+// One adapter for the lifetime of the module: a failed write must not throw out
+// of every settings setter (quota / private mode), and the failure flag has to
+// survive across calls.
+const settingsStorage = createSafeStorage(
+  () => (typeof window === 'undefined' ? null : window.localStorage),
+);
+
 /** Check if the proxy URL is still the unconfigured placeholder */
 export function isProxyUrlPlaceholder(url: string): boolean {
   return url.includes(PROXY_URL_PLACEHOLDER);
@@ -239,9 +246,7 @@ export const useSettings = create<SettingsState>()(
       skipHydration: true,
       // Storage can throw (private mode, quota). A failed write must not escape
       // every settings setter — the key and provider simply stay unsaved.
-      storage: createJSONStorage(() => createSafeStorage(
-        () => (typeof window === 'undefined' ? null : window.localStorage),
-      )),
+      storage: createJSONStorage(() => settingsStorage),
       // Only persist AppSettings fields (not isLoaded or action functions).
       // selectPersistedSettings drops the API key in session-only mode.
       partialize: (state) => selectPersistedSettings(state),
