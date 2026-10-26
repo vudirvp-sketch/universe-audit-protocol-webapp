@@ -33,6 +33,7 @@ import {
   buildBlock4SubPrompts,
   buildBlock5SubPrompts,
   buildExtraContextBlock,
+  detectAuditMode,
 } from './prompts-v3';
 import {
   extractOrientationContext,
@@ -110,6 +111,11 @@ export async function runAuditPipelineV3(
     // (material-aware mode). Rendered once and injected into every request.
     const extraContext = buildExtraContextBlock(input);
 
+    // v16 §2 audit mode is a property of what was actually submitted, not a
+    // label to be guessed by the model. Derive it deterministically so Block 1
+    // and the Blocks 2-5 priority block cannot disagree about the mode.
+    const detectedMode = detectAuditMode(input);
+
     // ============================================================
     // Block 1: Context and intent, world skeleton, fast screen (v16 §4-6)
     // ============================================================
@@ -121,13 +127,15 @@ export async function runAuditPipelineV3(
       modelCaps,
       callbacks,
       abortSignal,
-      () => [buildBlock1Prompt(input.text, input.mediaType, extraContext)],
+      () => [buildBlock1Prompt(input.text, input.mediaType, extraContext, detectedMode)],
       rpmDelayMs,
     );
     state.block1 = block1Result;
 
-    // Extract orientation context
+    // Extract orientation context. The mode is taken from the submission, not
+    // from the model's line, so a missing/misstated marker cannot corrupt it.
     state.orientationContext = extractOrientationContext(block1Result.markdown);
+    state.orientationContext.auditMode = detectedMode;
 
     // ============================================================
     // Block 2: Level 1 — world mechanism (v16 §7.1-7.12) — 4 sub-requests
@@ -144,7 +152,8 @@ export async function runAuditPipelineV3(
       rpmDelayMs,
     );
     state.block2 = block2Result;
-    state.accumulatedWeaknesses.push(extractWeaknessesSummary(block2Result.markdown));
+    block2Result.weaknessesSummary = extractWeaknessesSummary(block2Result.markdown);
+    state.accumulatedWeaknesses.push(block2Result.weaknessesSummary);
 
     // ============================================================
     // Block 3: Levels 1B-3 — epistemic, human, cultural, characters, psyche (v16 §8-12) — 3 sub-requests
@@ -168,7 +177,8 @@ export async function runAuditPipelineV3(
       rpmDelayMs,
     );
     state.block3 = block3Result;
-    state.accumulatedWeaknesses.push(extractWeaknessesSummary(block3Result.markdown));
+    block3Result.weaknessesSummary = extractWeaknessesSummary(block3Result.markdown);
+    state.accumulatedWeaknesses.push(block3Result.weaknessesSummary);
 
     // ============================================================
     // Block 4: Levels 4-8 — experience, story capacity, theme, medium, memorability (v16 §13-17) — 3 sub-requests
@@ -193,7 +203,8 @@ export async function runAuditPipelineV3(
       rpmDelayMs,
     );
     state.block4 = block4Result;
-    state.accumulatedWeaknesses.push(extractWeaknessesSummary(block4Result.markdown));
+    block4Result.weaknessesSummary = extractWeaknessesSummary(block4Result.markdown);
+    state.accumulatedWeaknesses.push(block4Result.weaknessesSummary);
 
     // ============================================================
     // Block 5: Level 9 + synthesis — failure classes, root issues, recommendations,
@@ -289,6 +300,10 @@ async function executeChunkedBlock(
   const blockStart = Date.now();
   const subResults: SubBlockResult[] = [];
   let fullMarkdown = '';
+  // A block is 'partial' when any sub-request was cut off by the output-token
+  // limit or its text was recovered from an interrupted stream. Without this
+  // signal a truncated audit is indistinguishable from a complete one.
+  let partial = false;
 
   for (let i = 0; i < subPrompts.length; i++) {
     // Notify UI about current chunk progress (for multi-chunk blocks)
@@ -327,6 +342,12 @@ async function executeChunkedBlock(
 
     const raw = typeof result === 'string' ? result : result.text;
     const usage = typeof result === 'string' ? null : result.usage;
+    const finishReason = typeof result === 'string' ? null : result.finishReason;
+    const incomplete = typeof result === 'string' ? false : result.incomplete === true;
+
+    if (incomplete || isTruncatedFinishReason(finishReason)) {
+      partial = true;
+    }
 
     if (usage) {
       state.meta.tokensUsed.prompt += usage.prompt;
@@ -356,13 +377,13 @@ async function executeChunkedBlock(
   const blockResult: BlockResult = {
     blockNumber,
     markdown: fullMarkdown,
-    weaknessesSummary: '', // Will be set by caller via extractWeaknessesSummary
+    weaknessesSummary: '', // Set by the caller via extractWeaknessesSummary
     meta: {
       elapsedMs: Date.now() - blockStart,
       tokensUsed: null, // Aggregated per sub-request above
       model: llmConfig.model,
       temperature: BLOCK_TEMPERATURES[blockNumber],
-      completionStatus: fullMarkdown ? 'complete' : 'error',
+      completionStatus: partial ? 'partial' : fullMarkdown.trim() ? 'complete' : 'error',
     },
   };
 
@@ -386,7 +407,7 @@ async function callWithRetry(
     const partial = getAccumulatedText();
     if (partial.trim().length > 0) {
       console.warn(`Block ${blockNumber}: error after streaming, using partial text (${partial.length} chars)`);
-      return { text: partial, usage: null };
+      return { text: partial, usage: null, finishReason: null, incomplete: true };
     }
 
     // Handle ProxyTimeoutError — do NOT retry with the same chunk size
@@ -404,7 +425,7 @@ async function callWithRetry(
       } catch (retryError) {
         const partialAfterRetry = getAccumulatedText();
         if (partialAfterRetry.trim().length > 0) {
-          return { text: partialAfterRetry, usage: null };
+          return { text: partialAfterRetry, usage: null, finishReason: null, incomplete: true };
         }
         throw new Error(`LLM не ответил на блоке ${blockNumber} после повторной попытки`);
       }
@@ -417,6 +438,13 @@ async function callWithRetry(
 function isTransientError(error: unknown): boolean {
   const classified = classifyLLMError(error);
   return classified.retryable && classified.type === 'transient_error';
+}
+
+/** Finish reasons that mean the answer was cut off or its completion was never confirmed. */
+const TRUNCATED_FINISH_REASONS = new Set(['length', 'max_tokens', 'MAX_TOKENS', 'incomplete', 'aborted']);
+
+function isTruncatedFinishReason(reason: string | null | undefined): boolean {
+  return !!reason && TRUNCATED_FINISH_REASONS.has(reason);
 }
 
 function abortAwareSleep(ms: number, signal?: AbortSignal): Promise<void> {

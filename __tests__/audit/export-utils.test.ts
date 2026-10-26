@@ -188,6 +188,16 @@ describe('exportAuditJSON', () => {
     expect(parsed.blocks[2]).toBeUndefined();
     expect(parsed.blocks[1]).toBeDefined();
   });
+
+  it('does not crash when the session meta is missing (export during a run)', () => {
+    // The Inspector drawer can export while the pipeline is still running:
+    // meta is only written when the run finishes, so it is null at that moment.
+    const state = makePipelineState({ meta: undefined as unknown as PipelineStateV3['meta'] });
+    const parsed = JSON.parse(exportAuditJSON(state));
+    expect(parsed.meta).toBeNull();
+    expect(parsed.input).toEqual({});
+    expect(parsed.blocks[1]).toContain('Текст блока 1');
+  });
 });
 
 // ============================================================
@@ -337,6 +347,27 @@ describe('exportV3ToMarkdown — author framing', () => {
   it('renders no framing section without extras', () => {
     const md = exportV3ToMarkdown(makePipelineState());
     expect(md).not.toContain('Рамки аудита');
+  });
+
+  it('folds newlines in author text so it cannot break the list structure', () => {
+    const md = exportV3ToMarkdown(makePipelineState(), {
+      guided: { genre: 'фэнтези\n\n## Поддельный раздел' },
+      materials: [{ label: 'Лор\n- поддельный пункт', text: ARTEFACT_TEXT }],
+    });
+    const lines = md.split('\n');
+    expect(lines.some((line) => line.startsWith('## Поддельный раздел'))).toBe(false);
+    expect(lines.some((line) => line.startsWith('- поддельный пункт'))).toBe(false);
+    expect(md).toContain('- Жанр: фэнтези ## Поддельный раздел');
+    expect(md).toContain('- Лор - поддельный пункт —');
+  });
+
+  it('keeps a multi-line closing statement inside the quote block', () => {
+    const md = exportV3ToMarkdown(
+      makePipelineState({
+        verdict: makeVerdict({ closingStatement: 'Первая строка\nВторая строка' }),
+      }),
+    );
+    expect(md).toContain('> Первая строка\n> Вторая строка');
   });
 });
 

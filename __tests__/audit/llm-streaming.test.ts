@@ -260,3 +260,56 @@ describe('callLLMStreaming — non-timeout errors', () => {
     await expect(callLLMStreaming(makeOptions())).rejects.toThrow('Failed to fetch');
   });
 });
+
+// ============================================================
+// Finish reason / truncation signal
+// ============================================================
+
+describe('callLLMStreaming — finish reason passthrough', () => {
+  it('propagates finish_reason "length" so truncation is visible to the pipeline', async () => {
+    mockChatCompletionStream.mockResolvedValue({
+      ...makeStreamResponse('Cut-off markdown'),
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: 'Cut-off markdown' },
+        finish_reason: 'length',
+      }],
+    });
+
+    const result = await callLLMStreaming(makeOptions());
+
+    expect(result.finishReason).toBe('length');
+    expect(result.incomplete).toBeFalsy();
+  });
+
+  it('propagates a normal "stop" finish reason', async () => {
+    mockChatCompletionStream.mockResolvedValue(makeStreamResponse('Complete markdown'));
+
+    const result = await callLLMStreaming(makeOptions());
+
+    expect(result.finishReason).toBe('stop');
+  });
+
+  it('flags text recovered from an interrupted stream as incomplete', async () => {
+    mockChatCompletionStream.mockImplementation(
+      async (_options: unknown, onDelta: (text: string, delta: string) => void) => {
+        onDelta('Partial', 'Partial');
+        throw new Error('Connection lost mid-stream');
+      }
+    );
+
+    const result = await callLLMStreaming(makeOptions());
+
+    expect(result.text).toBe('Partial');
+    expect(result.incomplete).toBe(true);
+  });
+
+  it('does not flag a normally completed stream as incomplete', async () => {
+    mockChatCompletionStream.mockResolvedValue(makeStreamResponse('Complete markdown'));
+
+    const result = await callLLMStreaming(makeOptions());
+
+    expect(result.incomplete).toBeFalsy();
+  });
+});
+

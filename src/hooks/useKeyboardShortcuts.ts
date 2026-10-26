@@ -9,6 +9,44 @@ interface UseKeyboardShortcutsOptions {
   closeInspector: () => void;
 }
 
+/** What a single key press asks the workspace to do. */
+export type ShortcutAction =
+  | { type: 'none' }
+  | { type: 'toggle-sidebar' }
+  | { type: 'close-inspector' }
+  | { type: 'scroll-to-block'; block: 1 | 2 | 3 | 4 | 5 };
+
+/**
+ * Pure key matcher.
+ *
+ * The bracket is matched by physical `code` as well as by `key`: on the Russian
+ * (and any non-US) layout the key labelled `[` produces `х`, so matching only
+ * `e.key` made the shortcut dead for RU-layout users.
+ */
+export function matchShortcut(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey'>,
+  phase: PipelinePhase,
+): ShortcutAction {
+  if (event.ctrlKey || event.metaKey || event.altKey) return { type: 'none' };
+
+  if (event.key === '[' || event.code === 'BracketLeft') return { type: 'toggle-sidebar' };
+  if (event.key === 'Escape') return { type: 'close-inspector' };
+
+  if (phase === 'running' || phase === 'done') {
+    if (event.key >= '1' && event.key <= '5') {
+      return { type: 'scroll-to-block', block: Number(event.key) as 1 | 2 | 3 | 4 | 5 };
+    }
+  }
+
+  return { type: 'none' };
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true;
+  if (target instanceof HTMLElement) return target.isContentEditable;
+  return false;
+}
+
 export function useKeyboardShortcuts({
   phase,
   toggleSidebar,
@@ -17,24 +55,24 @@ export function useKeyboardShortcuts({
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       // Ignore if user is typing in an input
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (isTypingTarget(e.target)) return;
 
-      // [ — toggle sidebar
-      if (e.key === '[') {
-        e.preventDefault();
-        toggleSidebar();
-      }
-
-      // Escape — close inspector drawer
-      if (e.key === 'Escape') {
-        closeInspector();
-      }
-
-      // 1-5 — scroll to block (during running/done)
-      if (e.key >= '1' && e.key <= '5' && (phase === 'running' || phase === 'done')) {
-        const blockNum = parseInt(e.key) as 1 | 2 | 3 | 4 | 5;
-        const el = document.getElementById(`block-${blockNum}`);
-        el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const action = matchShortcut(e, phase);
+      switch (action.type) {
+        case 'toggle-sidebar':
+          e.preventDefault();
+          toggleSidebar();
+          break;
+        case 'close-inspector':
+          closeInspector();
+          break;
+        case 'scroll-to-block': {
+          const el = document.getElementById(`block-${action.block}`);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          break;
+        }
+        default:
+          break;
       }
     };
 

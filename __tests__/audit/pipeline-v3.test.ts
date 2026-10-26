@@ -41,6 +41,7 @@ vi.mock('@/lib/audit/verdict', () => ({
 vi.mock('@/lib/audit/prompts-v3', () => ({
   buildBlock1Prompt: vi.fn(() => [{ system: 'system-1', user: 'user-1' }]),
   buildExtraContextBlock: vi.fn(() => ''),
+  detectAuditMode: vi.fn(() => 'lazy'),
   buildBlock2SubPrompts: vi.fn(() => [
     { system: 'system-2a', user: 'user-2a' },
     { system: 'system-2b', user: 'user-2b' },

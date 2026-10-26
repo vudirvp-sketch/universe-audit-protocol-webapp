@@ -100,6 +100,15 @@ function exportableGuided(
   return fields;
 }
 
+/**
+ * Author text is user input, not report structure: a newline inside a list item
+ * would start a new markdown block (fake heading, escaped list item). Fold it
+ * into a single line — the exported item stays one item.
+ */
+function inlineMarkdownValue(value: string): string {
+  return value.replace(/\s*\r?\n\s*/g, ' ').trim();
+}
+
 function exportableMaterials(materials?: AuditMaterial[]): AuditMaterial[] {
   return (materials ?? [])
     .filter((material) => material.text.trim().length > 0)
@@ -133,7 +142,7 @@ function framingToMarkdown(extras?: AuditInputExtras): string[] {
   if (guided.length > 0) {
     lines.push(`## ${t.report.framing}`, '');
     for (const field of guided) {
-      lines.push(`- ${field.label}: ${field.value}`);
+      lines.push(`- ${field.label}: ${inlineMarkdownValue(field.value)}`);
     }
     lines.push('');
   }
@@ -142,7 +151,7 @@ function framingToMarkdown(extras?: AuditInputExtras): string[] {
     lines.push(`## ${t.report.artefacts}`, '');
     for (const material of materials) {
       lines.push(
-        `- ${material.label} — ${t.report.artefactChars.replace('{count}', String(material.text.length))}`,
+        `- ${inlineMarkdownValue(material.label)} — ${t.report.artefactChars.replace('{count}', String(material.text.length))}`,
       );
     }
     lines.push('');
@@ -188,7 +197,10 @@ function verdictToMarkdown(verdict: AuditVerdict | null): string[] {
   }
 
   if (verdict.closingStatement) {
-    lines.push(`> ${verdict.closingStatement}`);
+    // A multi-line closing statement must stay inside the quote block.
+    for (const line of verdict.closingStatement.split(/\r?\n/)) {
+      lines.push(`> ${line}`);
+    }
     lines.push('');
   }
 
@@ -239,17 +251,18 @@ export function exportV3ToMarkdown(
     lines.push('');
   }
 
-  // Footer metadata from the last available block
+  // Footer metadata: block-level model, run-level elapsed time and token totals.
+  // (Per-block tokensUsed is intentionally null — usage is aggregated in state.meta.)
   const lastBlock = state.block5 || state.block4 || state.block3 || state.block2 || state.block1;
   lines.push(`Сгенерировано: ${new Date().toISOString()}`);
   if (lastBlock?.meta?.model) {
     lines.push(`Модель: ${lastBlock.meta.model}`);
   }
-  if (lastBlock?.meta?.elapsedMs) {
-    lines.push(`Время последнего блока: ${(lastBlock.meta.elapsedMs / 1000).toFixed(1)}с`);
+  if (state.meta?.elapsedMs) {
+    lines.push(`Время аудита: ${(state.meta.elapsedMs / 1000).toFixed(1)}с`);
   }
-  if (lastBlock?.meta?.tokensUsed) {
-    lines.push(`Токены: prompt=${lastBlock.meta.tokensUsed.prompt}, completion=${lastBlock.meta.tokensUsed.completion}, total=${lastBlock.meta.tokensUsed.total}`);
+  if (state.meta?.tokensUsed && state.meta.tokensUsed.total > 0) {
+    lines.push(`Токены: prompt=${state.meta.tokensUsed.prompt}, completion=${state.meta.tokensUsed.completion}, total=${state.meta.tokensUsed.total}`);
   }
 
   return lines.join('\n');
@@ -270,10 +283,12 @@ export function exportAuditJSON(
 ): string {
   const guided = exportableGuided(extras?.guided);
   const materials = exportableMaterials(extras?.materials);
+  // `meta` is only written when the pipeline finishes, but the Inspector drawer
+  // allows exporting while a run is still in flight. Do not crash on it.
+  const meta = state.meta ?? null;
 
   const input = {
-    text: state.meta.inputText,
-    mediaType: state.meta.mediaType,
+    ...(meta ? { text: meta.inputText, mediaType: meta.mediaType } : {}),
     ...(guided.length > 0
       ? { guided: Object.fromEntries(guided.map((field) => [field.key, field.value])) }
       : {}),
@@ -283,7 +298,7 @@ export function exportAuditJSON(
   return JSON.stringify({
     protocol: PROTOCOL_NAME,
     input,
-    meta: state.meta,
+    meta,
     orientationContext: state.orientationContext,
     verdict: state.verdict,
     blocks: {

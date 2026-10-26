@@ -51,7 +51,14 @@ function buildPipelineState(state: AuditStateV3): PipelineStateV3 {
     orientationContext: state.orientationContext,
     accumulatedWeaknesses: [],
     verdict: state.verdict,
-    meta: state.meta!,
+    // `meta` only exists once the pipeline finished, but the Inspector allows
+    // exporting mid-run; fall back to what is known so JSON keeps the input text.
+    meta: state.meta ?? {
+      inputText: state.inputText,
+      mediaType: state.mediaType,
+      elapsedMs: 0,
+      tokensUsed: { prompt: 0, completion: 0, total: 0 },
+    },
     error: state.error,
   };
 }
@@ -111,6 +118,7 @@ export default function Home() {
   const mediaType = useAuditStateV3(s => s.mediaType);
   const orientationContext = useAuditStateV3(s => s.orientationContext);
   const verdict = useAuditStateV3(s => s.verdict);
+  const storageError = useAuditStateV3(s => s.storageError);
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
@@ -246,7 +254,8 @@ export default function Home() {
       }
     } catch (err) {
       if (controller.signal.aborted) {
-        useAuditStateV3.getState().reset();
+        // Cancel drops the run, not the author's draft (input, framing, artefacts).
+        useAuditStateV3.getState().abortAudit();
       } else {
         const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
         useAuditStateV3.getState().setError(errorMessage);
@@ -274,7 +283,8 @@ export default function Home() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Revoking in the same tick can cancel the download in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   const blocks = [null, block1, block2, block3, block4, block5] as const;
@@ -328,6 +338,13 @@ export default function Home() {
         {proxyUnavailable && (
           <div className="bg-severity-warning/90 text-white text-center py-2 px-4 text-sm font-medium">
             Прокси недоступен — проверьте интернет или настройки прокси
+          </div>
+        )}
+
+        {/* Persistence failure banner — the draft on screen is no longer saved */}
+        {storageError && (
+          <div role="alert" className="bg-severity-critical/90 text-white text-center py-2 px-4 text-sm font-medium">
+            {storageError}
           </div>
         )}
 

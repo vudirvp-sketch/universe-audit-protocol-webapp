@@ -5,7 +5,9 @@
  */
 
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import { t } from '../lib/i18n/ru';
+import { createSafeStorage } from '../lib/safe-storage';
 import type {
   BlockResult,
   PipelineMeta,
@@ -46,9 +48,16 @@ export interface AuditStateV3 {
   materials: AuditMaterial[];
   /** Qualitative verdict (v16 §26.S) — replaces the legacy checklist score */
   verdict: AuditVerdict | null;
+  /**
+   * Last persistence failure (localStorage quota, blocked storage).
+   * Non-null means the draft on screen is no longer being saved.
+   */
+  storageError: string | null;
 
   // Actions
   startAudit: () => void;
+  /** Drop the run in progress but keep the author's draft (input, framing, artefacts). */
+  abortAudit: () => void;
   setBlockResult: (blockNumber: 1 | 2 | 3 | 4 | 5, result: BlockResult) => void;
   setOrientationContext: (context: OrientationContext) => void;
   setMeta: (meta: PipelineMeta) => void;
@@ -90,9 +99,21 @@ const initialState = {
   guided: {} as GuidedContext,
   materials: [] as AuditMaterial[],
   verdict: null as AuditVerdict | null,
+  storageError: null as string | null,
 };
 
 const AUDIT_STATE_V3_STORAGE_KEY = 'audit-state-v3';
+
+// ============================================================
+// Store
+// ============================================================
+
+let reportStorageFailure: (message: string | null) => void = () => {};
+
+const safeStorage = createSafeStorage(
+  () => (typeof window === 'undefined' ? null : window.localStorage),
+  (message) => reportStorageFailure(message ? t.form.storageError : null),
+);
 
 // ============================================================
 // Store
@@ -107,6 +128,25 @@ export const useAuditStateV3 = create<AuditStateV3>()(
         set({
           phase: 'running',
           currentBlock: 1,
+          currentBlockTotalChunks: 0,
+          currentChunkIndex: 0,
+          block1: null,
+          block2: null,
+          block3: null,
+          block4: null,
+          block5: null,
+          orientationContext: null,
+          meta: null,
+          streamingText: '',
+          error: null,
+          verdict: null,
+        }),
+
+      // Cancelling must not destroy the draft the author typed: only the run is dropped.
+      abortAudit: () =>
+        set({
+          phase: 'idle',
+          currentBlock: 0,
           currentBlockTotalChunks: 0,
           currentChunkIndex: 0,
           block1: null,
@@ -174,6 +214,7 @@ export const useAuditStateV3 = create<AuditStateV3>()(
     {
       name: AUDIT_STATE_V3_STORAGE_KEY,
       skipHydration: true,
+      storage: createJSONStorage(() => safeStorage),
       partialize: (state) => ({
         phase: state.phase,
         currentBlock: state.currentBlock,
@@ -187,7 +228,9 @@ export const useAuditStateV3 = create<AuditStateV3>()(
         orientationContext: state.orientationContext,
         meta: state.meta,
         error: state.error,
-        llmConfig: state.llmConfig,
+        // Deliberately not persisted: LLMConfig carries the plaintext apiKey.
+        // The live config lives in memory (and the key belongs in useSettings,
+        // which keeps it in sessionStorage only).
         inputText: state.inputText,
         mediaType: state.mediaType,
         guided: state.guided,
@@ -197,23 +240,9 @@ export const useAuditStateV3 = create<AuditStateV3>()(
       onRehydrateStorage: () => {
         return (state) => {
           if (state && state.phase === 'running') {
+            // A reload cannot resume a run: drop the stale run, keep the draft.
             queueMicrotask(() => {
-              useAuditStateV3.setState({
-                phase: 'idle',
-                currentBlock: 0,
-                currentBlockTotalChunks: 0,
-                currentChunkIndex: 0,
-                block1: null,
-                block2: null,
-                block3: null,
-                block4: null,
-                block5: null,
-                orientationContext: null,
-                meta: null,
-                streamingText: '',
-                error: null,
-                verdict: null,
-              });
+              useAuditStateV3.getState().abortAudit();
             });
           }
         };
@@ -221,3 +250,11 @@ export const useAuditStateV3 = create<AuditStateV3>()(
     }
   )
 );
+
+// Persistence failures are reported through the store itself: the failing write
+// has already been applied, so only a flag has to reach the UI.
+reportStorageFailure = (message) => {
+  if (useAuditStateV3.getState().storageError !== message) {
+    useAuditStateV3.setState({ storageError: message });
+  }
+};

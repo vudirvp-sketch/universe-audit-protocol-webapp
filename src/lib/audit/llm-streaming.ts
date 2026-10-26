@@ -31,6 +31,14 @@ export interface LLMStreamingResult {
   text: string;
   /** Token usage from the LLM response (if available) */
   usage: { prompt: number; completion: number; total: number } | null;
+  /**
+   * Provider-normalized finish reason of the streamed choice
+   * ('stop' | 'length' | 'content_filter' | ...). 'length' means the answer
+   * was cut off by the output-token limit and must not be reported as complete.
+   */
+  finishReason?: string | null;
+  /** True when the text was recovered from an interrupted stream — a partial answer. */
+  incomplete?: boolean;
 }
 
 export interface LLMStreamingOptions {
@@ -120,12 +128,13 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
     );
 
     const fullText = response.choices?.[0]?.message?.content || '';
+    const finishReason = response.choices?.[0]?.finish_reason ?? null;
 
     // If streaming returned empty text but we accumulated text via callbacks,
     // use the accumulated text (proxy might not populate choices[0].message.content)
     if (fullText.trim() === '' && streamingAccumulated.trim().length > 0) {
       console.warn('Streaming response had empty choices[0].message.content, using accumulated streaming text');
-      return { text: streamingAccumulated, usage: extractUsage(response) };
+      return { text: streamingAccumulated, usage: extractUsage(response), finishReason };
     }
 
     // If streaming returned empty text AND no accumulated text —
@@ -133,10 +142,10 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
     // Return empty — the pipeline will handle it.
     if (fullText.trim() === '' && streamingAccumulated.trim() === '') {
       console.warn('Streaming returned empty text and no accumulated text');
-      return { text: '', usage: extractUsage(response) };
+      return { text: '', usage: extractUsage(response), finishReason };
     }
 
-    return { text: fullText, usage: extractUsage(response) };
+    return { text: fullText, usage: extractUsage(response), finishReason };
   } catch (streamError) {
     // Partial text recovery — if we got ANY text before the error, use it
     if (streamingAccumulated.trim().length > 0) {
@@ -144,7 +153,7 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
         'Streaming failed but partial text received (' + streamingAccumulated.length +
         ' chars), using partial text instead of retrying buffered request'
       );
-      return { text: streamingAccumulated, usage: null };
+      return { text: streamingAccumulated, usage: null, finishReason: null, incomplete: true };
     }
 
     // No partial text — streaming was aborted before ANY data arrived.

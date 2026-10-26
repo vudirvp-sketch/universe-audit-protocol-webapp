@@ -60,6 +60,11 @@ const GUIDED_KEYS = [
   'excludedConcerns',
 ] as const;
 
+// Artefact text is re-sent in every one of the 13 requests and stored in
+// localStorage, so uploads are bounded rather than unbounded.
+const MAX_MATERIAL_FILE_BYTES = 512 * 1024; // 512 KB on disk
+const MAX_MATERIAL_CHARS = 100_000;         // per artefact, in characters
+
 /** Drop empty guided fields so an empty framing never switches the audit away from lazy mode. */
 function buildGuidedPayload(guided: GuidedContext): GuidedContext {
   const payload: GuidedContext = {};
@@ -168,15 +173,49 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
       setFileError(t.form.fileTypeError);
       return;
     }
+    // Artefact text is injected into every prompt and persisted to localStorage,
+    // so an unbounded upload can blow the model context and the storage quota.
+    if (file.size > MAX_MATERIAL_FILE_BYTES) {
+      setFileError(t.form.fileTooLargeError);
+      return;
+    }
+
+    const target = materials[index];
     const reader = new FileReader();
     reader.onerror = () => setFileError(t.form.fileReadError);
     reader.onload = () => {
       const content = typeof reader.result === 'string' ? reader.result : '';
-      const current = materials[index];
-      const nextText = current?.text.trim()
-        ? `${current.text}\n\n${content}`
-        : content;
-      updateMaterial(index, { text: nextText });
+      if (!content.trim()) {
+        setFileError(t.form.fileEmptyError);
+        return;
+      }
+      // Non-UTF-8 files decode to U+FFFD instead of failing silently.
+      if (content.includes('\uFFFD')) {
+        setFileError(t.form.fileEncodingError);
+        return;
+      }
+      if (content.length > MAX_MATERIAL_CHARS) {
+        setFileError(t.form.fileTooLargeError);
+        return;
+      }
+      // The row may have been deleted or replaced while the file was read —
+      // locate it by identity instead of trusting the captured index, and read
+      // the freshest store snapshot rather than the render-time closure.
+      const state = useAuditStateV3.getState();
+      const currentIndex = state.materials.indexOf(target);
+      if (currentIndex === -1) {
+        setFileError(null);
+        return;
+      }
+      const current = state.materials[currentIndex];
+      const nextText = current.text.trim() ? `${current.text}\n\n${content}` : content;
+      if (nextText.length > MAX_MATERIAL_CHARS) {
+        setFileError(t.form.fileTooLargeError);
+        return;
+      }
+      state.setMaterials(
+        state.materials.map((material, i) => (i === currentIndex ? { ...material, text: nextText } : material)),
+      );
       setFileError(null);
     };
     reader.readAsText(file);
@@ -208,6 +247,12 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
   };
 
   const handleClear = () => {
+    // Cancel the pending debounce first, otherwise the timer re-commits the
+    // text that was just cleared (~300 ms later).
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
     setLocalInput('');
     setInputText('');
     setGuided({
