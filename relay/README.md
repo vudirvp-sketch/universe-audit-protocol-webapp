@@ -13,14 +13,15 @@ no Cloudflare account, no `wrangler`, and no API key in the browser are needed.
 
 The relay serves `out/`, so run the build once (and after every code change):
 
-```powershell
-node .\node_modules\next\dist\bin\next build
+```bash
+npm run build        # or: npm run preview  (build + relay in one command)
 ```
 
 ## 2. Run the relay
 
-```powershell
+```bash
 node relay/relay.mjs --port 8787 --dir out
+# or simply: npm run relay
 ```
 
 ```
@@ -186,8 +187,8 @@ Run it on a trusted workstation.
 
 ## 7. Tests
 
-```powershell
-node .\node_modules\vitest\vitest.mjs run __tests__/relay --reporter=dot
+```bash
+npx vitest run __tests__/relay --reporter=dot
 ```
 
 The suite is in-process (no listening sockets, provider `fetch` is stubbed) and
