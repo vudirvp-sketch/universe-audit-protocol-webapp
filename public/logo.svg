@@ -10,6 +10,8 @@
       animation: breathe 2.5s ease-in-out infinite;
     }
 
+    @media (prefers-reduced-motion: reduce) { .z-breathe { animation: none; } }
+
     @keyframes breathe {
       0%, 100% { opacity: 0.7; }
       50% { opacity: 1; }

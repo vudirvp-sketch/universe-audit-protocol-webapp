@@ -5,24 +5,21 @@ import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles, BookOpen, Gamepad2, Eye, Dices } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import { cn, pluralRu } from '@/lib/utils';
 import type { MediaType } from '@/lib/audit/types-v3';
+import { t } from '@/lib/i18n/ru';
 
-// ─── Media type labels & icons ────────────────────────────────────────
+/** Минимум, ниже которого аудит вырождается в догадки (см. протокол, раздел 0). */
+const MIN_CONCEPT_CHARS = 50;
 
-const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string; icon: React.ReactNode }[] = [
-  { value: 'narrative', label: 'Нарратив', icon: <BookOpen className="h-4 w-4" /> },
-  { value: 'game', label: 'Игра', icon: <Gamepad2 className="h-4 w-4" /> },
-  { value: 'visual', label: 'Визуальное', icon: <Eye className="h-4 w-4" /> },
-  { value: 'ttrpg', label: 'Настольная RPG', icon: <Dices className="h-4 w-4" /> },
+// ─── Типы медиа ───────────────────────────────────────────────────────
+
+const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string }[] = [
+  { value: 'narrative', label: 'Нарратив' },
+  { value: 'game', label: 'Игра' },
+  { value: 'visual', label: 'Визуальное' },
+  { value: 'ttrpg', label: 'Настольная RPG' },
 ];
 
 // ─── Props ────────────────────────────────────────────────────────────
@@ -74,7 +71,7 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!localInput.trim()) return;
+    if (localInput.trim().length < MIN_CONCEPT_CHARS) return;
 
     // Flush debounce: immediately sync localInput to Zustand
     if (debounceTimerRef.current) {
@@ -91,91 +88,80 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
     setInputText('');
   };
 
+  const charCount = localInput.trim().length;
+  const remaining = Math.max(0, MIN_CONCEPT_CHARS - charCount);
+  const countUnit = pluralRu(charCount, t.form.charUnits);
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Concept Input */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-500" />
-            Концепт
-          </CardTitle>
-          <CardDescription>
-            Введите описание вашего концепта для анализа
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="concept-text">Текст концепта</Label>
-            <Textarea
-              id="concept-text"
-              placeholder="Опишите ваш концепт — от пары предложений до целого рассказа..."
-              value={localInput}
-              onChange={(e) => handleInputTextChange(e.target.value)}
-              className="min-h-[200px] resize-y"
-              disabled={isLoading}
-            />
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-muted-foreground">
-                {localInput.length} символов
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Введите концепт — от пары предложений до целого рассказа. Длинные тексты обрабатываются автоматически.
-              </p>
-            </div>
-          </div>
-
-          {/* Media Type Selection */}
-          <div className="space-y-2">
-            <Label>Тип медиа</Label>
-            <Select
-              value={mediaType}
-              onValueChange={(v) => setMediaType(v as MediaType)}
-              disabled={isLoading}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите тип медиа" />
-              </SelectTrigger>
-              <SelectContent>
-                {MEDIA_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      {option.icon}
-                      <span>{option.label}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex justify-end gap-4">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={handleClear}
+    <form onSubmit={handleSubmit} className="space-y-8">
+      <div className="space-y-2">
+        <Label htmlFor="concept-text" className="text-base font-semibold">Текст концепта</Label>
+        <p id="concept-hint" className="text-sm text-muted-foreground">
+          От пары предложений до целого рассказа. Длинные тексты обрабатываются автоматически.
+        </p>
+        <Textarea
+          id="concept-text"
+          aria-describedby="concept-hint concept-count concept-min"
+          placeholder="Опишите мир, героев и главный конфликт…"
+          value={localInput}
+          onChange={(e) => handleInputTextChange(e.target.value)}
+          className="min-h-[260px] resize-y text-base leading-relaxed"
           disabled={isLoading}
-        >
+        />
+        <p id="concept-count" className="text-sm tabular-nums text-muted-foreground">
+          {charCount.toLocaleString('ru-RU')} {countUnit}
+        </p>
+        {charCount < MIN_CONCEPT_CHARS && (
+          <p id="concept-min" className="text-sm text-muted-foreground">
+            {charCount === 0
+              ? t.form.minCharsWarning
+                  .replace('{min}', String(MIN_CONCEPT_CHARS))
+                  .replace('{unit}', pluralRu(MIN_CONCEPT_CHARS, t.form.charUnits))
+              : t.form.minCharsBlocked
+                  .replace('{count}', String(remaining))
+                  .replace('{unit}', pluralRu(remaining, t.form.charUnits))}
+          </p>
+        )}
+      </div>
+
+      <fieldset className="space-y-2" disabled={isLoading}>
+        <legend className="text-base font-semibold">Тип медиа</legend>
+        <div role="radiogroup" aria-label="Тип медиа" className="flex flex-wrap gap-2">
+          {MEDIA_TYPE_OPTIONS.map((option) => {
+            const selected = mediaType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setMediaType(option.value)}
+                className={cn(
+                  'rounded-sm border px-4 py-2 text-sm transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50',
+                  selected
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-input bg-transparent hover:bg-accent',
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <div className="flex flex-wrap justify-end gap-3">
+        <Button type="button" variant="ghost" onClick={handleClear} disabled={isLoading || !localInput}>
           Очистить
         </Button>
-        <Button
-          type="submit"
-          disabled={!localInput.trim() || isLoading}
-          className="min-w-[180px]"
-        >
+        <Button type="submit" size="lg" disabled={charCount < MIN_CONCEPT_CHARS || isLoading} className="min-w-[180px]">
           {isLoading ? (
             <>
-              <span className="animate-spin mr-2">⏳</span>
-              Анализируем...
+              <Loader2 className="animate-spin" aria-hidden="true" />
+              Анализируем…
             </>
           ) : (
-            <>
-              <Sparkles className="h-4 w-4 mr-2" />
-              Начать аудит
-            </>
+            'Начать аудит'
           )}
         </Button>
       </div>

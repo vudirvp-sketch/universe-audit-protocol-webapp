@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { CalloutBlock } from '@/components/audit/CalloutBlock';
+import { StatusMark, type CellStatus } from '@/components/audit/status-marks';
 
 /**
  * Extract plain text content from React children (for callout detection).
@@ -51,7 +52,33 @@ function removeCalloutPrefix(children: React.ReactNode, prefixLength: number): R
  * - pre: styled code block containers
  * - code: inline code styling
  */
+// \b не работает с кириллицей в JS, поэтому граница слова задана через lookahead.
+const STATUS_LINE = /^Статус:\s*(не найдено|найдено|неясно)(?![а-яё])/i;
+
+function statusFromWord(word: string): CellStatus {
+  const w = word.toLowerCase();
+  if (w === 'найдено') return 'PASS';
+  if (w === 'не найдено') return 'FAIL';
+  return 'INSUFFICIENT_DATA';
+}
+
 export const markdownComponents = {
+  // Строка «Статус: найдено / не найдено / неясно» получает тот же маркер, что и в чек-листе.
+  p: ({ children, ...props }: React.ComponentPropsWithoutRef<'p'> & { node?: unknown }) => {
+    const match = extractTextFromChildren(children).trim().match(STATUS_LINE);
+    if (match) {
+      const { node: _node, ...rest } = props;
+      void _node;
+      return (
+        <p {...rest} className="flex items-center gap-2">
+          <StatusMark status={statusFromWord(match[1])} />
+          <span>{children}</span>
+        </p>
+      );
+    }
+    return <p {...props}>{children}</p>;
+  },
+
   blockquote: ({ children, ...props }: React.ComponentPropsWithoutRef<'blockquote'> & { node?: unknown }) => {
     const textContent = extractTextFromChildren(children);
     const calloutMatch = textContent.match(/^\[!(NOTE|WARNING|TIP|CAUTION|CRITICAL)\]\s*/i);
@@ -66,7 +93,7 @@ export const markdownComponents = {
   },
 
   pre: ({ children, ...props }: React.ComponentPropsWithoutRef<'pre'>) => (
-    <pre className="rounded-lg bg-muted/50 p-4 overflow-x-auto text-sm" {...props}>
+    <pre className="rounded-sm border bg-card p-4 overflow-x-auto text-sm" {...props}>
       {children}
     </pre>
   ),
@@ -75,7 +102,7 @@ export const markdownComponents = {
     // If className contains a language (e.g., "language-tsx"), it's a fenced code block
     const isInline = !className;
     if (isInline) {
-      return <code className="bg-muted/50 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>{children}</code>;
+      return <code className="bg-muted px-1.5 py-0.5 rounded-sm text-[0.9em] font-mono" {...props}>{children}</code>;
     }
     return <code className={className} {...props}>{children}</code>;
   },

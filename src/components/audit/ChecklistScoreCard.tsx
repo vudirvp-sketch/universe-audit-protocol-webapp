@@ -9,35 +9,11 @@
 
 import * as React from 'react';
 import type { ChecklistScoreResult } from '@/lib/audit/types-v3';
-import { Badge } from '@/components/ui/badge';
+import { CELL_LABEL, StatusLabel, StatusMark } from './status-marks';
 import { t } from '@/lib/i18n/ru';
 
 interface ChecklistScoreCardProps {
   score: ChecklistScoreResult;
-}
-
-// ============================================================
-// Status badge colors — uses severity tokens
-// ============================================================
-
-function StatusBadge({ status }: { status: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA' }) {
-  const variants: Record<string, string> = {
-    PASS: 'bg-severity-success/10 text-severity-success',
-    FAIL: 'bg-severity-critical/10 text-severity-critical',
-    INSUFFICIENT_DATA: 'bg-muted text-muted-foreground',
-  };
-
-  const labels: Record<string, string> = {
-    PASS: 'PASS',
-    FAIL: 'FAIL',
-    INSUFFICIENT_DATA: 'Н/Д',
-  };
-
-  return (
-    <Badge variant="outline" className={`text-xs font-mono ${variants[status]}`}>
-      {labels[status]}
-    </Badge>
-  );
 }
 
 // ============================================================
@@ -50,16 +26,17 @@ function ChecklistRow({ item }: { item: { id: string; text: string; level: strin
 
   return (
     <>
-      <tr className="border-b hover:bg-muted/30">
-        <td className="py-1.5 px-1 font-mono text-xs">{item.id}</td>
-        <td className="py-1.5 px-1 text-sm">{item.text}</td>
-        <td className="py-1.5 px-1 text-sm text-muted-foreground">{item.level}</td>
-        <td className="py-1.5 px-1"><StatusBadge status={item.status} /></td>
-        <td className="py-1.5 px-1 text-sm">
+      <tr className="border-b hover:bg-accent/40">
+        <td className="hidden py-2 px-1 text-sm font-semibold tabular-nums text-muted-foreground lg:table-cell">{item.id}</td>
+        <td className="py-2 px-1 text-sm">{item.text}</td>
+        <td className="hidden py-2 px-1 text-sm text-muted-foreground lg:table-cell">{item.level}</td>
+        <td className="py-2 px-1 whitespace-nowrap"><StatusLabel status={item.status} compact /></td>
+        <td className="py-2 px-1 text-sm">
           {hasEvidence ? (
             <button
               onClick={() => setExpanded(!expanded)}
-              className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline decoration-dotted underline-offset-2"
+              aria-expanded={expanded}
+              className="inline-flex min-h-8 items-center text-[#8fc4dd] hover:text-foreground underline underline-offset-4 rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
             >
               {expanded ? t.score.evidenceHide : t.score.evidenceShow}
             </button>
@@ -69,8 +46,8 @@ function ChecklistRow({ item }: { item: { id: string; text: string; level: strin
         </td>
       </tr>
       {expanded && hasEvidence && (
-        <tr className="border-b bg-muted/10">
-          <td colSpan={5} className="py-2 px-3 text-sm text-muted-foreground italic">
+        <tr className="border-b bg-card">
+          <td colSpan={5} className="py-2 px-3 text-sm text-muted-foreground">
             {item.evidence}
           </td>
         </tr>
@@ -109,8 +86,8 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
   };
 
   return (
-    <div className="border rounded-lg p-6">
-      <div className="text-base font-semibold mb-3">{t.score.checklist} ({score.fulfilled}/{score.totalApplicable})</div>
+    <section className="mb-12" aria-labelledby="checklist-title">
+      <h2 id="checklist-title" className="mb-4 text-xl font-semibold">{t.score.checklist}</h2>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
@@ -120,10 +97,11 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
             <button
               key={level}
               onClick={() => setLevelFilter(level)}
-              className={`px-2 py-1 text-sm rounded transition-colors ${
+              aria-pressed={levelFilter === level}
+              className={`px-3 py-1.5 text-sm rounded-sm border transition-colors focus-visible:outline-2 focus-visible:outline-ring ${
                 levelFilter === level
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-transparent border-input hover:bg-accent'
               }`}
             >
               {level === 'all' ? t.score.filterAll : level}
@@ -132,22 +110,18 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
         </div>
 
         {/* Status toggles */}
-        <div className="flex gap-1 ml-2">
+        <div className="flex flex-wrap gap-1 sm:ml-3">
           {(['PASS', 'FAIL', 'INSUFFICIENT_DATA'] as const).map(status => (
             <button
               key={status}
               onClick={() => toggleStatus(status)}
-              className={`px-2 py-1 text-sm rounded transition-colors border ${
-                statusFilter.has(status)
-                  ? status === 'PASS'
-                    ? 'bg-severity-success/10 border-severity-success/40'
-                    : status === 'FAIL'
-                    ? 'bg-severity-critical/10 border-severity-critical/40'
-                    : 'bg-muted border-muted'
-                  : 'bg-transparent border-muted hover:bg-muted/50'
+              aria-pressed={statusFilter.has(status)}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-sm border transition-colors focus-visible:outline-2 focus-visible:outline-ring ${
+                statusFilter.has(status) ? 'bg-accent border-ring' : 'bg-transparent border-input hover:bg-accent/60'
               }`}
             >
-              {status === 'INSUFFICIENT_DATA' ? 'Н/Д' : status}
+              <StatusMark status={status} />
+              {CELL_LABEL[status]}
             </button>
           ))}
         </div>
@@ -158,9 +132,9 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b">
-              <th className="text-left py-2 px-1 w-12 text-sm font-medium">ID</th>
+              <th className="hidden text-left py-2 px-1 w-12 text-sm font-medium lg:table-cell">ID</th>
               <th className="text-left py-2 px-1 text-sm font-medium">{t.score.criteriaCol}</th>
-              <th className="text-left py-2 px-1 w-14 text-sm font-medium">{t.score.levelCol}</th>
+              <th className="hidden text-left py-2 px-1 w-14 text-sm font-medium lg:table-cell">{t.score.levelCol}</th>
               <th className="text-left py-2 px-1 w-20 text-sm font-medium">{t.score.statusCol}</th>
               <th className="text-left py-2 px-1 w-20 text-sm font-medium">{t.score.evidenceCol}</th>
             </tr>
@@ -178,6 +152,6 @@ export function ChecklistScoreCard({ score }: ChecklistScoreCardProps) {
           {t.score.noItems}
         </p>
       )}
-    </div>
+    </section>
   );
 }

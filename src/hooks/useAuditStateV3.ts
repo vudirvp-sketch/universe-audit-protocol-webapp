@@ -152,7 +152,14 @@ export const useAuditStateV3 = create<AuditStateV3>()(
 
       setChecklistScore: (score) => set({ checklistScore: score }),
 
-      reset: () => set({ ...initialState }),
+      // «Новый аудит» и выход из ошибки не должны стирать введённый концепт:
+      // текст восстанавливается в форме, очистить его можно кнопкой «Очистить».
+      reset: () =>
+        set((state) => ({
+          ...initialState,
+          inputText: state.inputText,
+          mediaType: state.mediaType,
+        })),
     }),
     {
       name: AUDIT_STATE_V3_STORAGE_KEY,

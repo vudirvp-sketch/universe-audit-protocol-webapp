@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server } from 'lucide-react';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Zap, Globe, ChevronDown, ChevronRight, Server } from 'lucide-react';
 import { useSettings, isProxyUrlPlaceholder } from '@/hooks/useSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -252,7 +252,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           {/* Provider Selection */}
           <div className="space-y-2">
             <Label className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
+              <Server className="h-4 w-4" />
               {t.settings.provider}
             </Label>
             <Select value={provider} onValueChange={(v) => handleProviderChange(v as LLMProvider)}>
@@ -311,7 +311,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                   href={currentProvider.modelDocsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
+                  className="text-[#8fc4dd] underline underline-offset-4 hover:text-foreground"
                 >
                   {t.settings.modelDocsLink}
                 </a>
@@ -329,6 +329,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               <Input
                 id="api-key"
                 type={showKey ? 'text' : 'password'}
+                autoComplete="off"
+                spellCheck={false}
                 placeholder={
                   currentProvider?.apiKeyPrefix
                     ? `${currentProvider.apiKeyPrefix}...`
@@ -344,11 +346,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 size="icon"
                 className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
                 onClick={() => setShowKey(!showKey)}
+                aria-label={showKey ? t.settings.hideKey : t.settings.showKey}
+                aria-pressed={showKey}
               >
                 {showKey ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  <EyeOff className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 ) : (
-                  <Eye className="h-4 w-4 text-muted-foreground" />
+                  <Eye className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
                 )}
               </Button>
             </div>
@@ -359,6 +363,22 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 </AlertDescription>
               </Alert>
             )}
+
+            {/* Гигиена ключа: ключ — расходник, а не основной секрет аккаунта */}
+            <div className="rounded-sm border-l-2 border-border pl-3 pt-1">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Key className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                {t.settings.keySafetyTitle}
+              </p>
+              <ul className="mt-1.5 space-y-1 text-sm text-muted-foreground">
+                {t.settings.keySafetyLines.map((line) => (
+                  <li key={line} className="pl-4 -indent-4">
+                    <span aria-hidden="true">— </span>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
           {/* Advanced Settings (collapsible) */}
@@ -585,7 +605,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                       {instructions.step1Url ? (
                         <>
                           {instructions.step1Text}{' '}
-                          <a href={instructions.step1Url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                          <a href={instructions.step1Url} target="_blank" rel="noopener noreferrer" className="text-[#8fc4dd] underline underline-offset-4 hover:text-foreground">
                             {instructions.step1Url.replace(/https?:\/\//, '').split('/')[0]}
                           </a>
                         </>
@@ -614,7 +634,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     return (
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label={t.settings.title}>
             <Settings className="h-5 w-5" />
           </Button>
         </SheetTrigger>
@@ -664,11 +684,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" aria-label={t.settings.title}>
           <Settings className="h-5 w-5" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto max-w-[95vw] sm:max-w-lg">
+      <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />

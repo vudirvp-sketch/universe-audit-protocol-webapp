@@ -10,15 +10,11 @@ import { InspectorDrawer } from '@/components/layout/InspectorDrawer';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  BookOpen,
-  Moon,
-  Sun,
-  Sparkles,
   RotateCcw,
-  AlertTriangle,
   PanelRight,
-  Sidebar,
+  PanelLeft,
 } from 'lucide-react';
+import { BrandMark } from '@/components/BrandMark';
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { exportV3ToMarkdown, exportAuditJSON, exportAuditHTML } from '@/lib/audit/export-utils';
 import { extractOrientationContext } from '@/lib/audit/context-bridge';
@@ -95,7 +91,6 @@ export default function Home() {
   const orientationContext = useAuditStateV3(s => s.orientationContext);
   const checklistScore = useAuditStateV3(s => s.checklistScore);
 
-  const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const { provider, apiKey, model, proxyUrl, baseUrl } = useSettings();
   const [proxyUnavailable, setProxyUnavailable] = React.useState(false);
@@ -140,11 +135,6 @@ export default function Home() {
     };
     checkHealth();
   }, [proxyUrl]);
-
-  // Toggle theme
-  React.useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
 
   // =========================================================================
   // Audit pipeline runner
@@ -282,9 +272,9 @@ export default function Home() {
   if (!isHydrated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <Sparkles className="h-8 w-8 text-amber-500 mx-auto animate-pulse" />
-          <p className="text-sm text-muted-foreground">Загрузка...</p>
+        <div role="status" className="flex flex-col items-center gap-3">
+          <BrandMark size={32} />
+          <p className="text-sm text-muted-foreground">Загрузка…</p>
         </div>
       </div>
     );
@@ -301,47 +291,37 @@ export default function Home() {
       <div className="min-h-screen bg-background text-foreground">
         {/* Proxy health-check banner */}
         {proxyUnavailable && (
-          <div className="bg-severity-warning/90 text-white text-center py-2 px-4 text-sm font-medium">
+          <div role="alert" className="bg-severity-warning text-severity-warning-foreground text-center py-2 px-4 text-sm font-medium">
             Прокси недоступен — проверьте интернет или настройки прокси
           </div>
         )}
 
         {/* Header / Topbar */}
-        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-0 z-50 border-b bg-background">
           <div className="flex h-14 items-center justify-between px-4 md:px-6">
             <div className="flex items-center gap-3">
-              <Sparkles className="h-6 w-6 text-amber-500" />
-              <div>
-                <h1 className="text-xl font-bold">Universe Audit Protocol</h1>
-                <p className="text-sm text-muted-foreground">{t.app.version}</p>
-              </div>
+              <BrandMark />
+              <h1 className="text-base font-semibold leading-none">
+                Протокол аудита вселенной
+                <span className="ml-2 text-sm font-normal text-muted-foreground">{t.app.version}</span>
+              </h1>
             </div>
             <div className="flex items-center gap-1">
-              {/* Rail toggle — only during running/done */}
               {showRailButtons && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={toggleSidebar}
-                    >
-                      <Sidebar className="h-5 w-5" />
+                    <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label={t.tooltips.navigation}>
+                      <PanelLeft className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t.tooltips.navigation}</TooltipContent>
                 </Tooltip>
               )}
 
-              {/* Inspector button — only during running/done */}
               {showRailButtons && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setInspectorOpen(true)}
-                    >
+                    <Button variant="ghost" size="icon" onClick={() => setInspectorOpen(true)} aria-label={t.tooltips.inspector}>
                       <PanelRight className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
@@ -349,25 +329,6 @@ export default function Home() {
                 </Tooltip>
               )}
 
-              {/* Theme toggle */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  >
-                    {theme === 'dark' ? (
-                      <Sun className="h-5 w-5" />
-                    ) : (
-                      <Moon className="h-5 w-5" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t.tooltips.changeTheme}</TooltipContent>
-              </Tooltip>
-
-              {/* Settings */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span>
@@ -377,7 +338,6 @@ export default function Home() {
                 <TooltipContent>{t.tooltips.settings}</TooltipContent>
               </Tooltip>
 
-              {/* New Audit / Reset */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -385,6 +345,7 @@ export default function Home() {
                     size="icon"
                     onClick={() => useAuditStateV3.getState().reset()}
                     disabled={phase === 'running'}
+                    aria-label={t.tooltips.newAudit}
                   >
                     <RotateCcw className="h-5 w-5" />
                   </Button>
@@ -398,61 +359,56 @@ export default function Home() {
         {/* Main Content */}
         {phase === 'idle' ? (
           /* ===== Input Form (idle state) ===== */
-          <main className="container py-6">
-            <div className="max-w-4xl mx-auto">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold mb-2">Universe Audit Protocol</h2>
-                <p className="text-muted-foreground max-w-2xl mx-auto">
-                  Анализ вымышленных миров: от скелета концепта до рекомендаций.
-                  Пять блоков — полный отчёт.
+          <main className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6 md:py-14">
+            <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-16">
+              <div>
+                <h2 className="max-w-[22ch] text-4xl font-semibold leading-[1.1] tracking-tight text-balance">
+                  Аудит вымышленного мира
+                </h2>
+                <p className="mt-4 mb-10 max-w-[56ch] text-muted-foreground">
+                  Вставьте описание концепта. Пять блоков проверят, работает ли мир как система,
+                  как устроены персонажи и что исправлять в первую очередь.
                 </p>
+                <AuditFormV2 onSubmit={startAudit} isLoading={false} />
               </div>
 
-              {/* Protocol Overview Cards (Section 4.1) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                {[
-                  { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', detail: '17 критериев живого мира', icon: '\u2699\uFE0F' },
-                  { level: 'L2+L3', name: 'Тело + Психика', question: 'Есть ли телесность и последствия?', detail: '5 слоёв персонажа, Архитектура Горя', icon: '\uD83E\uDEC0' },
-                  { level: 'L4', name: 'Мета', question: 'Задаёт ли вопрос реальной жизни?', detail: 'Корнелианская дилемма, зеркало агента', icon: '\uD83E\uDE9E' },
-                  { level: 'Блок 5', name: 'Синтез', question: 'Что конкретно исправить?', detail: 'Дерево решений, приоритеты, патчи', icon: '\uD83D\uDD27' },
-                ].map((item) => (
-                  <div key={item.level} className="text-center p-6 rounded-lg border bg-card hover:border-amber-500/30 transition-colors">
-                    <div className="text-4xl mb-2">{item.icon}</div>
-                    <div className="text-base font-semibold mb-1">{item.level}: {item.name}</div>
-                    <p className="text-sm text-muted-foreground mb-1">{item.question}</p>
-                    <p className="text-sm text-muted-foreground/70">{item.detail}</p>
-                  </div>
-                ))}
-              </div>
-
-              <AuditFormV2
-                onSubmit={startAudit}
-                isLoading={false}
-              />
+              <aside aria-labelledby="levels-title" className="lg:pt-2">
+                <h3 id="levels-title" className="text-base font-semibold">Что проверяется</h3>
+                <dl className="mt-4 divide-y border-y">
+                  {[
+                    { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', detail: '17 критериев живого мира' },
+                    { level: 'L2, L3', name: 'Тело и психика', question: 'Есть ли телесность и последствия?', detail: '5 слоёв персонажа, архитектура горя' },
+                    { level: 'L4', name: 'Мета', question: 'Задаёт ли мир вопрос о реальной жизни?', detail: 'Корнелианская дилемма, зеркало агента' },
+                    { level: 'Блок 5', name: 'Синтез', question: 'Что конкретно исправить?', detail: 'Дерево решений, приоритеты, патчи' },
+                  ].map((item) => (
+                    <div key={item.level} className="grid grid-cols-[4.25rem_1fr] gap-x-3 py-3.5">
+                      <dt className="text-sm font-semibold text-muted-foreground">{item.level}</dt>
+                      <dd>
+                        <p className="text-[0.9375rem] font-semibold leading-snug">{item.name}</p>
+                        <p className="mt-0.5 text-sm leading-snug">{item.question}</p>
+                        <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{item.detail}</p>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </aside>
             </div>
           </main>
         ) : phase === 'error' ? (
           /* ===== Error Screen ===== */
-          <main className="container py-6">
-            <div className="max-w-2xl mx-auto text-center space-y-6 py-12">
-              <AlertTriangle className="h-16 w-16 text-destructive mx-auto" />
-              <h2 className="text-2xl font-bold">Ошибка аудита</h2>
-              <p className="text-muted-foreground">
+          <main className="mx-auto w-full max-w-2xl px-4 py-14 md:px-6">
+            <div role="alert" className="border-l-2 border-severity-critical pl-5">
+              <h2 className="text-2xl font-semibold">Аудит остановлен</h2>
+              <p className="mt-2 max-w-[60ch] text-muted-foreground">
                 {error || 'Произошла неизвестная ошибка'}
               </p>
-              <div className="flex justify-center gap-4">
-                <Button
-                  variant="default"
-                  onClick={() => useAuditStateV3.getState().reset()}
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Новый аудит
-                </Button>
-                <Button variant="outline" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                  {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
-                  Сменить тему
-                </Button>
-              </div>
+              <p className="mt-2 max-w-[60ch] text-sm text-muted-foreground">
+                Проверьте ключ и прокси в настройках и запустите аудит снова.
+              </p>
+              <Button className="mt-6" onClick={() => useAuditStateV3.getState().reset()}>
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                Новый аудит
+              </Button>
             </div>
           </main>
         ) : (
@@ -512,13 +468,9 @@ export default function Home() {
         />
 
         {/* Footer */}
-        <footer className="border-t py-4">
-          <div className="container flex items-center justify-between text-sm text-muted-foreground">
-            <p>{`Universe Audit Protocol ${t.app.version}`}</p>
-            <div className="flex items-center gap-4">
-              <BookOpen className="h-4 w-4" />
-              <span>{t.app.footerStats}</span>
-            </div>
+        <footer className={phase === 'running' || phase === 'done' ? 'border-t py-4 pb-24 md:pb-4' : 'border-t py-4'}>
+          <div className="px-4 md:px-6 text-sm text-muted-foreground">
+            <p>{t.app.footerStats}</p>
           </div>
         </footer>
       </div>

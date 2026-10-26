@@ -52,7 +52,7 @@ const BLOCK_LABELS = [
 function StreamingPlaceholder() {
   return (
     <div className="flex items-center gap-2 text-muted-foreground py-4">
-      <span className="inline-block h-2 w-2 rounded-full bg-severity-streaming animate-pulse" />
+      <span className="inline-block size-2.5 bg-severity-streaming animate-pulse" aria-hidden="true" />
       <span className="text-sm">{t.app.streamingInProgress}</span>
     </div>
   );
@@ -84,7 +84,17 @@ export function AuditReportViewV3({
   }, [streamingText, isRunning]);
 
   return (
-    <article className="max-w-[84ch] mx-auto">
+    <article className="max-w-[84ch]">
+      {/* Шапка документа: отчёт должен начинаться с того, что аудируется */}
+      {meta?.inputText && (
+        <header className="mb-8 max-w-[68ch]">
+          <p className="text-sm text-muted-foreground">{t.report.auditedConcept}</p>
+          <p className="mt-1 line-clamp-2 text-[0.9375rem] leading-snug text-balance">
+            {meta.inputText}
+          </p>
+        </header>
+      )}
+
       {/* Score cards — visible only when audit is done and score exists */}
       {isDone && checklistScore && mediaType && (
         <>
@@ -104,7 +114,7 @@ export function AuditReportViewV3({
           <section
             key={blockNum}
             id={`block-${blockNum}`}
-            className="scroll-mt-16 py-6 first:pt-0"
+            className="scroll-mt-28 py-6 first:pt-0"
           >
             <BlockSectionHeader
               blockNumber={blockNum}
@@ -112,7 +122,7 @@ export function AuditReportViewV3({
               result={result}
               isStreaming={isStreamingThis}
             />
-            <div className="prose prose-lg dark:prose-invert max-w-none">
+            <div className="report prose prose-lg">
               {isStreamingThis && streamingText ? (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                   {streamingText}

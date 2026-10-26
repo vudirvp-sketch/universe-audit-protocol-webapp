@@ -4,20 +4,21 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { Info, AlertTriangle, Lightbulb, ShieldAlert, XCircle } from 'lucide-react';
 
+// Цвета берутся из токенов состояния, а не из палитры Tailwind.
 const CALLOUT_STYLES: Record<string, string> = {
-  NOTE: 'border-l-blue-500 bg-blue-500/5',
-  WARNING: 'border-l-amber-500 bg-amber-500/5',
-  TIP: 'border-l-emerald-500 bg-emerald-500/5',
-  CAUTION: 'border-l-orange-500 bg-orange-500/5',
-  CRITICAL: 'border-l-red-500 bg-red-500/5',
+  NOTE: 'border-l-severity-recommendation',
+  WARNING: 'border-l-severity-warning',
+  TIP: 'border-l-severity-success',
+  CAUTION: 'border-l-severity-warning',
+  CRITICAL: 'border-l-severity-critical',
 };
 
 const CALLOUT_ICONS: Record<string, React.ReactNode> = {
-  NOTE: <Info className="h-4 w-4 text-blue-500" />,
-  WARNING: <AlertTriangle className="h-4 w-4 text-amber-500" />,
-  TIP: <Lightbulb className="h-4 w-4 text-emerald-500" />,
-  CAUTION: <ShieldAlert className="h-4 w-4 text-orange-500" />,
-  CRITICAL: <XCircle className="h-4 w-4 text-red-500" />,
+  NOTE: <Info className="h-4 w-4 text-severity-recommendation" aria-hidden="true" />,
+  WARNING: <AlertTriangle className="h-4 w-4 text-severity-warning" aria-hidden="true" />,
+  TIP: <Lightbulb className="h-4 w-4 text-severity-success" aria-hidden="true" />,
+  CAUTION: <ShieldAlert className="h-4 w-4 text-severity-warning" aria-hidden="true" />,
+  CRITICAL: <XCircle className="h-4 w-4 text-severity-critical" aria-hidden="true" />,
 };
 
 export function CalloutBlock({ type, children }: { type: string; children: React.ReactNode }) {
@@ -25,9 +26,9 @@ export function CalloutBlock({ type, children }: { type: string; children: React
   const icon = CALLOUT_ICONS[type] || CALLOUT_ICONS.NOTE;
 
   return (
-    <div className={cn('flex gap-3 rounded-r-lg border-l-4 p-4 my-4', style)}>
-      <div className="shrink-0 mt-0.5">{icon}</div>
-      <div className="min-w-0 prose prose-sm dark:prose-invert max-w-none">{children}</div>
+    <div className={cn('my-5 flex gap-3 border-l-2 bg-card py-3 pl-4 pr-4', style)}>
+      <div className="mt-1 shrink-0">{icon}</div>
+      <div className="report prose prose-sm min-w-0 max-w-none">{children}</div>
     </div>
   );
 }

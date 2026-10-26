@@ -62,14 +62,16 @@ export const t = {
     narrativeLabel: 'Нарратив / Текст концепта',
     narrativePlaceholder:
       'Введите концепт вашего нарратива, структуру истории или описание мира здесь...\n\nПример: Постапокалиптический мир, где воспоминания можно извлекать и продавать. Протагонист — торговец памятью — обнаруживает, что его собственные воспоминания были систематически стёрты, что ведёт его в путешествие за восстановлением прошлого, пока он раскрывает заговор, угрожающий тому, что осталось от общества...',
-    characterCount: '{count} символов | Минимум 100 символов рекомендуется',
+    characterCount: '{count} {unit}',
+    charUnits: ['символ', 'символа', 'символов'],
     mediaType: 'Тип медиа',
     mediaTypeSelect: 'Выберите тип медиа',
     mediaNarrative: 'Нарратив',
     mediaGame: 'Игра',
     mediaVisual: 'Визуальное',
     mediaTtrpg: 'ТВРПГ',
-    minCharsWarning: 'Минимум 50 символов для запуска аудита',
+    minCharsWarning: 'Минимум {min} {unit} для запуска аудита',
+    minCharsBlocked: 'Ещё {count} {unit} — и можно запускать',
     uploadFile: 'Загрузить файл',
     supportedFormats: 'Поддерживаемые форматы: .txt, .md, .docx, .pdf',
     fileUploaded: 'Файл загружен: {name} ({size} символов)',
@@ -195,7 +197,16 @@ export const t = {
     apiKeyConfigured: 'API ключ {provider} настроен',
     howToGetKey: 'Как получить API ключ:',
     keySecurityNote:
-      'Ваш API ключ хранится локально в браузере и не передаётся третьим лицам.',
+      'Ключ хранится только в этом браузере и уходит напрямую провайдеру через прокси — ни приложение, ни прокси его не сохраняют.',
+    // Гигиена ключа: пользователь платит своими квотами, поэтому ключ должен быть расходным.
+    keySafetyTitle: 'Ключ на один аудит',
+    keySafetyLines: [
+      'Заведите отдельный ключ под аудиты, а не берите основной ключ аккаунта.',
+      'Поставьте лимит расходов и короткий срок жизни — например, один час.',
+      'Одноразовый ключ после аудита отзовите: если он утечёт, ущерб ограничен лимитом и сроком.',
+    ],
+    showKey: 'Показать ключ',
+    hideKey: 'Скрыть ключ',
     // Provider-specific instructions (Russian per Language Contract)
     providerInstructions: {
       google: {
@@ -282,6 +293,7 @@ export const t = {
   // v3: Ключи для AuditReportViewV3 (5-блочный отчёт с markdown)
   report: {
     title: 'Отчёт аудита',
+    auditedConcept: 'Аудит концепта',
     protocolVersion: 'Universe Audit Protocol v3.1 (v10.0 diagnostics)',
     // Block labels
     block1: 'Ориентация',
@@ -295,7 +307,7 @@ export const t = {
     streamingFull: 'стримится...',
     generating: 'Генерация ответа...',
     completed: 'Завершено',
-    blockPrefix: 'БЛОК',
+    blockPrefix: 'Блок',
     // Meta info
     tokens: 'Токены',
     time: 'Время',
@@ -343,7 +355,7 @@ export const t = {
     profile: 'Профиль',
     blockOf: 'Блок {current} из {total}',
     blockShort: 'Блок {current}/5',
-    parts: '{count} частей',
+    parts: '{count} {unit}',
     partOf: 'часть {current}/{total}',
   },
 
