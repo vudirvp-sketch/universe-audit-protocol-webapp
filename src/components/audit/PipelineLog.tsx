@@ -85,7 +85,7 @@ export function PipelineStatusLine({ entries, startedAt, phase }: PipelineStatus
 
   return (
     <div
-      className="mb-4 rounded-lg border bg-muted/40 px-3 py-2 text-sm"
+      className="mb-4 border-y border-border py-2 text-sm"
       role="status"
       aria-live="polite"
     >
@@ -99,7 +99,9 @@ export function PipelineStatusLine({ entries, startedAt, phase }: PipelineStatus
         <span className="font-mono tabular-nums text-muted-foreground shrink-0">
           {formatLogTime(elapsedMs)}
         </span>
-        <span className="truncate">{last ? last.message : 'ожидание первого события…'}</span>
+        <span className="min-w-0 flex-1 break-words">
+          {last ? last.message : 'ожидание первого события…'}
+        </span>
         {isRunning && quietSeconds >= 10 && (
           <span className="ml-auto shrink-0 font-mono tabular-nums text-severity-warning">
             тишина {quietSeconds} с
@@ -107,8 +109,9 @@ export function PipelineStatusLine({ entries, startedAt, phase }: PipelineStatus
         )}
       </div>
       {last && (
-        <p className="text-xs text-muted-foreground/70 mt-1 truncate">
-          событие записано на {formatLogTime(last.at)}
+        <p className="mt-1 text-xs text-muted-foreground/70">
+          событие записано на{' '}
+          <span className="font-mono tabular-nums">{formatLogTime(last.at)}</span>
         </p>
       )}
     </div>
@@ -137,9 +140,9 @@ export function PipelineLogSection({ entries }: { entries: PipelineLogEntry[] })
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <ScrollText className="h-3.5 w-3.5" />
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
           Журнал пайплайна
         </h3>
         {entries.length > 0 && (
@@ -147,10 +150,12 @@ export function PipelineLogSection({ entries }: { entries: PipelineLogEntry[] })
             type="button"
             variant="ghost"
             size="sm"
-            className="h-6 px-2 text-xs"
+            className="h-7 rounded-sm px-2 text-xs text-muted-foreground"
             onClick={() => void copy()}
           >
-            {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
+            {copied
+              ? <Check className="h-3 w-3 mr-1" aria-hidden="true" />
+              : <Copy className="h-3 w-3 mr-1" aria-hidden="true" />}
             {copied ? 'Скопировано' : 'Копировать'}
           </Button>
         )}
@@ -158,9 +163,12 @@ export function PipelineLogSection({ entries }: { entries: PipelineLogEntry[] })
       {entries.length === 0 ? (
         <p className="text-sm text-muted-foreground">Событий пока нет — журнал заполняется с началом аудита.</p>
       ) : (
-        <div className="max-h-64 overflow-y-auto rounded-md border bg-muted/30 p-2 font-mono text-[11px] leading-relaxed">
+        <div className="max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed">
           {entries.map((entry, index) => (
-            <div key={`${entry.at}-${index}`} className="flex gap-2">
+            <div
+              key={`${entry.at}-${index}`}
+              className="flex gap-2 border-t border-border py-1 first:border-t-0"
+            >
               <span className="shrink-0 tabular-nums text-muted-foreground/70">{formatLogTime(entry.at)}</span>
               <span className={cn('break-words', LEVEL_CLASS[entry.level])}>{entry.message}</span>
             </div>

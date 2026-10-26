@@ -1,10 +1,10 @@
 'use client';
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+import { cn, pluralRu } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
+import { BrandMark } from '@/components/BrandMark';
 import type { BlockResult, OrientationContext, PipelinePhase } from '@/lib/audit/types-v3';
 import { StatusIndicator, type BlockStatus } from '@/components/audit/StatusIndicator';
 import { t } from '@/lib/i18n/ru';
@@ -52,110 +52,73 @@ function getBlockStatus(
   return 'waiting';
 }
 
-// ============================================================
-// Small circular progress SVG for collapsed mode
-// ============================================================
+function completedBlocks(currentBlock: 0 | 1 | 2 | 3 | 4 | 5, phase: PipelinePhase): number {
+  return phase === 'done' ? 5 : BLOCKS.filter(b => b.index < currentBlock).length;
+}
 
-function MiniCircularProgress({ percent, size = 40 }: { percent: number; size?: number }) {
-  const strokeWidth = 4;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percent / 100) * circumference;
+/** «4 части», а не «4 частей»: t.rail.parts принимает число и склонённую форму. */
+function partsLabel(count: number): string {
+  return t.rail.parts
+    .replace('{count}', String(count))
+    .replace('{unit}', pluralRu(count, t.rail.partUnits));
+}
 
-  const colorClass =
-    percent >= 75 ? 'stroke-severity-success' :
-    percent >= 50 ? 'stroke-severity-warning' :
-    'stroke-severity-critical';
+function blockOfLabel(blockIndex: number): string {
+  return t.rail.blockOf.replace('{current}', String(blockIndex)).replace('{total}', '5');
+}
 
-  return (
-    <svg width={size} height={size} className="-rotate-90">
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={strokeWidth}
-        className="text-muted/20"
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        strokeWidth={strokeWidth}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        className={colorClass}
-        style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-      />
-    </svg>
-  );
+function scrollToBlock(blockIndex: number): void {
+  const el = document.getElementById(`block-${blockIndex}`);
+  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ============================================================
-// Collapsed content
+// Collapsed content: счётчик станций, без кругового прогресса
 // ============================================================
 
 function CollapsedContent({
   currentBlock,
-  blocks,
   phase,
 }: {
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
-  blocks: (BlockResult | null)[];
   phase: PipelinePhase;
 }) {
-  const completedBlocks = phase === 'done'
-    ? 5
-    : BLOCKS.filter(b => b.index < currentBlock).length;
-  const progressPercent = Math.round((completedBlocks / 5) * 100);
+  const completed = completedBlocks(currentBlock, phase);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      {/* Mini circular progress */}
-      <div className="relative">
-        <MiniCircularProgress percent={progressPercent} />
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs font-bold">{progressPercent}%</span>
-        </div>
-      </div>
-
-      {/* 5 block dots */}
-      <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-3" role="group" aria-label={t.report.progress}>
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {completed}/5
+      </span>
+      <ol className="flex flex-col items-center gap-3">
         {BLOCKS.map((block) => {
           const status = getBlockStatus(block.index, currentBlock, phase);
-          const isActive = status === 'in_progress';
           const isClickable = status === 'completed';
 
           return (
-            <button
-              key={block.index}
-              className={cn(
-                'rounded-full p-0',
-                isActive && 'ring-2 ring-amber-500',
-                isClickable && 'cursor-pointer hover:opacity-80',
-              )}
-              onClick={() => {
-                if (isClickable) {
-                  const el = document.getElementById(`block-${block.index}`);
-                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-              }}
-              title={`${t.report.blockPrefix || 'БЛОК'} ${block.index}: ${block.label}`}
-            >
-              <StatusIndicator status={status} size="md" />
-            </button>
+            <li key={block.index}>
+              <button
+                type="button"
+                disabled={!isClickable}
+                onClick={() => scrollToBlock(block.index)}
+                aria-label={`${blockOfLabel(block.index)}: ${block.label}`}
+                className={cn(
+                  'flex h-6 w-6 items-center justify-center rounded-sm',
+                  isClickable && 'cursor-pointer hover:bg-accent',
+                )}
+              >
+                <StatusIndicator status={status} size="sm" />
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </div>
   );
 }
 
 // ============================================================
-// Expanded content (progress bar, block list, orientation context, cancel button)
+// Expanded content: вертикальная волосяная линия со станциями
 // Exported for reuse by MobileProgressFAB.
 // ============================================================
 
@@ -168,10 +131,6 @@ export function ExpandedContent({
   phase,
   orientationContext,
 }: Omit<LeftRailProps, 'collapsed' | 'onToggleCollapse'>) {
-  const completedBlocks = phase === 'done'
-    ? 5
-    : BLOCKS.filter(b => b.index < currentBlock).length;
-  const progressPercent = Math.round((completedBlocks / 5) * 100);
   const isAuditing = currentBlock > 0 && currentBlock <= 5 && phase === 'running';
 
   const currentBlockInfo = BLOCKS.find(b => b.index === currentBlock);
@@ -180,84 +139,93 @@ export function ExpandedContent({
   const chunkDisplay = showChunks && currentChunkIndex !== undefined
     ? ` (${t.rail.partOf.replace('{current}', String(currentChunkIndex + 1)).replace('{total}', String(totalChunks))})`
     : showChunks
-      ? ` (${t.rail.parts.replace('{count}', String(totalChunks))})`
+      ? ` (${partsLabel(totalChunks)})`
       : '';
 
   const progressLabel = phase === 'done'
     ? t.phases.complete
     : currentBlock > 0
-      ? `${t.rail.blockOf.replace('{current}', String(Math.min(currentBlock, 5))).replace('{total}', '5')}${chunkDisplay}`
+      ? `${blockOfLabel(Math.min(currentBlock, 5))}${chunkDisplay}`
       : t.rail.preparing;
 
   return (
     <div className="space-y-4">
-      {/* Progress bar */}
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>{t.progress.progress}</span>
-          <span>{progressLabel}</span>
-        </div>
-        <Progress value={progressPercent} className="h-2" />
+      {/* Строка состояния пайплайна */}
+      <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2 text-sm">
+        <span className="text-muted-foreground shrink-0">{t.progress.progress}</span>
+        <span className="text-right text-muted-foreground">{progressLabel}</span>
       </div>
 
-      {/* Block list */}
-      <div className="space-y-1">
-        {BLOCKS.map((block) => {
-          const status = getBlockStatus(block.index, currentBlock, phase);
-          const isActive = status === 'in_progress';
-          const blockResult = blocks[block.index];
-          const isChunked = block.defaultChunks > 1;
-          const chunkLabel = isChunked ? ` (${t.rail.parts.replace('{count}', String(block.defaultChunks))})` : '';
-          const elapsedLabel = blockResult?.meta?.elapsedMs
-            ? `${(blockResult.meta.elapsedMs / 1000).toFixed(1)}с`
-            : '';
-          const tokenLabel = blockResult?.meta?.tokensUsed
-            ? `${blockResult.meta.tokensUsed.total.toLocaleString()} tok`
-            : '';
-          const isClickable = status === 'completed';
+      {/* Станции на волосяной линии */}
+      <div className="relative">
+        <span aria-hidden="true" className="absolute bottom-3 left-[4px] top-3 w-px bg-border" />
+        <ol>
+          {BLOCKS.map((block) => {
+            const status = getBlockStatus(block.index, currentBlock, phase);
+            const isActive = status === 'in_progress';
+            const blockResult = blocks[block.index];
+            const chunkLabel = block.defaultChunks > 1 ? ` (${partsLabel(block.defaultChunks)})` : '';
+            const elapsedLabel = blockResult?.meta?.elapsedMs
+              ? `${(blockResult.meta.elapsedMs / 1000).toFixed(1)}с`
+              : '';
+            const tokenLabel = blockResult?.meta?.tokensUsed
+              ? `${blockResult.meta.tokensUsed.total.toLocaleString()} tok`
+              : '';
+            const isClickable = status === 'completed';
 
-          return (
-            <div
-              key={block.index}
-              className={cn(
-                'flex items-center gap-3 p-2 rounded-md transition-colors',
-                isClickable ? 'cursor-pointer hover:bg-accent/50' : '',
-                isActive ? 'bg-accent' : status === 'completed' ? 'opacity-70' : 'opacity-50',
-              )}
-              onClick={() => {
-                if (isClickable) {
-                  const el = document.getElementById(`block-${block.index}`);
-                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-              }}
-              role={isClickable ? 'button' : undefined}
-              tabIndex={isClickable ? 0 : undefined}
-            >
-              <StatusIndicator status={status} size="sm" />
-              <span className="text-sm font-medium flex-1 truncate">{block.label}{chunkLabel}</span>
-              {elapsedLabel && (
-                <span className="text-sm text-muted-foreground">{elapsedLabel}</span>
-              )}
-              {tokenLabel && (
-                <span className="text-sm text-muted-foreground">{tokenLabel}</span>
-              )}
-            </div>
-          );
-        })}
+            return (
+              <li key={block.index}>
+                <button
+                  type="button"
+                  disabled={!isClickable}
+                  onClick={() => scrollToBlock(block.index)}
+                  className={cn(
+                    'flex w-full items-start gap-2.5 rounded-sm py-2 text-left',
+                    isClickable && 'cursor-pointer hover:bg-accent/40',
+                  )}
+                >
+                  <span className="relative z-10 mt-[7px] flex h-2.5 w-2.5 shrink-0 items-center justify-center bg-background">
+                    <StatusIndicator status={status} size="sm" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        'block text-sm',
+                        isActive
+                          ? 'font-semibold text-foreground'
+                          : status === 'completed'
+                            ? 'text-foreground/80'
+                            : 'text-muted-foreground',
+                      )}
+                    >
+                      {block.label}{chunkLabel}
+                    </span>
+                    {(elapsedLabel || tokenLabel) && (
+                      <span className="mt-0.5 flex flex-wrap gap-x-2 font-mono text-xs tabular-nums text-muted-foreground">
+                        {elapsedLabel && <span>{elapsedLabel}</span>}
+                        {tokenLabel && <span>{tokenLabel}</span>}
+                      </span>
+                    )}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
       </div>
 
       {/* Orientation context — audit mode + authorship hypothesis (v16 §2, §4.2) */}
       {orientationContext && (
-        <div className="pt-2 border-t space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">{t.rail.auditContext}</p>
+        <div className="space-y-1 border-t border-border pt-3">
+          <p className="text-sm text-muted-foreground">{t.rail.auditContext}</p>
           {orientationContext.auditMode && (
             <div className="flex justify-between gap-2 text-sm">
-              <span className="text-muted-foreground shrink-0">{t.rail.mode}:</span>
+              <span className="text-muted-foreground shrink-0">{t.rail.mode}</span>
               <span className="text-right">{t.modes[orientationContext.auditMode]}</span>
             </div>
           )}
           {orientationContext.authorshipHypothesis && (
-            <div className="space-y-1">
+            <div className="space-y-1 pt-1">
               <p className="text-sm text-muted-foreground">{t.rail.authorship}</p>
               <p className="text-sm">{orientationContext.authorshipHypothesis}</p>
             </div>
@@ -267,8 +235,8 @@ export function ExpandedContent({
 
       {/* Cancel button */}
       {isAuditing && (
-        <div className="flex justify-end">
-          <Button variant="destructive" size="sm" onClick={onCancel}>
+        <div className="flex justify-end border-t border-border pt-3">
+          <Button variant="outline" size="sm" className="rounded-sm" onClick={onCancel}>
             {t.app.cancelAudit}
           </Button>
         </div>
@@ -295,45 +263,56 @@ export function LeftRail({
   return (
     <div
       className={cn(
-        'hidden md:flex flex-col border-r bg-card transition-[width] duration-200 ease-in-out overflow-hidden shrink-0',
+        'hidden md:flex flex-col border-r border-border bg-background transition-[width] duration-200 ease-in-out overflow-hidden shrink-0',
         collapsed ? 'w-16' : 'w-[280px]',
       )}
     >
-      {/* Top: Logo/Brand */}
-      <div className="flex items-center gap-2 px-3 h-14 border-b shrink-0">
-        {collapsed ? (
-          <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
-        ) : (
-          <>
-            <Sparkles className="h-5 w-5 text-amber-500 shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-bold truncate">{t.rail.brandName}</p>
-              <p className="text-xs text-muted-foreground truncate">{t.rail.brandSub}</p>
-            </div>
-          </>
+      {/* Top: brand */}
+      <div
+        className={cn(
+          'flex items-center gap-2 h-14 border-b border-border shrink-0',
+          collapsed ? 'justify-center px-2' : 'px-3',
+        )}
+      >
+        <BrandMark size={collapsed ? 20 : 22} />
+        {!collapsed && (
+          <div className="min-w-0">
+            <p className="text-sm font-semibold truncate">{t.rail.brandName}</p>
+            <p className="text-xs text-muted-foreground truncate">{t.rail.brandSub}</p>
+          </div>
         )}
       </div>
 
-      {/* Progress section */}
+      {/* Stations */}
       <div className="flex-1 overflow-y-auto p-3">
         {collapsed ? (
-          <CollapsedContent currentBlock={currentBlock} blocks={blocks} phase={phase} />
+          <CollapsedContent currentBlock={currentBlock} phase={phase} />
         ) : (
-          <ExpandedContent
-            currentBlock={currentBlock}
-            onCancel={onCancel}
-            currentBlockTotalChunks={currentBlockTotalChunks}
-            currentChunkIndex={currentChunkIndex}
-            blocks={blocks}
-            phase={phase}
-            orientationContext={orientationContext}
-          />
+          <div id="rail-progress">
+            <ExpandedContent
+              currentBlock={currentBlock}
+              onCancel={onCancel}
+              currentBlockTotalChunks={currentBlockTotalChunks}
+              currentChunkIndex={currentChunkIndex}
+              blocks={blocks}
+              phase={phase}
+              orientationContext={orientationContext}
+            />
+          </div>
         )}
       </div>
 
-      {/* Bottom: Toggle button */}
-      <div className="border-t p-2 shrink-0">
-        <Button variant="ghost" size="icon" className="w-full" onClick={onToggleCollapse}>
+      {/* Bottom: collapse toggle */}
+      <div className="border-t border-border p-2 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="w-full rounded-sm"
+          onClick={onToggleCollapse}
+          aria-label={t.report.navigation}
+          aria-expanded={!collapsed}
+          aria-controls="rail-progress"
+        >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
       </div>

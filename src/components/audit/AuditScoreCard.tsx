@@ -6,6 +6,9 @@
  * Replaces the legacy numeric score card: no percentages, no circular
  * progress, no arbitrary score totals. Renders the seven qualitative bands,
  * confidence, root-issue / recommendation counts and the capability frontier (§22).
+ *
+ * Direction A: the verdict is a document section, not a box — hairline rows,
+ * severity carried by `SeverityMark` shape plus one text token, no chips.
  */
 
 import * as React from 'react';
@@ -15,15 +18,14 @@ import type {
   MediaType,
   VerdictBand,
 } from '@/lib/audit/types-v3';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n/ru';
+import { SeverityMark } from './status-marks';
 import {
   bandSeverity,
   bandValueLabel,
   confidenceSeverity,
   formatCount,
-  severityChipClass,
   severityTextClass,
 } from '@/lib/audit/verdict-display';
 
@@ -64,19 +66,19 @@ const FRONTIER_KEYS = [
 
 function FrontierBreakdown({ frontier }: { frontier: CapabilityFrontierCounts }) {
   return (
-    <div className="border-t pt-3">
-      <h3 className="text-sm font-medium mb-2">{t.verdict.frontier}</h3>
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+    <div className="py-3">
+      <h3 className="text-sm font-medium">{t.verdict.frontier}</h3>
+      <ul className="mt-2 grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2">
         {FRONTIER_KEYS.map((key) => {
           const count = frontier[key];
           return (
             <li key={key} className="flex items-baseline justify-between gap-3 text-sm">
-              <span className={cn(count > 0 ? 'text-foreground' : 'text-muted-foreground')}>
+              <span className={count > 0 ? 'text-foreground' : 'text-muted-foreground'}>
                 {t.verdict.frontierLabels[key]}
               </span>
               <span
                 className={cn(
-                  'font-mono tabular-nums',
+                  'tabular-nums',
                   count > 0 ? 'text-foreground' : 'text-muted-foreground/60',
                 )}
               >
@@ -107,59 +109,57 @@ export function AuditVerdictCard({ verdict, mediaType }: AuditVerdictCardProps) 
   const overall = verdict.bands.find((band) => band.key === 'overall_state') ?? null;
   const otherBands = verdict.bands.filter((band) => band.key !== 'overall_state');
   const confidence = verdict.confidence;
+  const confidenceTone = confidenceSeverity(confidence);
+  const sourceLabel =
+    verdict.source === 'json' ? t.verdict.sourceJson : t.verdict.sourceMarkdown;
 
   return (
-    <section
-      aria-labelledby="verdict-card-title"
-      className="border-2 rounded-lg p-6 mb-6"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <section aria-labelledby="verdict-card-title" className="mb-10">
+      {/* Title row + provenance, hairline underneath */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border pb-3">
         <h2 id="verdict-card-title" className="text-base font-semibold">
           {t.verdict.title}
         </h2>
-        <div className="flex items-center gap-2">
-          {mediaType && (
-            <span className="text-sm text-muted-foreground">{mediaLabel(mediaType)}</span>
-          )}
-          <Badge variant="outline" className="text-xs">
-            {verdict.source === 'json' ? t.verdict.sourceJson : t.verdict.sourceMarkdown}
-          </Badge>
-        </div>
+        <p className="text-sm text-muted-foreground">
+          {mediaType ? `${mediaLabel(mediaType)} · ` : null}
+          {sourceLabel}
+        </p>
       </div>
 
       {verdict.bands.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t.verdict.fallback}</p>
+        <p className="border-b border-border py-3 text-sm text-muted-foreground">
+          {t.verdict.fallback}
+        </p>
       ) : (
         <>
-          {/* Overall state — headline */}
+          {/* Overall state — the one headline row */}
           {overall && (
-            <div className="mb-4">
-              <p className="text-sm text-muted-foreground">{t.verdict.bands.overall_state}</p>
-              <p
-                className={cn('text-2xl font-bold', severityTextClass(bandSeverity(overall)))}
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border py-4">
+              <span className="flex items-baseline gap-2">
+                <SeverityMark severity={bandSeverity(overall)} />
+                <span className="text-sm text-muted-foreground">{bandLabel(overall)}</span>
+              </span>
+              <span
+                className={cn('text-xl font-semibold', severityTextClass(bandSeverity(overall)))}
               >
                 {bandValueLabel(overall.value)}
-              </p>
+              </span>
             </div>
           )}
 
-          {/* Remaining bands as labelled value chips */}
-          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Remaining bands — document rows, value in severity colour + mark */}
+          <dl className="border-b border-border">
             {otherBands.map((band) => {
               const severity = bandSeverity(band);
               return (
                 <div
                   key={band.key}
-                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                  className="flex items-baseline justify-between gap-4 border-b border-border py-2 last:border-b-0"
                 >
                   <dt className="text-sm text-muted-foreground">{bandLabel(band)}</dt>
-                  <dd className="m-0">
-                    <span
-                      className={cn(
-                        'inline-block rounded-md px-2 py-0.5 text-sm font-medium',
-                        severityChipClass(severity),
-                      )}
-                    >
+                  <dd className="m-0 flex items-baseline gap-2 text-sm">
+                    <SeverityMark severity={severity} size="sm" />
+                    <span className={cn('font-medium', severityTextClass(severity))}>
                       {bandValueLabel(band.value)}
                     </span>
                   </dd>
@@ -168,25 +168,21 @@ export function AuditVerdictCard({ verdict, mediaType }: AuditVerdictCardProps) 
             })}
           </dl>
 
-          {/* Confidence + counts */}
-          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          {/* Confidence + counts, same rhythm */}
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 border-b border-border py-3 text-sm">
             {confidence && (
-              <span className="flex items-center gap-2">
+              <span className="flex items-baseline gap-2">
+                <SeverityMark severity={confidenceTone} size="sm" />
                 <span className="text-muted-foreground">{t.verdict.confidence}:</span>
-                <span
-                  className={cn(
-                    'font-medium',
-                    severityTextClass(confidenceSeverity(confidence)),
-                  )}
-                >
+                <span className={cn('font-medium', severityTextClass(confidenceTone))}>
                   {bandValueLabel(confidence)}
                 </span>
               </span>
             )}
-            <span className="text-muted-foreground">
+            <span className="tabular-nums text-muted-foreground">
               {formatCount(verdict.issues.length, t.verdict.counts.problems)}
             </span>
-            <span className="text-muted-foreground">
+            <span className="tabular-nums text-muted-foreground">
               {formatCount(verdict.recommendations.length, t.verdict.counts.recommendations)}
             </span>
           </div>
@@ -195,16 +191,19 @@ export function AuditVerdictCard({ verdict, mediaType }: AuditVerdictCardProps) 
 
       {/* Capability frontier — v16 §22 */}
       {verdict.frontier && (
-        <div className="mt-4">
+        <div className="border-b border-border">
           <FrontierBreakdown frontier={verdict.frontier} />
         </div>
       )}
 
       {/* Closing statement — required by §26.S */}
       {verdict.closingStatement && (
-        <blockquote className="mt-4 border-l-4 border-severity-recommendation pl-3 text-sm italic text-muted-foreground">
-          {verdict.closingStatement}
-        </blockquote>
+        <div className="border-b border-border py-4">
+          <blockquote className="m-0 border-l-2 border-border pl-4">
+            <p className="text-sm text-muted-foreground">{t.verdict.closing}</p>
+            <p className="mt-1 text-base text-foreground">{verdict.closingStatement}</p>
+          </blockquote>
+        </div>
       )}
 
       <p className="mt-3 text-xs text-muted-foreground">{t.verdict.docs}</p>

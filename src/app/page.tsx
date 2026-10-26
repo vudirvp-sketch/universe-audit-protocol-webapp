@@ -11,19 +11,11 @@ import { InspectorDrawer } from '@/components/layout/InspectorDrawer';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  BookOpen,
-  Clock,
-  Globe,
-  Moon,
-  Network,
-  Sun,
-  Sparkles,
   RotateCcw,
-  AlertTriangle,
   PanelRight,
-  Sidebar,
-  Users,
+  PanelLeft,
 } from 'lucide-react';
+import { BrandMark } from '@/components/BrandMark';
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { exportV3ToMarkdown, exportAuditJSON, exportAuditHTML } from '@/lib/audit/export-utils';
 import { extractOrientationContext } from '@/lib/audit/context-bridge';
@@ -68,13 +60,7 @@ function buildPipelineState(state: AuditStateV3): PipelineStateV3 {
 // Five coupled audit dimensions — v16 §3
 // ============================================================
 
-const DIMENSION_ICONS = {
-  world: Globe,
-  systemic: Network,
-  human: Users,
-  experience: BookOpen,
-  memory: Clock,
-} as const;
+const DIMENSION_KEYS = ['world', 'systemic', 'human', 'experience', 'memory'] as const;
 
 export default function Home() {
   // =========================================================================
@@ -123,7 +109,6 @@ export default function Home() {
   const pipelineLog = useAuditStateV3(s => s.log);
   const pipelineStartedAt = useAuditStateV3(s => s.pipelineStartedAt);
 
-  const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
   const transport = useSettings((s) => s.transport);
   const relayUrl = useSettings((s) => s.relayUrl);
@@ -172,11 +157,6 @@ export default function Home() {
     };
     checkHealth();
   }, [transport, relayUrl]);
-
-  // Toggle theme
-  React.useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
 
   // =========================================================================
   // Audit pipeline runner
@@ -341,10 +321,10 @@ export default function Home() {
   // =========================================================================
   if (!isHydrated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <Sparkles className="h-8 w-8 text-amber-500 mx-auto animate-pulse" />
-          <p className="text-sm text-muted-foreground">Загрузка...</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div role="status" className="flex flex-col items-center gap-3">
+          <BrandMark size={32} />
+          <p className="text-sm text-muted-foreground">Загрузка…</p>
         </div>
       </div>
     );
@@ -360,27 +340,27 @@ export default function Home() {
       <div className="min-h-screen bg-background text-foreground">
         {/* Local relay health-check banner (relay transport only) */}
         {relayUnavailable && (
-          <div className="bg-severity-warning/90 text-white text-center py-2 px-4 text-sm font-medium">
+          <div role="alert" className="bg-severity-warning px-4 py-2 text-center text-sm font-medium text-severity-warning-foreground">
             {t.settings.proxyHealthCheckBanner}
           </div>
         )}
 
         {/* Persistence failure banner — the draft on screen is no longer saved */}
         {storageError && (
-          <div role="alert" className="bg-severity-critical/90 text-white text-center py-2 px-4 text-sm font-medium">
+          <div role="alert" className="bg-severity-critical px-4 py-2 text-center text-sm font-medium text-severity-critical-foreground">
             {storageError}
           </div>
         )}
 
         {/* Header / Topbar */}
-        <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="sticky top-0 z-50 border-b bg-background">
           <div className="flex h-14 items-center justify-between px-4 md:px-6">
-            <div className="flex items-center gap-3">
-              <Sparkles className="h-6 w-6 text-amber-500" />
-              <div>
-                <h1 className="text-xl font-bold">Universe Audit Protocol</h1>
-                <p className="text-sm text-muted-foreground">{t.app.version}</p>
-              </div>
+            <div className="flex min-w-0 items-center gap-3">
+              <BrandMark />
+              <h1 className="truncate text-base font-semibold leading-none">
+                {t.app.title}
+                <span className="ml-2 text-sm font-normal text-muted-foreground">{t.app.version}</span>
+              </h1>
             </div>
             <div className="flex items-center gap-1">
               {/* Rail toggle — only during running/done */}
@@ -391,8 +371,9 @@ export default function Home() {
                       variant="ghost"
                       size="icon"
                       onClick={toggleSidebar}
+                      aria-label={t.tooltips.navigation}
                     >
-                      <Sidebar className="h-5 w-5" />
+                      <PanelLeft className="h-5 w-5" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>{t.tooltips.navigation}</TooltipContent>
@@ -407,6 +388,7 @@ export default function Home() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setInspectorOpen(true)}
+                      aria-label={t.tooltips.inspector}
                     >
                       <PanelRight className="h-5 w-5" />
                     </Button>
@@ -414,24 +396,6 @@ export default function Home() {
                   <TooltipContent>{t.tooltips.inspector}</TooltipContent>
                 </Tooltip>
               )}
-
-              {/* Theme toggle */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                  >
-                    {theme === 'dark' ? (
-                      <Sun className="h-5 w-5" />
-                    ) : (
-                      <Moon className="h-5 w-5" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{t.tooltips.changeTheme}</TooltipContent>
-              </Tooltip>
 
               {/* Settings */}
               <Tooltip>
@@ -451,6 +415,7 @@ export default function Home() {
                     size="icon"
                     onClick={() => useAuditStateV3.getState().reset()}
                     disabled={phase === 'running'}
+                    aria-label={t.tooltips.newAudit}
                   >
                     <RotateCcw className="h-5 w-5" />
                   </Button>
@@ -464,61 +429,64 @@ export default function Home() {
         {/* Main Content */}
         {phase === 'idle' ? (
           /* ===== Input Form (idle state) ===== */
-          <main className="container py-6">
-            <div className="max-w-4xl mx-auto">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold mb-2">Universe Audit Protocol</h2>
-                <p className="text-muted-foreground max-w-2xl mx-auto">
-                  Аудит вымышленных миров: от скелета концепта до качественного
-                  вердикта. Пять блоков — полный отчёт без числовых оценок.
+          <main className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6 md:py-14">
+            <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-16">
+              <div>
+                <h2 className="max-w-[22ch] text-4xl font-semibold leading-[1.1] tracking-tight text-balance">
+                  Аудит вымышленного мира
+                </h2>
+                <p className="mt-4 mb-10 max-w-[56ch] text-muted-foreground">
+                  Вставьте описание концепта. Пять блоков проверят, что в мире истинно,
+                  какие у этого последствия и что исправлять в первую очередь.
                 </p>
+                <AuditFormV2
+                  onSubmit={startAudit}
+                  isLoading={false}
+                />
               </div>
 
               {/* Five coupled audit dimensions — v16 §3 */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-                {(Object.keys(t.levels) as (keyof typeof t.levels)[]).map((key) => {
-                  const dimension = t.levels[key];
-                  const Icon = DIMENSION_ICONS[key];
-                  return (
-                    <div
-                      key={key}
-                      className="p-4 rounded-lg border bg-card hover:border-amber-500/30 transition-colors"
-                    >
-                      <Icon className="h-5 w-5 text-amber-500 mb-2" />
-                      <div className="text-sm font-semibold mb-1">{dimension.name}</div>
-                      <p className="text-xs text-muted-foreground mb-1">{dimension.question}</p>
-                      <p className="text-xs text-muted-foreground/70">{dimension.focus}</p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <AuditFormV2
-                onSubmit={startAudit}
-                isLoading={false}
-              />
+              <aside aria-labelledby="dimensions-title" className="lg:pt-2">
+                <h3 id="dimensions-title" className="text-base font-semibold">Что проверяется</h3>
+                <dl className="mt-4 divide-y border-y">
+                  {DIMENSION_KEYS.map((key) => {
+                    const dimension = t.levels[key];
+                    return (
+                      <div key={key} className="grid grid-cols-[2.25rem_1fr] gap-x-3 py-3.5">
+                        <dt className="text-sm font-semibold tabular-nums text-muted-foreground">
+                          {DIMENSION_KEYS.indexOf(key) + 1}
+                        </dt>
+                        <dd>
+                          <p className="text-[0.9375rem] font-semibold leading-snug">{dimension.name}</p>
+                          <p className="mt-0.5 text-sm leading-snug">{dimension.question}</p>
+                          <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{dimension.focus}</p>
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </aside>
             </div>
           </main>
         ) : phase === 'error' ? (
           /* ===== Error Screen ===== */
-          <main className="container py-6">
-            <div className="max-w-2xl mx-auto text-center space-y-6 py-12">
-              <AlertTriangle className="h-16 w-16 text-destructive mx-auto" />
-              <h2 className="text-2xl font-bold">Ошибка аудита</h2>
-              <p className="text-muted-foreground">
+          <main className="mx-auto w-full max-w-2xl px-4 py-14 md:px-6">
+            <div role="alert" className="border-l-2 border-severity-critical pl-5">
+              <h2 className="text-2xl font-semibold">Аудит остановлен</h2>
+              <p className="mt-2 max-w-[60ch] text-muted-foreground">
                 {error || 'Произошла неизвестная ошибка'}
               </p>
-              <div className="flex justify-center gap-4">
-                <Button
-                  variant="default"
-                  onClick={() => useAuditStateV3.getState().reset()}
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Новый аудит
+              <p className="mt-2 max-w-[60ch] text-sm text-muted-foreground">
+                Проверьте ключ, транспорт и модель в настройках и запустите аудит снова.
+              </p>
+              {/* Два выхода: вернуться к черновику (без потерь) или начать с нуля */}
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <Button onClick={() => useAuditStateV3.getState().abortAudit()}>
+                  {t.app.backToDraft}
                 </Button>
-                <Button variant="outline" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                  {theme === 'dark' ? <Sun className="h-4 w-4 mr-2" /> : <Moon className="h-4 w-4 mr-2" />}
-                  Сменить тему
+                <Button variant="outline" onClick={() => useAuditStateV3.getState().reset()}>
+                  <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                  {t.app.newAudit}
                 </Button>
               </div>
             </div>
@@ -586,14 +554,17 @@ export default function Home() {
           onExportHTML={exportHandlers.onExportHTML}
         />
 
-        {/* Footer */}
-        <footer className="border-t py-4">
-          <div className="container flex items-center justify-between text-sm text-muted-foreground">
-            <p>{`Universe Audit Protocol ${t.app.version}`}</p>
-            <div className="flex items-center gap-4">
-              <BookOpen className="h-4 w-4" />
-              <span>{t.app.footerStats}</span>
-            </div>
+        {/* Footer — на мобильном оставляет место плавающей кнопке прогресса */}
+        <footer
+          className={
+            phase === 'running' || phase === 'done'
+              ? 'border-t py-4 pb-24 md:pb-4'
+              : 'border-t py-4'
+          }
+        >
+          <div className="flex items-center justify-between px-4 text-sm text-muted-foreground md:px-6">
+            <p>{`${t.app.title} ${t.app.version}`}</p>
+            <p className="tabular-nums">{t.app.footerStats}</p>
           </div>
         </footer>
       </div>

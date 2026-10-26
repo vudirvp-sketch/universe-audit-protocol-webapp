@@ -7,24 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Sparkles,
   BookOpen,
-  Gamepad2,
-  Eye,
-  Dices,
   ChevronDown,
+  Dices,
+  Eye,
+  Gamepad2,
+  Loader2,
   Plus,
   Trash2,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, pluralRu } from '@/lib/utils';
 import type { AuditMaterial, GuidedContext, MediaType } from '@/lib/audit/types-v3';
 import { t } from '@/lib/i18n/ru';
 
@@ -64,6 +56,10 @@ const GUIDED_KEYS = [
 // localStorage, so uploads are bounded rather than unbounded.
 const MAX_MATERIAL_FILE_BYTES = 512 * 1024; // 512 KB on disk
 const MAX_MATERIAL_CHARS = 100_000;         // per artefact, in characters
+
+// Нижняя граница осмысленного запуска: на более коротком тексте протоколу
+// нечего проверять, и аудит возвращает общие места.
+const MIN_INPUT_CHARS = 50;
 
 /** Drop empty guided fields so an empty framing never switches the audit away from lazy mode. */
 function buildGuidedPayload(guided: GuidedContext): GuidedContext {
@@ -117,6 +113,9 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
 
   const guidedPanelId = React.useId();
   const materialsPanelId = React.useId();
+  const conceptCountId = React.useId();
+  const conceptMinHintId = React.useId();
+  const mediaGroupLabelId = React.useId();
 
   // Collapsible sections start closed — both are optional.
   const [guidedOpen, setGuidedOpen] = React.useState(false);
@@ -151,6 +150,29 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
       }
     };
   }, []);
+
+  // ── Character counter and the 50-character floor ───────────────────
+  // Считаем по обрезанному тексту: пробелы и переводы строк не дают запуску
+  // аудита ни одного проверяемого утверждения.
+  const charCount = localInput.trim().length;
+  const remainingChars = Math.max(0, MIN_INPUT_CHARS - charCount);
+  const characterCountText = t.form.characterCount
+    .replace('{count}', String(charCount))
+    .replace('{unit}', pluralRu(charCount, t.form.charUnits));
+  const minCharsHint =
+    charCount === 0
+      ? t.form.minCharsWarning
+          .replace('{min}', String(MIN_INPUT_CHARS))
+          .replace('{unit}', pluralRu(MIN_INPUT_CHARS, t.form.charUnits))
+      : remainingChars > 0
+        ? t.form.minCharsBlocked
+            .replace('{count}', String(remainingChars))
+            .replace('{unit}', pluralRu(remainingChars, t.form.charUnits))
+        : null;
+  const canSubmit = !isLoading && remainingChars === 0;
+  const conceptDescribedBy = minCharsHint
+    ? `${conceptCountId} ${conceptMinHintId}`
+    : conceptCountId;
 
   // ── Artefact handlers ──────────────────────────────────────────────
 
@@ -226,7 +248,7 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!localInput.trim()) return;
+    if (localInput.trim().length < MIN_INPUT_CHARS) return;
 
     // Flush debounce: immediately sync localInput to Zustand
     if (debounceTimerRef.current) {
@@ -268,75 +290,88 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Concept Input */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-500" />
-            Концепт
-          </CardTitle>
-          <CardDescription>
+    <form onSubmit={handleSubmit} className="space-y-8">
+      {/* Concept — секция на волосяной линии, без карточки */}
+      <section className="space-y-4 border-t border-border pt-6">
+        <div className="space-y-1">
+          <h2 className="text-base font-semibold">Концепт</h2>
+          <p className="text-sm text-muted-foreground">
             Введите описание вашего концепта для анализа
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="concept-text">Текст концепта</Label>
-            <Textarea
-              id="concept-text"
-              placeholder="Опишите ваш концепт — от пары предложений до целого рассказа..."
-              value={localInput}
-              onChange={(e) => handleInputTextChange(e.target.value)}
-              className="min-h-[200px] resize-y"
-              disabled={isLoading}
-            />
-            <div className="flex flex-col gap-1">
-              <p className="text-sm text-muted-foreground">
-                {localInput.length} символов
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Введите концепт — от пары предложений до целого рассказа. Длинные тексты обрабатываются автоматически.
-              </p>
-            </div>
-          </div>
+          </p>
+        </div>
 
-          {/* Media Type Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="audit-media-type">Тип медиа</Label>
-            <Select
-              value={mediaType}
-              onValueChange={(v) => setMediaType(v as MediaType)}
-              disabled={isLoading}
-            >
-              <SelectTrigger id="audit-media-type">
-                <SelectValue placeholder={t.form.mediaTypeSelect} />
-              </SelectTrigger>
-              <SelectContent>
-                {MEDIA_TYPE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      {option.icon}
-                      <span>{option.label}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+        <div className="space-y-2">
+          <Label htmlFor="concept-text" className="text-sm font-normal text-muted-foreground">
+            Текст концепта
+          </Label>
+          <Textarea
+            id="concept-text"
+            placeholder="Опишите ваш концепт — от пары предложений до целого рассказа..."
+            value={localInput}
+            onChange={(e) => handleInputTextChange(e.target.value)}
+            aria-describedby={conceptDescribedBy}
+            className="min-h-[200px] resize-y"
+            disabled={isLoading}
+          />
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p id={conceptCountId} className="text-sm text-muted-foreground tabular-nums">
+              {characterCountText}
+            </p>
+            {minCharsHint && (
+              <p id={conceptMinHintId} className="text-sm text-muted-foreground tabular-nums">
+                {minCharsHint}
+              </p>
+            )}
           </div>
-        </CardContent>
-      </Card>
+          <p className="text-sm text-muted-foreground">{t.app.inputHint}</p>
+        </div>
+
+        {/* Media type — видимые переключатели, не Select */}
+        <div className="space-y-2">
+          <p id={mediaGroupLabelId} className="text-sm text-muted-foreground">
+            {t.form.mediaType}
+          </p>
+          <div
+            role="radiogroup"
+            aria-labelledby={mediaGroupLabelId}
+            className="flex flex-wrap gap-2"
+          >
+            {MEDIA_TYPE_OPTIONS.map((option) => {
+              const selected = mediaType === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={isLoading}
+                  onClick={() => setMediaType(option.value)}
+                  className={cn(
+                    'inline-flex min-h-9 items-center gap-2 rounded-sm border px-3 text-sm transition-colors disabled:pointer-events-none disabled:opacity-50',
+                    selected
+                      ? 'border-foreground/40 bg-accent text-foreground'
+                      : 'border-border text-muted-foreground hover:border-input hover:text-foreground',
+                  )}
+                >
+                  {option.icon}
+                  <span>{option.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </section>
 
       {/* Guided framing — v16 §2 GUIDED MODE */}
-      <Card className="py-4">
+      <section className="border-t border-border pt-5">
         <button
           type="button"
           onClick={() => setGuidedOpen((open) => !open)}
           aria-expanded={guidedOpen}
           aria-controls={guidedPanelId}
-          className="flex w-full items-start justify-between gap-4 px-6 text-left"
+          className="flex w-full items-start justify-between gap-4 text-left"
         >
-          <span className="min-w-0">
+          <span className="min-w-0 space-y-1">
             <span className="block text-base font-semibold">{t.form.guidedTitle}</span>
             <span className="block text-sm text-muted-foreground">
               {t.form.guidedDescription}
@@ -345,56 +380,66 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
           <ChevronDown
             aria-hidden="true"
             className={cn(
-              'mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+              'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
               guidedOpen && 'rotate-180',
             )}
           />
         </button>
 
-          <div id={guidedPanelId} hidden={!guidedOpen} className="px-6 pt-4 space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {GUIDED_TEXT_FIELDS.map((field) => (
-                <div key={field.key} className="space-y-2">
-                  <Label htmlFor={`guided-${field.key}`}>{field.label}</Label>
-                  <Input
-                    id={`guided-${field.key}`}
-                    value={guided[field.key] ?? ''}
-                    placeholder={field.placeholder}
-                    onChange={(e) => setGuided({ [field.key]: e.target.value })}
-                    disabled={isLoading}
-                  />
-                </div>
-              ))}
-            </div>
-
-            {GUIDED_AREA_FIELDS.map((field) => (
+        <div id={guidedPanelId} hidden={!guidedOpen} className="space-y-4 pt-4">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {GUIDED_TEXT_FIELDS.map((field) => (
               <div key={field.key} className="space-y-2">
-                <Label htmlFor={`guided-${field.key}`}>{field.label}</Label>
-                <Textarea
+                <Label
+                  htmlFor={`guided-${field.key}`}
+                  className="text-sm font-normal text-muted-foreground"
+                >
+                  {field.label}
+                </Label>
+                <Input
                   id={`guided-${field.key}`}
                   value={guided[field.key] ?? ''}
                   placeholder={field.placeholder}
                   onChange={(e) => setGuided({ [field.key]: e.target.value })}
-                  className="min-h-[72px] resize-y"
                   disabled={isLoading}
                 />
               </div>
             ))}
-
-            <p className="text-sm text-muted-foreground">{t.form.guidedHint}</p>
           </div>
-      </Card>
+
+          {GUIDED_AREA_FIELDS.map((field) => (
+            <div key={field.key} className="space-y-2">
+              <Label
+                htmlFor={`guided-${field.key}`}
+                className="text-sm font-normal text-muted-foreground"
+              >
+                {field.label}
+              </Label>
+              <Textarea
+                id={`guided-${field.key}`}
+                value={guided[field.key] ?? ''}
+                placeholder={field.placeholder}
+                onChange={(e) => setGuided({ [field.key]: e.target.value })}
+                className="min-h-[72px] resize-y"
+                disabled={isLoading}
+              />
+            </div>
+          ))}
+
+          <p className="text-sm text-muted-foreground">{t.form.guidedHint}</p>
+        </div>
+      </section>
 
       {/* Additional artefacts — v16 §2 MATERIAL-AWARE MODE */}
-      <Card className="py-4">
+      <section className="border-t border-border pt-5">
         <button
           type="button"
           onClick={() => setMaterialsOpen((open) => !open)}
           aria-expanded={materialsOpen}
           aria-controls={materialsPanelId}
-          className="flex w-full items-start justify-between gap-4 px-6 text-left"
+          className="flex w-full items-start justify-between gap-4 text-left"
         >
-          <span className="min-w-0">
+          <span className="min-w-0 space-y-1">
             <span className="block text-base font-semibold">{t.form.materialsTitle}</span>
             <span className="block text-sm text-muted-foreground">
               {t.form.materialsDescription}
@@ -403,121 +448,132 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
           <ChevronDown
             aria-hidden="true"
             className={cn(
-              'mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+              'mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
               materialsOpen && 'rotate-180',
             )}
           />
         </button>
 
-          <div id={materialsPanelId} hidden={!materialsOpen} className="px-6 pt-4 space-y-4">
-            {materials.length === 0 && (
-              <p className="text-sm text-muted-foreground">{t.form.materialsHint}</p>
-            )}
+        <div id={materialsPanelId} hidden={!materialsOpen} className="space-y-4 pt-4">
+          {materials.length === 0 && (
+            <p className="text-sm text-muted-foreground">{t.form.materialsHint}</p>
+          )}
 
-            {materials.map((material, index) => (
-              <div key={index} className="space-y-3 rounded-lg border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium">
-                    {t.form.materialRowTitle.replace('{n}', String(index + 1))}
-                  </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeMaterial(index)}
-                    disabled={isLoading}
-                    aria-label={`${t.form.removeMaterial} ${index + 1}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+          {materials.map((material, index) => (
+            <div key={index} className="space-y-3 border-t border-border pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {t.form.materialRowTitle.replace('{n}', String(index + 1))}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeMaterial(index)}
+                  disabled={isLoading}
+                  aria-label={`${t.form.removeMaterial} ${index + 1}`}
+                  className="h-8 w-8 rounded-sm text-muted-foreground hover:text-foreground"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                </Button>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor={`material-label-${index}`}>{t.form.materialLabel}</Label>
-                  <Input
-                    id={`material-label-${index}`}
-                    value={material.label}
-                    placeholder={t.form.materialLabelPlaceholder}
-                    onChange={(e) => updateMaterial(index, { label: e.target.value })}
+              <div className="space-y-2">
+                <Label
+                  htmlFor={`material-label-${index}`}
+                  className="text-sm font-normal text-muted-foreground"
+                >
+                  {t.form.materialLabel}
+                </Label>
+                <Input
+                  id={`material-label-${index}`}
+                  value={material.label}
+                  placeholder={t.form.materialLabelPlaceholder}
+                  onChange={(e) => updateMaterial(index, { label: e.target.value })}
+                  disabled={isLoading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label
+                  htmlFor={`material-text-${index}`}
+                  className="text-sm font-normal text-muted-foreground"
+                >
+                  {t.form.materialText}
+                </Label>
+                <Textarea
+                  id={`material-text-${index}`}
+                  value={material.text}
+                  placeholder={t.form.materialTextPlaceholder}
+                  onChange={(e) => updateMaterial(index, { text: e.target.value })}
+                  className="min-h-[120px] resize-y"
+                  disabled={isLoading}
+                />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {t.form.materialChars.replace('{count}', String(material.text.length))}
+                  </span>
+                  <input
+                    type="file"
+                    accept=".txt,.md,text/plain,text/markdown"
+                    aria-label={`${t.form.materialUpload} ${index + 1}`}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = '';
+                      handleMaterialFile(index, file);
+                    }}
                     disabled={isLoading}
+                    className="block w-full max-w-full text-sm text-muted-foreground file:mr-3 file:rounded-sm file:border file:border-input file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-accent disabled:pointer-events-none disabled:opacity-50 sm:max-w-[260px]"
                   />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor={`material-text-${index}`}>{t.form.materialText}</Label>
-                  <Textarea
-                    id={`material-text-${index}`}
-                    value={material.text}
-                    placeholder={t.form.materialTextPlaceholder}
-                    onChange={(e) => updateMaterial(index, { text: e.target.value })}
-                    className="min-h-[120px] resize-y"
-                    disabled={isLoading}
-                  />
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">
-                      {t.form.materialChars.replace('{count}', String(material.text.length))}
-                    </span>
-                    <input
-                      type="file"
-                      accept=".txt,.md,text/plain,text/markdown"
-                      aria-label={`${t.form.materialUpload} ${index + 1}`}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        e.target.value = '';
-                        handleMaterialFile(index, file);
-                      }}
-                      disabled={isLoading}
-                      className="block w-full max-w-[260px] text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-input file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-accent disabled:pointer-events-none disabled:opacity-50"
-                    />
-                  </div>
                 </div>
               </div>
-            ))}
+            </div>
+          ))}
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={addMaterial}
-              disabled={isLoading}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              {t.form.addMaterial}
-            </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addMaterial}
+            disabled={isLoading}
+            className="rounded-sm"
+          >
+            <Plus className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            {t.form.addMaterial}
+          </Button>
 
-            {fileError && (
-              <p role="alert" className="text-sm text-severity-critical">
-                {fileError}
-              </p>
-            )}
-          </div>
-      </Card>
+          {fileError && (
+            <p role="alert" className="text-sm text-severity-critical">
+              {fileError}
+            </p>
+          )}
+        </div>
+      </section>
 
       {/* Actions */}
-      <div className="flex justify-end gap-4">
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-5">
         <Button
           type="button"
           variant="outline"
           onClick={handleClear}
           disabled={isLoading}
+          className="rounded-sm"
         >
-          Очистить
+          {t.app.clear}
         </Button>
         <Button
           type="submit"
-          disabled={!localInput.trim() || isLoading}
-          className="min-w-[180px]"
+          disabled={!canSubmit}
+          aria-describedby={minCharsHint ? conceptMinHintId : undefined}
+          className="min-w-[180px] rounded-sm bg-primary text-primary-foreground"
         >
           {isLoading ? (
             <>
-              <span className="animate-spin mr-2">⏳</span>
-              Анализируем...
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              {t.app.analyzing}
             </>
           ) : (
-            <>
-              <Sparkles className="h-4 w-4 mr-2" />
-              Начать аудит
-            </>
+            t.app.startAudit
           )}
         </Button>
       </div>

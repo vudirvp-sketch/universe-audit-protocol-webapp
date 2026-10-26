@@ -66,7 +66,7 @@ export const markdownComponents = {
   },
 
   pre: ({ children, ...props }: React.ComponentPropsWithoutRef<'pre'>) => (
-    <pre className="rounded-lg bg-muted/50 p-4 overflow-x-auto text-sm" {...props}>
+    <pre className="rounded-sm border bg-card p-4 overflow-x-auto text-sm" {...props}>
       {children}
     </pre>
   ),
@@ -75,7 +75,7 @@ export const markdownComponents = {
     // If className contains a language (e.g., "language-tsx"), it's a fenced code block
     const isInline = !className;
     if (isInline) {
-      return <code className="bg-muted/50 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>{children}</code>;
+      return <code className="bg-muted px-1.5 py-0.5 rounded-sm text-[0.9em] font-mono" {...props}>{children}</code>;
     }
     return <code className={className} {...props}>{children}</code>;
   },

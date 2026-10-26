@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+export const viewport = {
+  themeColor: "#0a0f11",
+  colorScheme: "dark" as const,
+};
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// Фавикон — фирменный знак, а не эмодзи: тот же контур, что и в шапке.
+const FAVICON =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'>" +
+      "<rect x='1' y='1' width='28' height='28' rx='2' fill='#0a0f11' stroke='#8497a0' stroke-width='1'/>" +
+      "<path d='M23 7 L12.6 23 H5.7 L16.1 7 Z' fill='#d3dcdd'/>" +
+      "</svg>",
+  );
 
 export const metadata: Metadata = {
   title: "Протокол Аудита Вселенной v16",
@@ -18,7 +22,7 @@ export const metadata: Metadata = {
   keywords: ["аудит вселенной", "ворлдбилдинг", "анализ нарратива", "структура истории", "аудит мира", "каузальный аудит", "мир как система"],
   authors: [{ name: "Протокол Аудита Вселенной" }],
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌌</text></svg>",
+    icon: FAVICON,
   },
   openGraph: {
     title: "Протокол Аудита Вселенной v16",
@@ -34,9 +38,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru" suppressHydrationWarning className="dark">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground min-h-screen`}
-      >
+      <body className="antialiased bg-background text-foreground min-h-screen">
         {children}
       </body>
     </html>

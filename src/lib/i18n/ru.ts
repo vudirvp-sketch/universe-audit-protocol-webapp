@@ -26,6 +26,7 @@ export const t = {
     footerStats: '5 измерений \u2022 5 блоков \u2022 v16',
     newAudit: 'Новый аудит',
     cancelAudit: 'Отменить аудит',
+    backToDraft: 'Вернуться к форме',
     startAudit: 'Начать аудит',
     analyzing: 'Анализируем...',
     clear: 'Очистить',
@@ -59,14 +60,16 @@ export const t = {
     narrativeLabel: 'Нарратив / Текст концепта',
     narrativePlaceholder:
       'Введите концепт вашего нарратива, структуру истории или описание мира здесь...\n\nПример: Постапокалиптический мир, где воспоминания можно извлекать и продавать. Протагонист — торговец памятью — обнаруживает, что его собственные воспоминания были систематически стёрты, что ведёт его в путешествие за восстановление прошлого, пока он раскрывает заговор, угрожающий тому, что осталось от общества...',
-    characterCount: '{count} символов | Минимум 100 символов рекомендуется',
+    characterCount: '{count} {unit}',
+    charUnits: ['символ', 'символа', 'символов'],
     mediaType: 'Тип медиа',
     mediaTypeSelect: 'Выберите тип медиа',
     mediaNarrative: 'Нарратив',
     mediaGame: 'Игра',
     mediaVisual: 'Визуальное',
     mediaTtrpg: 'Настольная RPG',
-    minCharsWarning: 'Минимум 50 символов для запуска аудита',
+    minCharsWarning: 'Минимум {min} {unit} для запуска аудита',
+    minCharsBlocked: 'Ещё {count} {unit} — и можно запускать',
     uploadFile: 'Загрузить файл',
     supportedFormats: 'Поддерживаемые форматы: .txt, .md, .docx, .pdf',
     fileUploaded: 'Файл загружен: {name} ({size} символов)',
@@ -268,6 +271,15 @@ export const t = {
     howToGetKey: 'Как получить API ключ:',
     keySecurityNote:
       'Ключ не покидает вашу машину: при «Напрямую» браузер обращается к API провайдера сам, при «Локальном релее» запрос идёт на 127.0.0.1, и ключ можно вообще не вводить в браузер (LLM_API_KEY в окружении релея). Сторонних прокси в приложении больше нет.',
+    // Гигиена ключа: ключ расходный, а не главный секрет аккаунта
+    keySafetyTitle: 'Ключ на один аудит',
+    keySafetyLines: [
+      'Заведите отдельный ключ под аудиты, а не берите основной ключ аккаунта.',
+      'Поставьте лимит расходов и короткий срок жизни — например, один час.',
+      'Одноразовый ключ после аудита отзовите: если он утечёт, ущерб ограничен лимитом и сроком.',
+    ],
+    showKey: 'Показать ключ',
+    hideKey: 'Скрыть ключ',
     // Provider-specific instructions (Russian per Language Contract)
     providerInstructions: {
       google: {
@@ -354,6 +366,7 @@ export const t = {
   // Ключи для AuditReportViewV3 (5-блочный отчёт с markdown)
   report: {
     title: 'Отчёт аудита',
+    auditedConcept: 'Аудит концепта',
     protocolVersion: 'UNIVERSE AUDIT PROTOCOL ULTIMATE v16',
     // Block labels
     block1: 'Контекст и скелет',
@@ -406,15 +419,16 @@ export const t = {
 
   // Rail / sidebar strings
   rail: {
-    brandName: 'Universe Audit',
-    brandSub: 'PROTOCOL v16',
+    brandName: 'Протокол аудита вселенной',
+    brandSub: 'v16 · качественный аудит',
     preparing: 'Подготовка...',
     auditContext: 'Контекст аудита',
     mode: 'Режим аудита',
     authorship: 'Гипотеза авторства',
     blockOf: 'Блок {current} из {total}',
     blockShort: 'Блок {current}/5',
-    parts: '{count} частей',
+    parts: '{count} {unit}',
+    partUnits: ['часть', 'части', 'частей'],
     partOf: 'часть {current}/{total}',
   },
 

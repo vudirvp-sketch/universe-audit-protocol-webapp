@@ -21,7 +21,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   Select,
   SelectContent,
@@ -30,7 +29,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server, ShieldCheck, RefreshCw } from 'lucide-react';
+import {
+  Settings,
+  Eye,
+  EyeOff,
+  Check,
+  Trash2,
+  ChevronDown,
+  RefreshCw,
+  Loader2,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useSettings } from '@/hooks/useSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -53,6 +62,12 @@ import {
   type ModelCatalogResult,
 } from '@/lib/model-catalog';
 import { t } from '@/lib/i18n/ru';
+
+/** Метка секции настроек: обычный регистр, muted, без иконок. */
+const SECTION_LABEL = 'text-sm font-normal text-muted-foreground';
+
+/** Пояснение под полем. */
+const FIELD_HINT = 'text-sm text-muted-foreground';
 
 interface SettingsDialogProps {
   onSettingsChange?: (settings: { provider: LLMProvider; apiKey: string | null; model: string | null }) => void;
@@ -81,9 +96,12 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const customSupportsJSONMode = useSettings((s) => s.customSupportsJSONMode);
   const keyMemoryOnly = useSettings((s) => s.keyMemoryOnly);
   const setKeyMemoryOnly = useSettings((s) => s.setKeyMemoryOnly);
+  const referenceComparison = useSettings((s) => s.referenceComparison);
+  const setReferenceComparison = useSettings((s) => s.setReferenceComparison);
   const clearSettings = useSettings((s) => s.clearSettings);
 
   const isMobile = useIsMobile();
+  const advancedPanelId = React.useId();
   const [open, setOpen] = React.useState(false);
   const [inputKey, setInputKey] = React.useState('');
   const [inputModel, setInputModel] = React.useState('');
@@ -385,447 +403,446 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
   // The settings form body — shared between Dialog (desktop) and Sheet (mobile)
   const settingsForm = (
-    <>
-      <div className="space-y-5 py-4">
-          {/* Provider Selection */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
-              {t.settings.provider}
-            </Label>
-            <Select value={provider} onValueChange={(v) => handleProviderChange(v as LLMProvider)}>
-              <SelectTrigger>
-                <SelectValue placeholder={t.settings.providerSelect} />
-              </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                {AVAILABLE_PROVIDERS.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    <div className="flex items-center gap-2">
-                      <span>{p.name}</span>
-                      {p.hasFreeTier && (
-                        <span className="text-xs bg-severity-success/10 text-severity-success px-1.5 py-0.5 rounded">
-                          {t.settings.freeTier}
-                        </span>
-                      )}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {hasFreeTier && (
-              <p className="text-sm text-severity-success flex items-center gap-1">
-                <Zap className="h-3 w-3" />
-                {t.settings.freeTierAvailable}
-              </p>
-            )}
-          </div>
-
-          {/* Transport: direct browser calls or a local relay */}
-          <div className="space-y-2">
-            <Label htmlFor="transport" className="flex items-center gap-2">
-              <Server className="h-4 w-4" />
-              {t.settings.transport}
-            </Label>
-            <Select value={inputTransport} onValueChange={(v) => setInputTransport(v as LLMTransport)}>
-              <SelectTrigger id="transport">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="direct">{t.settings.transportDirect}</SelectItem>
-                <SelectItem value="relay">{t.settings.transportRelay}</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-sm text-muted-foreground">{t.settings.transportHint}</p>
-
-            {inputTransport === 'direct' && corsSupport !== 'yes' && (
-              <Alert className="bg-severity-warning/10 border-severity-warning/30">
-                <AlertDescription className="text-severity-warning text-sm">
-                  {(corsSupport === 'no' ? t.settings.corsBlocked : t.settings.corsUnknown)
-                    .replace('{provider}', currentProvider?.name || '')}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {inputTransport === 'relay' && (
-              <div className="space-y-2 pt-1">
-                <Label htmlFor="relay-url" className="flex items-center gap-2 text-sm">
-                  <Server className="h-3 w-3" />
-                  {t.settings.relayUrl}
-                </Label>
-                <Input
-                  id="relay-url"
-                  type="url"
-                  placeholder={RELAY_URL_DEFAULT}
-                  value={inputRelayUrl}
-                  onChange={(e) => setInputRelayUrl(e.target.value)}
-                  className="text-sm h-8"
-                />
-                <p className="text-sm text-muted-foreground">{t.settings.relayUrlHint}</p>
-                {relayWarning && (
-                  <p className="text-sm text-severity-critical">{relayWarning}</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Model Selection */}
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Globe className="h-4 w-4" />
-              {t.settings.model}
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                placeholder={currentProvider?.defaultModel || 'model-name'}
-                value={inputModel}
-                onChange={(e) => setInputModel(e.target.value)}
-                list={`model-list-${provider}`}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="shrink-0"
-                onClick={() => void refreshCatalog(true, currentCatalogInputs)}
-                disabled={catalogLoading}
-                title={t.settings.refreshModels}
-                aria-label={t.settings.refreshModels}
-              >
-                <RefreshCw className={`h-4 w-4 ${catalogLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
-            {/* Datalist from the provider's live catalog (cached for a day) */}
-            <datalist id={`model-list-${provider}`}>
-              {modelOptions.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-            <p className="text-sm text-muted-foreground">
-              {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
-            </p>
-            {catalogStatusText && (
-              <p className={`text-sm ${catalog?.source === 'fallback' ? 'text-severity-warning' : 'text-muted-foreground'}`}>
-                {catalogStatusText}
-              </p>
-            )}
-            {modelMissingFromCatalog && (
-              <p className="text-sm text-severity-warning">
-                {t.settings.modelNotInCatalog}
-              </p>
-            )}
-            <p className="text-sm text-muted-foreground">{t.settings.modelListHint}</p>
-            {currentProvider?.modelDocsUrl && (
-              <p className="text-sm">
-                <a
-                  href={currentProvider.modelDocsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-500 hover:underline"
-                >
-                  {t.settings.modelDocsLink}
-                </a>
-              </p>
-            )}
-          </div>
-
-          {/* API Key Input */}
-          <div className="space-y-2">
-            <Label htmlFor="api-key" className="flex items-center gap-2">
-              <Key className="h-4 w-4" />
-              {t.settings.apiKey}
-            </Label>
-            <div className="relative">
-              <Input
-                id="api-key"
-                type={showKey ? 'text' : 'password'}
-                placeholder={
-                  currentProvider?.apiKeyPrefix
-                    ? `${currentProvider.apiKeyPrefix}...`
-                    : t.settings.apiKeyPlaceholder
-                }
-                value={inputKey}
-                onChange={(e) => setInputKey(e.target.value)}
-                className="pr-10"
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                onClick={() => setShowKey(!showKey)}
-              >
-                {showKey ? (
-                  <EyeOff className="h-4 w-4 text-muted-foreground" />
-                ) : (
-                  <Eye className="h-4 w-4 text-muted-foreground" />
-                )}
-              </Button>
-            </div>
-            {!inputKey.trim() && inputTransport === 'direct' && (
-              <Alert className="bg-severity-critical/10 border-severity-critical/30">
-                <AlertDescription className="text-severity-critical text-sm">
-                  API-ключ обязателен для запуска аудита. Без ключа запросы к LLM вернут ошибку 400.
-                </AlertDescription>
-              </Alert>
-            )}
-            {!inputKey.trim() && inputTransport === 'relay' && (
-              <Alert className="bg-muted border-border">
-                <AlertDescription className="text-muted-foreground text-sm">
-                  {t.settings.relayKeyOptional}
-                </AlertDescription>
-              </Alert>
-            )}
-            {keyFormatWarning && (
-              <p className="text-sm text-severity-warning">{keyFormatWarning}</p>
-            )}
-            {maskedKey && (
-              <p className="text-sm text-muted-foreground">
-                {t.settings.keyMasked.replace('{masked}', maskedKey)}
-              </p>
-            )}
-            <div className="rounded-lg border p-3 space-y-1">
-              <div className="flex items-start gap-2">
-                <input
-                  id="key-memory-only"
-                  type="checkbox"
-                  checked={keyMemoryOnly}
-                  onChange={(e) => setKeyMemoryOnly(e.target.checked)}
-                  className="mt-1 rounded border-gray-300"
-                />
-                <Label htmlFor="key-memory-only" className="text-sm flex items-center gap-2">
-                  <ShieldCheck className="h-3 w-3" />
-                  {t.settings.keyMemoryOnly}
-                </Label>
-              </div>
-              <p className="text-sm text-muted-foreground">{t.settings.keyMemoryOnlyHint}</p>
-            </div>
-          </div>
-
-          {/* Advanced Settings (collapsible) */}
-          <div className="border rounded-lg">
-            <button
-              type="button"
-              className="flex items-center justify-between w-full px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setShowAdvanced(!showAdvanced)}
-            >
-              <span>{t.settings.advancedSettings}</span>
-              {showAdvanced ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </button>
-
-            {showAdvanced && (
-              <div className="px-3 pb-3 space-y-4">
-                {/* Base URL for Custom Provider */}
-                {provider === 'custom' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="base-url" className="flex items-center gap-2 text-sm">
-                      <Globe className="h-3 w-3" />
-                      Base URL провайдера
-                    </Label>
-                    <Input
-                      id="base-url"
-                      type="url"
-                      placeholder="https://api.example.com/v1"
-                      value={inputBaseUrl}
-                      onChange={(e) => setInputBaseUrl(e.target.value)}
-                      className="text-sm h-8"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      Базовый URL API для кастомного провайдера (без /chat/completions)
-                    </p>
-                    {baseUrlWarning && (
-                      <p className="text-sm text-severity-warning">{baseUrlWarning}</p>
-                    )}
-                  </div>
-                )}
-
-                {/* RPM Limit */}
-                <div className="space-y-2">
-                  <Label htmlFor="rpm-limit" className="flex items-center gap-2 text-sm">
-                    <Zap className="h-3 w-3" />
-                    {t.settings.rpmLimit}
-                  </Label>
-                  <Input
-                    id="rpm-limit"
-                    type="number"
-                    min={1}
-                    max={120}
-                    placeholder={String(rpmLimit || 10)}
-                    value={inputRpmLimit}
-                    onChange={(e) => setInputRpmLimit(e.target.value)}
-                    className="text-sm h-8"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {t.settings.rpmLimitHint}
-                  </p>
+    <div className="space-y-5 py-4">
+      {/* Provider */}
+      <div className="space-y-2">
+        <Label htmlFor="provider-select" className={SECTION_LABEL}>
+          {t.settings.provider}
+        </Label>
+        <Select value={provider} onValueChange={(v) => handleProviderChange(v as LLMProvider)}>
+          <SelectTrigger id="provider-select">
+            <SelectValue placeholder={t.settings.providerSelect} />
+          </SelectTrigger>
+          <SelectContent className="max-h-[300px]">
+            {AVAILABLE_PROVIDERS.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                <div className="flex items-center gap-2">
+                  <span>{p.name}</span>
+                  {p.hasFreeTier && (
+                    <span className="text-xs text-muted-foreground">{t.settings.freeTier}</span>
+                  )}
                 </div>
-
-                {/* Model Capabilities Override (11.2) */}
-                <div className="space-y-3 pt-2 border-t">
-                  <p className="text-sm text-muted-foreground font-medium">
-                    {t.settings.capabilitiesHint}
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="context-window" className="text-sm">
-                      {t.settings.contextWindow}
-                    </Label>
-                    <Input
-                      id="context-window"
-                      type="number"
-                      min={0}
-                      placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').contextWindow)}
-                      value={inputContextWindow}
-                      onChange={(e) => setInputContextWindow(e.target.value)}
-                      className="text-sm h-8"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      {t.settings.contextWindowHint}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="max-output-tokens" className="text-sm">
-                      {t.settings.maxOutputTokens}
-                    </Label>
-                    <Input
-                      id="max-output-tokens"
-                      type="number"
-                      min={0}
-                      placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').maxOutputTokens)}
-                      value={inputMaxOutputTokens}
-                      onChange={(e) => setInputMaxOutputTokens(e.target.value)}
-                      className="text-sm h-8"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      {t.settings.maxOutputTokensHint}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="json-mode"
-                      type="checkbox"
-                      checked={customSupportsJSONMode ?? getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').supportsJSONMode}
-                      onChange={(e) => setCustomSupportsJSONMode(e.target.checked)}
-                      className="rounded border-gray-300"
-                    />
-                    <Label htmlFor="json-mode" className="text-sm">
-                      {t.settings.supportsJSONMode}
-                    </Label>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {t.settings.supportsJSONModeHint}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Audit Feature Flags */}
-          <div className="space-y-3 border rounded-lg p-3">
-            <p className="text-sm font-medium text-muted-foreground">Параметры аудита</p>
-            <div className="flex items-center gap-2">
-              <input
-                id="reference-comparison"
-                type="checkbox"
-                checked={useSettings((s) => s.referenceComparison)}
-                onChange={(e) => useSettings.getState().setReferenceComparison(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <Label htmlFor="reference-comparison" className="text-sm">
-                Сравнить с референсами (Disco Elysium, Expedition 33, Pathologic 2, Атака Титанов)
-              </Label>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Добавляет сравнение с эталонными примерами в финальный синтез (Блок 5)
-            </p>
-          </div>
-
-          {/* Test Connection Button — fails fast (20s timeout) */}
-          <div className="space-y-2">
-            {formError && (
-              <p className="text-sm text-severity-critical">{formError}</p>
-            )}
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleTestConnection}
-              disabled={(!inputKey.trim() && inputTransport !== 'relay') || testConnection.loading}
-            >
-              {testConnection.loading ? (
-                <>
-                  <span className="animate-spin mr-2">&#9203;</span>
-                  {t.settings.testing}
-                </>
-              ) : testConnection.success ? (
-                <>
-                  <Check className="h-4 w-4 mr-2 text-severity-success" />
-                  {t.settings.testSuccess}
-                </>
-              ) : testConnection.error ? (
-                <>
-                  {t.settings.testFailed}
-                </>
-              ) : (
-                t.settings.testConnection
-              )}
-            </Button>
-            {testConnection.loading && (
-              <p className="text-sm text-muted-foreground text-center">
-                Проверяем подключение (таймаут 20 сек)...
-              </p>
-            )}
-            {testConnection.error && (
-              <p className="text-sm text-severity-critical">{testConnection.error}</p>
-            )}
-          </div>
-
-          {/* Status indicator */}
-          {hasKey && !testConnection.loading && (
-            <Alert className="bg-severity-success/10 border-severity-success/30">
-              <Check className="h-4 w-4 text-severity-success" />
-              <AlertDescription className="text-severity-success text-sm">
-                {t.settings.apiKeyConfigured.replace('{provider}', currentProvider?.name || '')}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Instructions */}
-          <div className="rounded-lg bg-muted p-4 space-y-3">
-            <h4 className="text-sm font-medium">{t.settings.howToGetKey}</h4>
-
-            <div className="text-sm text-muted-foreground space-y-2">
-              {(() => {
-                const instructions = t.settings.providerInstructions[provider as keyof typeof t.settings.providerInstructions];
-                if (!instructions) return null;
-                return (
-                  <ol className="list-decimal list-inside space-y-1">
-                    <li>
-                      {instructions.step1Text}
-                      {instructions.step1Url && (
-                        <>
-                          {' '}
-                          <a href={instructions.step1Url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                            {instructions.step1Url.replace(/https?:\/\//, '').split('/')[0]}
-                          </a>
-                        </>
-                      )}
-                    </li>
-                    <li>{instructions.step2}</li>
-                    {instructions.step3 && <li>{instructions.step3}</li>}
-                  </ol>
-                );
-              })()}
-            </div>
-
-            <p className="text-sm text-muted-foreground pt-2 border-t">
-              {t.settings.keySecurityNote}
-            </p>
-          </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {hasFreeTier && (
+          <p className={FIELD_HINT}>{t.settings.freeTierAvailable}</p>
+        )}
       </div>
 
-    </>
+      {/* Transport: direct browser calls or a local relay */}
+      <div className="space-y-2 border-t border-border pt-4">
+        <Label htmlFor="transport" className={SECTION_LABEL}>
+          {t.settings.transport}
+        </Label>
+        <Select value={inputTransport} onValueChange={(v) => setInputTransport(v as LLMTransport)}>
+          <SelectTrigger id="transport">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="direct">{t.settings.transportDirect}</SelectItem>
+            <SelectItem value="relay">{t.settings.transportRelay}</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className={FIELD_HINT}>{t.settings.transportHint}</p>
+
+        {inputTransport === 'direct' && corsSupport !== 'yes' && (
+          <p className="border-l-2 border-severity-warning pl-3 text-sm text-severity-warning">
+            {(corsSupport === 'no' ? t.settings.corsBlocked : t.settings.corsUnknown)
+              .replace('{provider}', currentProvider?.name || '')}
+          </p>
+        )}
+
+        {inputTransport === 'relay' && (
+          <div className="space-y-2 pt-1">
+            <Label htmlFor="relay-url" className={SECTION_LABEL}>
+              {t.settings.relayUrl}
+            </Label>
+            <Input
+              id="relay-url"
+              type="url"
+              placeholder={RELAY_URL_DEFAULT}
+              value={inputRelayUrl}
+              onChange={(e) => setInputRelayUrl(e.target.value)}
+              className="text-sm"
+            />
+            <p className={FIELD_HINT}>{t.settings.relayUrlHint}</p>
+            {relayWarning && (
+              <p className="text-sm text-severity-critical">{relayWarning}</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Model */}
+      <div className="space-y-2 border-t border-border pt-4">
+        <Label htmlFor="model-name" className={SECTION_LABEL}>
+          {t.settings.model}
+        </Label>
+        <div className="flex gap-2">
+          <Input
+            id="model-name"
+            placeholder={currentProvider?.defaultModel || 'model-name'}
+            value={inputModel}
+            onChange={(e) => setInputModel(e.target.value)}
+            list={`model-list-${provider}`}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="shrink-0 rounded-sm"
+            onClick={() => void refreshCatalog(true, currentCatalogInputs)}
+            disabled={catalogLoading}
+            title={t.settings.refreshModels}
+            aria-label={t.settings.refreshModels}
+          >
+            <RefreshCw
+              className={cn('h-4 w-4', catalogLoading && 'animate-spin')}
+              aria-hidden="true"
+            />
+          </Button>
+        </div>
+        {/* Datalist from the provider's live catalog (cached for a day) */}
+        <datalist id={`model-list-${provider}`}>
+          {modelOptions.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        <p className={FIELD_HINT}>
+          {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
+        </p>
+        {catalogStatusText && (
+          <p
+            className={cn(
+              'text-sm tabular-nums',
+              catalog?.source === 'fallback' ? 'text-severity-warning' : 'text-muted-foreground',
+            )}
+          >
+            {catalogStatusText}
+          </p>
+        )}
+        {modelMissingFromCatalog && (
+          <p className="text-sm text-severity-warning">
+            {t.settings.modelNotInCatalog}
+          </p>
+        )}
+        <p className={FIELD_HINT}>{t.settings.modelListHint}</p>
+        {currentProvider?.modelDocsUrl && (
+          <p className="text-sm">
+            <a
+              href={currentProvider.modelDocsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground"
+            >
+              {t.settings.modelDocsLink}
+            </a>
+          </p>
+        )}
+      </div>
+
+      {/* API key + гигиена ключа */}
+      <div className="space-y-3 border-t border-border pt-4">
+        <Label htmlFor="api-key" className={SECTION_LABEL}>
+          {t.settings.apiKey}
+        </Label>
+        <div className="relative">
+          <Input
+            id="api-key"
+            type={showKey ? 'text' : 'password'}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={
+              currentProvider?.apiKeyPrefix
+                ? `${currentProvider.apiKeyPrefix}...`
+                : t.settings.apiKeyPlaceholder
+            }
+            value={inputKey}
+            onChange={(e) => setInputKey(e.target.value)}
+            className="pr-11"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-9 w-9 rounded-sm text-muted-foreground hover:bg-transparent hover:text-foreground"
+            onClick={() => setShowKey(!showKey)}
+            aria-label={showKey ? t.settings.hideKey : t.settings.showKey}
+            aria-pressed={showKey}
+          >
+            {showKey ? (
+              <EyeOff className="h-4 w-4" aria-hidden="true" />
+            ) : (
+              <Eye className="h-4 w-4" aria-hidden="true" />
+            )}
+          </Button>
+        </div>
+        {!inputKey.trim() && inputTransport === 'direct' && (
+          <p className="border-l-2 border-severity-critical pl-3 text-sm text-severity-critical">
+            API-ключ обязателен для запуска аудита. Без ключа запросы к LLM вернут ошибку 400.
+          </p>
+        )}
+        {!inputKey.trim() && inputTransport === 'relay' && (
+          <p className="border-l-2 border-border pl-3 text-sm text-muted-foreground">
+            {t.settings.relayKeyOptional}
+          </p>
+        )}
+        {keyFormatWarning && (
+          <p className="text-sm text-severity-warning">{keyFormatWarning}</p>
+        )}
+        {maskedKey && (
+          <p className="text-sm text-muted-foreground tabular-nums">
+            {t.settings.keyMasked.replace('{masked}', maskedKey)}
+          </p>
+        )}
+
+        {/* Гигиена ключа: ключ расходный, а не главный секрет аккаунта */}
+        <div className="border-l-2 border-border pl-3">
+          <p className="text-sm font-medium">{t.settings.keySafetyTitle}</p>
+          <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-muted-foreground">
+            {t.settings.keySafetyLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="space-y-1 border-t border-border pt-3">
+          <div className="flex items-start gap-2">
+            <input
+              id="key-memory-only"
+              type="checkbox"
+              checked={keyMemoryOnly}
+              onChange={(e) => setKeyMemoryOnly(e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 accent-primary"
+            />
+            <Label htmlFor="key-memory-only" className="text-sm font-normal text-muted-foreground">
+              {t.settings.keyMemoryOnly}
+            </Label>
+          </div>
+          <p className="pl-6 text-sm text-muted-foreground">{t.settings.keyMemoryOnlyHint}</p>
+        </div>
+      </div>
+
+      {/* Advanced settings (collapsible) */}
+      <div className="border-t border-border pt-4">
+        <button
+          type="button"
+          aria-expanded={showAdvanced}
+          aria-controls={advancedPanelId}
+          className="flex w-full items-center justify-between gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+        >
+          <span>{t.settings.advancedSettings}</span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn('h-4 w-4 transition-transform', showAdvanced && 'rotate-180')}
+          />
+        </button>
+
+        <div id={advancedPanelId} hidden={!showAdvanced} className="space-y-4 pt-4">
+          {/* Base URL for Custom Provider */}
+          {provider === 'custom' && (
+            <div className="space-y-2">
+              <Label htmlFor="base-url" className={SECTION_LABEL}>
+                Base URL провайдера
+              </Label>
+              <Input
+                id="base-url"
+                type="url"
+                placeholder="https://api.example.com/v1"
+                value={inputBaseUrl}
+                onChange={(e) => setInputBaseUrl(e.target.value)}
+                className="text-sm"
+              />
+              <p className={FIELD_HINT}>
+                Базовый URL API для кастомного провайдера (без /chat/completions)
+              </p>
+              {baseUrlWarning && (
+                <p className="text-sm text-severity-warning">{baseUrlWarning}</p>
+              )}
+            </div>
+          )}
+
+          {/* RPM Limit */}
+          <div className="space-y-2">
+            <Label htmlFor="rpm-limit" className={SECTION_LABEL}>
+              {t.settings.rpmLimit}
+            </Label>
+            <Input
+              id="rpm-limit"
+              type="number"
+              min={1}
+              max={120}
+              placeholder={String(rpmLimit || 10)}
+              value={inputRpmLimit}
+              onChange={(e) => setInputRpmLimit(e.target.value)}
+              className="text-sm tabular-nums"
+            />
+            <p className={FIELD_HINT}>
+              {t.settings.rpmLimitHint}
+            </p>
+          </div>
+
+          {/* Model Capabilities Override (11.2) */}
+          <div className="space-y-3 border-t border-border pt-3">
+            <p className={FIELD_HINT}>
+              {t.settings.capabilitiesHint}
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="context-window" className={SECTION_LABEL}>
+                {t.settings.contextWindow}
+              </Label>
+              <Input
+                id="context-window"
+                type="number"
+                min={0}
+                placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').contextWindow)}
+                value={inputContextWindow}
+                onChange={(e) => setInputContextWindow(e.target.value)}
+                className="text-sm tabular-nums"
+              />
+              <p className={FIELD_HINT}>
+                {t.settings.contextWindowHint}
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="max-output-tokens" className={SECTION_LABEL}>
+                {t.settings.maxOutputTokens}
+              </Label>
+              <Input
+                id="max-output-tokens"
+                type="number"
+                min={0}
+                placeholder={String(getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').maxOutputTokens)}
+                value={inputMaxOutputTokens}
+                onChange={(e) => setInputMaxOutputTokens(e.target.value)}
+                className="text-sm tabular-nums"
+              />
+              <p className={FIELD_HINT}>
+                {t.settings.maxOutputTokensHint}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="json-mode"
+                type="checkbox"
+                checked={customSupportsJSONMode ?? getModelCapabilities(provider, inputModel || currentProvider?.defaultModel || '').supportsJSONMode}
+                onChange={(e) => setCustomSupportsJSONMode(e.target.checked)}
+                className="h-4 w-4 shrink-0 accent-primary"
+              />
+              <Label htmlFor="json-mode" className="text-sm font-normal text-muted-foreground">
+                {t.settings.supportsJSONMode}
+              </Label>
+            </div>
+            <p className={FIELD_HINT}>
+              {t.settings.supportsJSONModeHint}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Audit Feature Flags */}
+      <div className="space-y-3 border-t border-border pt-4">
+        <p className={SECTION_LABEL}>Параметры аудита</p>
+        <div className="flex items-start gap-2">
+          <input
+            id="reference-comparison"
+            type="checkbox"
+            checked={referenceComparison}
+            onChange={(e) => setReferenceComparison(e.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0 accent-primary"
+          />
+          <Label htmlFor="reference-comparison" className="text-sm font-normal text-muted-foreground">
+            Сравнить с референсами (Disco Elysium, Expedition 33, Pathologic 2, Атака Титанов)
+          </Label>
+        </div>
+        <p className={FIELD_HINT}>
+          Добавляет сравнение с эталонными примерами в финальный синтез (Блок 5)
+        </p>
+      </div>
+
+      {/* Test Connection Button — fails fast (20s timeout) */}
+      <div className="space-y-2 border-t border-border pt-4">
+        {formError && (
+          <p className="text-sm text-severity-critical">{formError}</p>
+        )}
+        <Button
+          variant="outline"
+          className="w-full rounded-sm"
+          onClick={handleTestConnection}
+          disabled={(!inputKey.trim() && inputTransport !== 'relay') || testConnection.loading}
+        >
+          {testConnection.loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              {t.settings.testing}
+            </>
+          ) : testConnection.success ? (
+            <>
+              <Check className="h-4 w-4" aria-hidden="true" />
+              {t.settings.testSuccess}
+            </>
+          ) : testConnection.error ? (
+            t.settings.testFailed
+          ) : (
+            t.settings.testConnection
+          )}
+        </Button>
+        {testConnection.loading && (
+          <p className={cn(FIELD_HINT, 'text-center')}>
+            Проверяем подключение (таймаут 20 сек)...
+          </p>
+        )}
+        {testConnection.error && (
+          <p className="text-sm text-severity-critical">{testConnection.error}</p>
+        )}
+      </div>
+
+      {/* Status indicator */}
+      {hasKey && !testConnection.loading && (
+        <p className="border-l-2 border-severity-success pl-3 text-sm text-severity-success">
+          {t.settings.apiKeyConfigured.replace('{provider}', currentProvider?.name || '')}
+        </p>
+      )}
+
+      {/* Instructions */}
+      <div className="space-y-3 border-t border-border pt-4">
+        <p className="text-sm font-medium">{t.settings.howToGetKey}</p>
+
+        {(() => {
+          const instructions = t.settings.providerInstructions[provider as keyof typeof t.settings.providerInstructions];
+          if (!instructions) return null;
+          return (
+            <ol className="list-decimal space-y-1 pl-4 text-sm text-muted-foreground">
+              <li>
+                {instructions.step1Text}
+                {instructions.step1Url && (
+                  <>
+                    {' '}
+                    <a
+                      href={instructions.step1Url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground"
+                    >
+                      {instructions.step1Url.replace(/https?:\/\//, '').split('/')[0]}
+                    </a>
+                  </>
+                )}
+              </li>
+              <li>{instructions.step2}</li>
+              {instructions.step3 && <li>{instructions.step3}</li>}
+            </ol>
+          );
+        })()}
+
+        <p className="border-t border-border pt-3 text-sm text-muted-foreground">
+          {t.settings.keySecurityNote}
+        </p>
+      </div>
+    </div>
   );
 
   // Desktop: Dialog (modal), Mobile: Sheet (fullscreen side panel)
@@ -833,16 +850,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     return (
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon">
-            <Settings className="h-5 w-5" />
+          <Button variant="ghost" size="icon" aria-label={t.settings.title}>
+            <Settings className="h-5 w-5" aria-hidden="true" />
           </Button>
         </SheetTrigger>
-        <SheetContent side="bottom" className="h-[95vh] rounded-t-xl p-0">
-          <SheetHeader className="px-4 pt-4 pb-0">
-            <SheetTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5" />
-              {t.settings.title}
-            </SheetTitle>
+        <SheetContent side="bottom" className="h-[95vh] rounded-t-md border-t border-border p-0 shadow-none">
+          <SheetHeader className="border-b border-border px-4 pt-4 pb-3">
+            <SheetTitle>{t.settings.title}</SheetTitle>
             <SheetDescription>
               {t.settings.description}
             </SheetDescription>
@@ -850,24 +864,24 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
           <ScrollArea className="flex-1 overflow-y-auto px-4">
             {settingsForm}
           </ScrollArea>
-          <div className="flex flex-col gap-2 px-4 py-3 border-t">
+          <div className="flex flex-col gap-2 border-t border-border px-4 py-3">
             <Button
               variant="outline"
               onClick={handleClear}
               disabled={!inputKey && !hasKey}
-              className="w-full"
+              className="w-full rounded-sm"
             >
-              <Trash2 className="h-4 w-4 mr-2" />
+              <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               {t.app.clear}
             </Button>
             <Button
               onClick={handleSave}
               disabled={saved}
-              className="w-full"
+              className="w-full rounded-sm bg-primary text-primary-foreground"
             >
               {saved ? (
                 <>
-                  <Check className="h-4 w-4 mr-2" />
+                  <Check className="h-4 w-4" aria-hidden="true" />
                   {t.app.saved}
                 </>
               ) : (
@@ -883,39 +897,36 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon">
-          <Settings className="h-5 w-5" />
+        <Button variant="ghost" size="icon" aria-label={t.settings.title}>
+          <Settings className="h-5 w-5" aria-hidden="true" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto max-w-[95vw] sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-md border-border shadow-none sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            {t.settings.title}
-          </DialogTitle>
+          <DialogTitle>{t.settings.title}</DialogTitle>
           <DialogDescription>
             {t.settings.description}
           </DialogDescription>
         </DialogHeader>
         {settingsForm}
-        <DialogFooter className="flex-col sm:flex-row gap-2">
+        <DialogFooter className="flex-col gap-2 border-t border-border pt-4 sm:flex-row">
           <Button
             variant="outline"
             onClick={handleClear}
             disabled={!inputKey && !hasKey}
-            className="w-full sm:w-auto"
+            className="w-full rounded-sm sm:w-auto"
           >
-            <Trash2 className="h-4 w-4 mr-2" />
+            <Trash2 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             {t.app.clear}
           </Button>
           <Button
             onClick={handleSave}
             disabled={saved}
-            className="w-full sm:w-auto"
+            className="w-full rounded-sm bg-primary text-primary-foreground sm:w-auto"
           >
             {saved ? (
               <>
-                <Check className="h-4 w-4 mr-2" />
+                <Check className="h-4 w-4" aria-hidden="true" />
                 {t.app.saved}
               </>
             ) : (

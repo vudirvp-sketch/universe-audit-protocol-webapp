@@ -10,6 +10,7 @@
 
 import type { VerdictBand, VerdictBandKey } from '@/lib/audit/types-v3';
 import { t } from '@/lib/i18n/ru';
+import { pluralRu, type PluralForms } from '@/lib/utils';
 
 // ============================================================
 // Severity → semantic token classes
@@ -92,15 +93,11 @@ export function confidenceSeverity(confidence: string | null): Severity {
 // Russian counts
 // ============================================================
 
-export type PluralForms = readonly [string, string, string];
+export type { PluralForms };
 
-/** Russian plural form for a count: 1 проблема / 2 проблемы / 5 проблем. */
+/** Русский plural form for a count: 1 проблема / 2 проблемы / 5 проблем. */
 export function pluralForm(count: number, forms: PluralForms): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return forms[0];
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
-  return forms[2];
+  return pluralRu(count, forms);
 }
 
 /** "3 корневых проблем" */

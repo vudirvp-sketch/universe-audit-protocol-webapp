@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * AuditReportViewV3 — Continuous document-style report renderer.
  *
@@ -8,8 +10,6 @@
  * v16: the legacy checklist score is replaced by the qualitative verdict
  * (§26.S) plus the Block 1 fast screen (§6).
  */
-
-'use client';
 
 import * as React from 'react';
 import type {
@@ -60,8 +60,8 @@ const BLOCK_LABELS = [
 
 function StreamingPlaceholder() {
   return (
-    <div className="flex items-center gap-2 text-muted-foreground py-4">
-      <span className="inline-block h-2 w-2 rounded-full bg-severity-streaming animate-pulse" />
+    <div className="flex items-center gap-2 py-4 text-muted-foreground">
+      <span className="inline-block size-2.5 rounded-[1px] bg-severity-streaming animate-pulse" aria-hidden="true" />
       <span className="text-sm">{t.app.streamingInProgress}</span>
     </div>
   );
@@ -93,11 +93,21 @@ export function AuditReportViewV3({
   }, [streamingText, isRunning]);
 
   return (
-    <article className="max-w-[84ch] mx-auto">
+    <article className="max-w-[84ch]">
+      {/* Шапка документа: отчёт начинается с того, что аудируется */}
+      {meta?.inputText && (
+        <header className="mb-8 max-w-[68ch]">
+          <p className="text-sm text-muted-foreground">{t.report.auditedConcept}</p>
+          <p className="mt-1 line-clamp-2 text-[0.9375rem] leading-snug text-balance">
+            {meta.inputText}
+          </p>
+        </header>
+      )}
+
       {/* Verdict + fast screen — visible only when the audit is done */}
       {isDone && verdict && <AuditVerdictCard verdict={verdict} mediaType={meta?.mediaType} />}
       {isDone && !verdict && (
-        <p className="text-sm text-muted-foreground mb-6">{t.verdict.fallback}</p>
+        <p className="mb-8 text-sm text-muted-foreground">{t.verdict.fallback}</p>
       )}
       {isDone && orientationContext && (
         <FastScreenCard orientationContext={orientationContext} />
@@ -114,7 +124,7 @@ export function AuditReportViewV3({
           <section
             key={blockNum}
             id={`block-${blockNum}`}
-            className="scroll-mt-16 py-6 first:pt-0"
+            className="scroll-mt-28 py-6 first:pt-0"
           >
             <BlockSectionHeader
               blockNumber={blockNum}
@@ -122,7 +132,7 @@ export function AuditReportViewV3({
               result={result}
               isStreaming={isStreamingThis}
             />
-            <div className="prose prose-lg dark:prose-invert max-w-none">
+            <div className="report prose prose-lg mt-6">
               {isStreamingThis && streamingText ? (
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                   {streamingText}
