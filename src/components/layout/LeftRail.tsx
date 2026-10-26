@@ -32,9 +32,9 @@ interface LeftRailProps {
 export const BLOCKS = [
   { index: 1, label: t.app.block1Label, defaultChunks: 1 },
   { index: 2, label: t.app.block2Label, defaultChunks: 4 },
-  { index: 3, label: t.app.block3Label, defaultChunks: 2 },
-  { index: 4, label: t.app.block4Label, defaultChunks: 1 },
-  { index: 5, label: t.app.block5Label, defaultChunks: 1 },
+  { index: 3, label: t.app.block3Label, defaultChunks: 3 },
+  { index: 4, label: t.app.block4Label, defaultChunks: 3 },
+  { index: 5, label: t.app.block5Label, defaultChunks: 2 },
 ] as const;
 
 // ============================================================
@@ -246,20 +246,20 @@ export function ExpandedContent({
         })}
       </div>
 
-      {/* Orientation context */}
+      {/* Orientation context — audit mode + authorship hypothesis (v16 §2, §4.2) */}
       {orientationContext && (
         <div className="pt-2 border-t space-y-1">
           <p className="text-sm font-medium text-muted-foreground">{t.rail.auditContext}</p>
           {orientationContext.auditMode && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t.rail.mode}:</span>
-              <span>{orientationContext.auditMode}</span>
+            <div className="flex justify-between gap-2 text-sm">
+              <span className="text-muted-foreground shrink-0">{t.rail.mode}:</span>
+              <span className="text-right">{t.modes[orientationContext.auditMode]}</span>
             </div>
           )}
-          {orientationContext.authorProfileType && (
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">{t.rail.profile}:</span>
-              <span>{orientationContext.authorProfileType}</span>
+          {orientationContext.authorshipHypothesis && (
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">{t.rail.authorship}</p>
+              <p className="text-sm">{orientationContext.authorshipHypothesis}</p>
             </div>
           )}
         </div>

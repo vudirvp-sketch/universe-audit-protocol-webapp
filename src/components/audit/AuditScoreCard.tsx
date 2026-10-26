@@ -1,139 +1,213 @@
 'use client';
 
 /**
- * AuditScoreCard — visual score summary component.
- * Displays overall score percent, verdict, and per-level circular progress indicators.
- * Uses semantic severity color tokens (Section 11.3).
+ * AuditScoreCard — qualitative verdict card (v16 §26.S).
+ *
+ * Replaces the legacy numeric score card: no percentages, no circular
+ * progress, no arbitrary score totals. Renders the seven qualitative bands,
+ * confidence, root-issue / recommendation counts and the capability frontier (§22).
  */
 
 import * as React from 'react';
-import type { ChecklistScoreResult, MediaType } from '@/lib/audit/types-v3';
+import type {
+  AuditVerdict,
+  CapabilityFrontierCounts,
+  MediaType,
+  VerdictBand,
+} from '@/lib/audit/types-v3';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import { t } from '@/lib/i18n/ru';
+import {
+  bandSeverity,
+  bandValueLabel,
+  confidenceSeverity,
+  formatCount,
+  severityChipClass,
+  severityTextClass,
+} from '@/lib/audit/verdict-display';
 
-interface AuditScoreCardProps {
-  score: ChecklistScoreResult;
-  mediaType: MediaType;
+// ============================================================
+// Band label & media label
+// ============================================================
+
+function bandLabel(band: VerdictBand): string {
+  return t.verdict.bands[band.key] ?? band.label;
+}
+
+function mediaLabel(mediaType: MediaType): string {
+  switch (mediaType) {
+    case 'narrative':
+      return t.form.mediaNarrative;
+    case 'game':
+      return t.form.mediaGame;
+    case 'visual':
+      return t.form.mediaVisual;
+    default:
+      return t.form.mediaTtrpg;
+  }
 }
 
 // ============================================================
-// Verdict logic — uses severity color tokens
+// Frontier breakdown — v16 §22
 // ============================================================
 
-function getVerdict(score: ChecklistScoreResult): { text: string; color: string } {
-  if (score.scorePercent >= 75) return { text: t.score.verdictAlive, color: 'text-severity-success' };
-  if (score.scorePercent >= 50) return { text: t.score.verdictNeedsWork, color: 'text-severity-warning' };
-  return { text: t.score.verdictRedesign, color: 'text-severity-critical' };
-}
+const FRONTIER_KEYS = [
+  'demonstrated',
+  'under_proven',
+  'latent',
+  'new_primitive_required',
+  'experimental',
+  'deferred',
+  'contradicted_or_should_not_add',
+] as const;
 
-// ============================================================
-// Circular progress component — uses severity stroke tokens
-// ============================================================
-
-function CircularProgress({
-  percent,
-  label,
-  fulfilled,
-  applicable,
-  size = 80,
-}: {
-  percent: number;
-  label: string;
-  fulfilled: number;
-  applicable: number;
-  size?: number;
-}) {
-  const strokeWidth = 6;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (percent / 100) * circumference;
-
-  const colorClass =
-    percent >= 75 ? 'stroke-severity-success' :
-    percent >= 50 ? 'stroke-severity-warning' :
-    'stroke-severity-critical';
-
+function FrontierBreakdown({ frontier }: { frontier: CapabilityFrontierCounts }) {
   return (
-    <div className="flex flex-col items-center gap-1">
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={strokeWidth}
-          className="text-muted/20"
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          strokeWidth={strokeWidth}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          className={colorClass}
-          style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-        />
-      </svg>
-      <div className="text-center -mt-[calc(50%+8px)] mb-[calc(50%-8px)] flex flex-col items-center justify-center" style={{ width: size, height: size, marginTop: -size, position: 'relative', zIndex: 1 }}>
-        <span className="text-lg font-bold">{percent}%</span>
-      </div>
-      <span className="text-sm font-medium">{label}</span>
-      <span className="text-sm text-muted-foreground">{fulfilled}/{applicable}</span>
+    <div className="border-t pt-3">
+      <h3 className="text-sm font-medium mb-2">{t.verdict.frontier}</h3>
+      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
+        {FRONTIER_KEYS.map((key) => {
+          const count = frontier[key];
+          return (
+            <li key={key} className="flex items-baseline justify-between gap-3 text-sm">
+              <span className={cn(count > 0 ? 'text-foreground' : 'text-muted-foreground')}>
+                {t.verdict.frontierLabels[key]}
+              </span>
+              <span
+                className={cn(
+                  'font-mono tabular-nums',
+                  count > 0 ? 'text-foreground' : 'text-muted-foreground/60',
+                )}
+              >
+                {count}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
+}
+
+// ============================================================
+// Props
+// ============================================================
+
+export interface AuditVerdictCardProps {
+  verdict: AuditVerdict;
+  mediaType?: MediaType;
 }
 
 // ============================================================
 // Main component
 // ============================================================
 
-export function AuditScoreCard({ score, mediaType }: AuditScoreCardProps) {
-  const verdict = getVerdict(score);
-  const levels = ['L1', 'L2', 'L3', 'L4'] as const;
-
-  const mediaLabel =
-    mediaType === 'narrative' ? t.form.mediaNarrative :
-    mediaType === 'game' ? t.form.mediaGame :
-    mediaType === 'visual' ? t.form.mediaVisual : t.form.mediaTtrpg;
+export function AuditVerdictCard({ verdict, mediaType }: AuditVerdictCardProps) {
+  const overall = verdict.bands.find((band) => band.key === 'overall_state') ?? null;
+  const otherBands = verdict.bands.filter((band) => band.key !== 'overall_state');
+  const confidence = verdict.confidence;
 
   return (
-    <div className="border-2 rounded-lg p-6">
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-base font-semibold">{t.score.title}</span>
-        <span className="text-sm font-normal text-muted-foreground">
-          {mediaLabel}
-        </span>
-      </div>
-      <div className="flex flex-col items-center gap-4">
-        {/* Overall score */}
-        <div className="text-center">
-          <div className={`text-4xl font-bold ${verdict.color}`}>{score.scorePercent}%</div>
-          <div className={`text-lg font-semibold mt-1 ${verdict.color}`}>{verdict.text}</div>
-          <div className="text-base text-muted-foreground mt-1">
-            {t.score.criteriaPassed.replace('{fulfilled}', String(score.fulfilled)).replace('{total}', String(score.totalApplicable))}
-          </div>
+    <section
+      aria-labelledby="verdict-card-title"
+      className="border-2 rounded-lg p-6 mb-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 id="verdict-card-title" className="text-base font-semibold">
+          {t.verdict.title}
+        </h2>
+        <div className="flex items-center gap-2">
+          {mediaType && (
+            <span className="text-sm text-muted-foreground">{mediaLabel(mediaType)}</span>
+          )}
+          <Badge variant="outline" className="text-xs">
+            {verdict.source === 'json' ? t.verdict.sourceJson : t.verdict.sourceMarkdown}
+          </Badge>
         </div>
+      </div>
 
-        {/* Per-level breakdown */}
-        <div className="flex gap-4 flex-wrap justify-center">
-          {levels.map(level => {
-            const data = score.byLevel[level];
-            if (!data) return null;
-            return (
-              <CircularProgress
-                key={level}
-                percent={data.percent}
-                label={level}
-                fulfilled={data.fulfilled}
-                applicable={data.applicable}
-              />
-            );
-          })}
+      {verdict.bands.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t.verdict.fallback}</p>
+      ) : (
+        <>
+          {/* Overall state — headline */}
+          {overall && (
+            <div className="mb-4">
+              <p className="text-sm text-muted-foreground">{t.verdict.bands.overall_state}</p>
+              <p
+                className={cn('text-2xl font-bold', severityTextClass(bandSeverity(overall)))}
+              >
+                {bandValueLabel(overall.value)}
+              </p>
+            </div>
+          )}
+
+          {/* Remaining bands as labelled value chips */}
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {otherBands.map((band) => {
+              const severity = bandSeverity(band);
+              return (
+                <div
+                  key={band.key}
+                  className="flex items-center justify-between gap-3 rounded-md border px-3 py-2"
+                >
+                  <dt className="text-sm text-muted-foreground">{bandLabel(band)}</dt>
+                  <dd className="m-0">
+                    <span
+                      className={cn(
+                        'inline-block rounded-md px-2 py-0.5 text-sm font-medium',
+                        severityChipClass(severity),
+                      )}
+                    >
+                      {bandValueLabel(band.value)}
+                    </span>
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+
+          {/* Confidence + counts */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            {confidence && (
+              <span className="flex items-center gap-2">
+                <span className="text-muted-foreground">{t.verdict.confidence}:</span>
+                <span
+                  className={cn(
+                    'font-medium',
+                    severityTextClass(confidenceSeverity(confidence)),
+                  )}
+                >
+                  {bandValueLabel(confidence)}
+                </span>
+              </span>
+            )}
+            <span className="text-muted-foreground">
+              {formatCount(verdict.issues.length, t.verdict.counts.problems)}
+            </span>
+            <span className="text-muted-foreground">
+              {formatCount(verdict.recommendations.length, t.verdict.counts.recommendations)}
+            </span>
+          </div>
+        </>
+      )}
+
+      {/* Capability frontier — v16 §22 */}
+      {verdict.frontier && (
+        <div className="mt-4">
+          <FrontierBreakdown frontier={verdict.frontier} />
         </div>
-      </div>
-    </div>
+      )}
+
+      {/* Closing statement — required by §26.S */}
+      {verdict.closingStatement && (
+        <blockquote className="mt-4 border-l-4 border-severity-recommendation pl-3 text-sm italic text-muted-foreground">
+          {verdict.closingStatement}
+        </blockquote>
+      )}
+
+      <p className="mt-3 text-xs text-muted-foreground">{t.verdict.docs}</p>
+    </section>
   );
 }

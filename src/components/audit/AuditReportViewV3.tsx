@@ -4,16 +4,25 @@
  * All 5 blocks render as continuous sections in a single scrollable document.
  * No collapsible toggles, no max-height restrictions.
  * Markdown rendered with custom components (callouts, code blocks).
+ *
+ * v16: the legacy checklist score is replaced by the qualitative verdict
+ * (§26.S) plus the Block 1 fast screen (§6).
  */
 
 'use client';
 
 import * as React from 'react';
-import type { BlockResult, PipelineMeta, PipelinePhase, ChecklistScoreResult } from '@/lib/audit/types-v3';
+import type {
+  AuditVerdict,
+  BlockResult,
+  OrientationContext,
+  PipelineMeta,
+  PipelinePhase,
+} from '@/lib/audit/types-v3';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { AuditScoreCard } from './AuditScoreCard';
-import { ChecklistScoreCard } from './ChecklistScoreCard';
+import { AuditVerdictCard } from './AuditScoreCard';
+import { FastScreenCard } from './FastScreenCard';
 import { BlockSectionHeader } from './BlockSectionHeader';
 import { markdownComponents } from '@/lib/markdown-components';
 import { t } from '@/lib/i18n/ru';
@@ -28,8 +37,8 @@ interface AuditReportViewV3Props {
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
   streamingText: string;
   phase: PipelinePhase;
-  checklistScore?: ChecklistScoreResult | null;
-  mediaType?: 'narrative' | 'game' | 'visual' | 'ttrpg';
+  verdict?: AuditVerdict | null;
+  orientationContext?: OrientationContext | null;
 }
 
 // ============================================================
@@ -68,8 +77,8 @@ export function AuditReportViewV3({
   currentBlock,
   streamingText,
   phase,
-  checklistScore,
-  mediaType,
+  verdict,
+  orientationContext,
 }: AuditReportViewV3Props) {
   const isRunning = phase === 'running';
   const isDone = phase === 'done';
@@ -85,12 +94,13 @@ export function AuditReportViewV3({
 
   return (
     <article className="max-w-[84ch] mx-auto">
-      {/* Score cards — visible only when audit is done and score exists */}
-      {isDone && checklistScore && mediaType && (
-        <>
-          <AuditScoreCard score={checklistScore} mediaType={mediaType} />
-          <ChecklistScoreCard score={checklistScore} />
-        </>
+      {/* Verdict + fast screen — visible only when the audit is done */}
+      {isDone && verdict && <AuditVerdictCard verdict={verdict} mediaType={meta?.mediaType} />}
+      {isDone && !verdict && (
+        <p className="text-sm text-muted-foreground mb-6">{t.verdict.fallback}</p>
+      )}
+      {isDone && orientationContext && (
+        <FastScreenCard orientationContext={orientationContext} />
       )}
 
       {/* 5 block sections — continuous document */}

@@ -1,6 +1,8 @@
-# Universe Audit Protocol v10.0
+# Universe Audit Protocol v16
 
-AI-powered tool for auditing fictional worlds and narratives through a 5-block sequential pipeline with 4 hierarchical analysis levels. No deployment, no downloads — just open the link, enter your API key, and start analyzing.
+AI-powered tool for auditing fictional worlds and narratives through a 5-block sequential pipeline and five coupled audit dimensions. The verdict is qualitative: no numeric scores, no checklist percentages. No deployment, no downloads — just open the link, enter your API key, and start analyzing.
+
+The canonical specification is [`UNIVERSE_AUDIT_PROTOCOL_ULTIMATE_v16`](./UNIVERSE_AUDIT_PROTOCOL_ULTIMATE_v16) in the repository root.
 
 ## Quick Start
 
@@ -14,24 +16,78 @@ The CORS proxy is pre-configured. You don't need to deploy anything.
 
 ## What it does
 
-This tool analyzes narratives (novels, games, films, anime, series, TTRPGs) through a 5-block sequential pipeline:
+The audit examines five coupled dimensions (v16 §3), each of which must be stated even when the material fails it:
 
-| Block | Name | Level | Description |
-|-------|------|-------|-------------|
-| **1** | Orientation | — | Detect audit mode (Conflict/Kishō/Hybrid), author profile, concept skeleton, 7-question screening |
-| **2** | Mechanism | L1 | MDA+OT, 17 vitality criteria, connectedness, economic arrow, "A chtoby chto?" test (4 chunks) |
-| **3** | Body + Psyche | L2+L3 | 5-layer character model, hamartia, Mary Sue test, Sanderson test, Grief Architecture × 4 levels (2 chunks) |
-| **4** | Meta | L4 | Three reality layers, Cornelian dilemma, authorship ethics, agent mirror, misdirection, narrative debt (2 chunks) |
-| **5** | Synthesis + Recommendations | — | Patch decision tree, prioritized recommendations, final verdict (X/52) (2 chunks) |
+```text
+WORLD MODEL → SYSTEMIC CONSEQUENCE → HUMAN MATERIALISATION
+            → EXPERIENCE / STORY CAPACITY → MEMORY / TIME
+```
+
+The report is produced in 5 blocks — 13 LLM requests in total (1 + 4 + 3 + 3 + 2), because Blocks 2–5 are split into sub-requests to stay within free-plan timeout limits:
+
+| Block | Name | v16 sections | Description |
+|-------|------|--------------|-------------|
+| **1** | Context and skeleton | §2, §4–6 | Audit mode (lazy / guided / material-aware), narrative engine, authorship hypothesis, world skeleton, 7-question fast screen |
+| **2** | World mechanism | §7.1–7.12 | Possibility space, causal chains and reach, residue, pressure and displacement, coupling, ablation, perturbation, flow trace, geography, scale, macro–meso–micro continuity (4 chunks) |
+| **3** | Epistemics and the human | §8–12 | Truth layers, information propagation and knowledge leakage, perspective divergence, random-passerby and biography tests, protagonist ablation, cultural integrity, characters, psychology (3 chunks) |
+| **4** | Experience, story, theme | §13–17 | Human and reader surfaces, embodiment, humour and heartbreak, story capacity, thematic law, resolution integrity, narrative debt, medium fit, memorability and distinctiveness (3 chunks) |
+| **5** | Root issues and recommendations | §18, §21–27 | Failure-mode classification, compressed root issues, up to 5 priority interventions, capability frontier, final verdict per §26.S (2 chunks) |
+
+### Optional author framing: guided and material-aware modes
+
+v16 §2 defines three audit modes; the default is `lazy` (only the concept is supplied). The form exposes the two richer modes as optional, collapsed sections:
+
+- **Guided framing — «Рамки аудита» (optional).** Genre, target audience, target experience, non-negotiable pillars, known weaknesses and excluded questions. Filling any field switches the audit to `guided`: the framing changes section weighting and applicability, never the underlying causal standard, and a declared frame is still checked against the material rather than taken as proof. Empty fields are omitted, so an untouched form stays in `lazy` mode.
+- **Additional materials — «Дополнительные материалы» (optional).** One or more artefacts, each with a short label and either pasted text or a loaded `.txt` / `.md` file. Two or more artefacts switch the audit to `material_aware`: each artefact is treated as a separate evidence layer, and disagreements between sources are reported instead of being silently reconciled. Rows without text are dropped on submit.
+
+Both sections are optional and persist locally. Leaving them empty reproduces the default lazy audit. Exports record the framing: JSON carries the full input (`text`, `mediaType`, `guided`, `materials`), while Markdown and HTML include the guided fields and artefact labels with their text length (the artefact text itself is not duplicated).
+
+### Evidence labels
+
+Every finding carries an evidence label (§1.2) and a confidence word:
+
+- `EXPLICIT` — established directly by the supplied material;
+- `DERIVED` — follows from material facts through a shown mechanism;
+- `INFERRED` — a plausible reading not directly shown;
+- `HYPOTHESIS` — a working assumption to be tested;
+- `UNKNOWN` — the material is silent; this is not a defect by itself (§1.7).
+
+### Qualitative verdict (§26.S)
+
+The report ends with seven diagnostic bands and a confidence word instead of a number:
+
+```text
+WORLD FOUNDATION:        weak / developing / coherent / strong
+SYSTEMIC DEPTH:          weak / developing / coherent / strong
+HUMAN INTEGRATION:       weak / developing / coherent / strong
+EXPERIENTIAL INTEGRATION:weak / developing / coherent / strong
+STORY CAPACITY:          narrow / focused / broad / highly generative
+IDENTITY:                diffuse / emerging / distinct / highly distinct
+OVERALL STATE:           fragile / viable / robust / unusually generative
+CONFIDENCE:              high / mixed / low
+```
+
+These are diagnostic bands, not objective quality scores (§1.4, §26.S, §29). The UI never shows percentages, `X/52` counters or circular progress. When the material is too thin for a world skeleton, Block 1 marks it `FOUNDATION-LIMITED` and the fast-screen card shows a warning.
+
+The capability frontier (§22) is always reported: demonstrated / under-proven / latent / new primitive required / experimental / deferred / contradicted or should-not-add.
 
 ### Pipeline Architecture
 
 - **Sequential execution**: All 5 blocks always run to completion (no gate blocking)
-- **Chunked requests**: Blocks 2-5 are split into sub-requests to stay within free-plan timeout limits
+- **Chunked requests**: Blocks 2–5 are split into sub-requests to stay within free-plan timeout limits
 - **RPM-aware delay**: Configurable delay between chunks (based on RPM limit setting, minimum 1 second)
 - **Single retry**: Transient errors (429, 502, 503) trigger one automatic retry with 5-second backoff
 - **Partial-text recovery**: If a streaming request fails after receiving some text, the partial text is preserved
-- **Non-blocking scoring**: After Block 5, a checklist scoring LLM call runs but does not block the pipeline on failure
+- **Non-blocking verdict extraction**: the machine-readable §27 JSON block is parsed after Block 5; if it is missing or invalid, the qualitative bands are recovered from the report markdown, so a verdict failure never breaks the audit
+- **Block summaries as context**: each block emits a short weaknesses summary that is passed to the following blocks
+
+### Exports
+
+- **Markdown** — protocol identity, author framing (guided fields, artefact labels with text length), qualitative verdict table (bands, confidence, counts, frontier, closing statement), all five block markdowns, session metadata
+- **JSON** — `protocol`, `input` (`text`, `mediaType`, plus `guided` / `materials` when supplied), `meta`, `orientationContext`, `verdict` (bands / issues / recommendations / frontier / closingStatement / source) and the five block markdowns
+- **HTML** — printable single-file report with the same framing, verdict section and block content
+
+No export contains a checklist score, a percentage or an `X/52` counter.
 
 ## Supported LLM Providers
 
@@ -118,7 +174,7 @@ npm test
 npm run test:coverage
 
 # Run specific test file
-npx vitest run __tests__/audit/json-sanitizer.test.ts
+npx vitest run __tests__/audit/export-utils.test.ts
 ```
 
 ### Deploying the CORS Proxy Worker
@@ -178,26 +234,30 @@ It means Cloudflare is trying to deploy as a **Worker** (using OpenNext) instead
 
 ## Language Contract
 
-All LLM prompts are in Russian. JSON keys and enum values are in English. User-facing text is in Russian. Code comments are in English. This follows the protocol's language contract (Section 0.5).
+All LLM prompts are in Russian. JSON keys and enum values are in English. User-facing text is in Russian. Code comments are in English. This follows the protocol's language contract (v16 §1.9).
 
 ## Test Coverage
 
-The test suite covers error classification and SSE parsing:
+The test suite covers:
 
-- **Error handler**: All `AuditErrorType` classifications, retry logic, Russian messages, abort handling
+- **Export utilities**: protocol identity, verdict serialisation, five block markdowns, HTML escaping, absence of any score artefact
+- **Error handler**: all `AuditErrorType` classifications, retry logic, Russian messages, abort handling
 - **Streaming**: SSE line parsing, provider-specific delta extraction (OpenAI, Anthropic, Google)
+- **Context bridge**: orientation extraction (audit mode, authorship hypothesis, skeleton, fast screen)
+- **Pipeline**: sequential block execution, chunking, partial-text recovery
 
 ## Key Protocol Rules Implemented
 
 | Rule | Description |
 |------|-------------|
-| RULE_2 | "A chtoby chto?" chain BREAK at early stage = critical issue |
-| RULE_3 | Grief HARD CHECK - dominant stage must have >=2 levels |
-| RULE_8 | Block output always includes level-based breakdown |
-| RULE_9 | ISSUE objects missing any field = invalid, regenerate |
-| RULE_10 | Generative templates activate automatically when inputs absent |
-| Section 0.6 | Count-based screening - code decides, not LLM |
-| Section 0.8 | Cult potential merged INTO L4 evaluation |
+| v16 §1.2 Evidence discipline | Every claim carries an evidence label and a confidence word |
+| v16 §1.4 No false precision | No numeric quality scores; qualitative bands only |
+| v16 §1.7 Missing evidence ≠ missing feature | Silence of the material is not treated as a defect |
+| v16 §5 Foundation rule | `FOUNDATION-LIMITED` when the material is too thin for a skeleton |
+| v16 §22 Capability frontier | Mandatory seven-bucket frontier: more important than any checklist score |
+| v16 §24 Do not double-count | Root problem → manifestations → affected levels |
+| v16 §25 Recommendation priority | Maximum 5 interventions, classes LOCAL / CONNECTIVE / STRUCTURAL / EXPERIMENTAL |
+| v16 §26.S Qualitative verdict | Seven diagnostic bands plus confidence, no percentages |
 
 ## License
 

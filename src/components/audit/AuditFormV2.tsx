@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
@@ -13,22 +14,85 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Sparkles, BookOpen, Gamepad2, Eye, Dices } from 'lucide-react';
-import type { MediaType } from '@/lib/audit/types-v3';
+import {
+  Sparkles,
+  BookOpen,
+  Gamepad2,
+  Eye,
+  Dices,
+  ChevronDown,
+  Plus,
+  Trash2,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+import type { AuditMaterial, GuidedContext, MediaType } from '@/lib/audit/types-v3';
+import { t } from '@/lib/i18n/ru';
 
 // ─── Media type labels & icons ────────────────────────────────────────
 
 const MEDIA_TYPE_OPTIONS: { value: MediaType; label: string; icon: React.ReactNode }[] = [
-  { value: 'narrative', label: 'Нарратив', icon: <BookOpen className="h-4 w-4" /> },
-  { value: 'game', label: 'Игра', icon: <Gamepad2 className="h-4 w-4" /> },
-  { value: 'visual', label: 'Визуальное', icon: <Eye className="h-4 w-4" /> },
-  { value: 'ttrpg', label: 'Настольная RPG', icon: <Dices className="h-4 w-4" /> },
+  { value: 'narrative', label: t.form.mediaNarrative, icon: <BookOpen className="h-4 w-4" /> },
+  { value: 'game', label: t.form.mediaGame, icon: <Gamepad2 className="h-4 w-4" /> },
+  { value: 'visual', label: t.form.mediaVisual, icon: <Eye className="h-4 w-4" /> },
+  { value: 'ttrpg', label: t.form.mediaTtrpg, icon: <Dices className="h-4 w-4" /> },
 ];
+
+// ─── Guided framing fields ────────────────────────────────────────────
+
+const GUIDED_TEXT_FIELDS = [
+  { key: 'genre', label: t.form.guidedGenre, placeholder: t.form.guidedGenrePlaceholder },
+  { key: 'targetAudience', label: t.form.guidedAudience, placeholder: t.form.guidedAudiencePlaceholder },
+  { key: 'targetExperience', label: t.form.guidedExperience, placeholder: t.form.guidedExperiencePlaceholder },
+] as const;
+
+const GUIDED_AREA_FIELDS = [
+  { key: 'nonNegotiables', label: t.form.guidedNonNegotiables, placeholder: t.form.guidedNonNegotiablesPlaceholder },
+  { key: 'knownConcerns', label: t.form.guidedKnownConcerns, placeholder: t.form.guidedKnownConcernsPlaceholder },
+  { key: 'excludedConcerns', label: t.form.guidedExcludedConcerns, placeholder: t.form.guidedExcludedConcernsPlaceholder },
+] as const;
+
+const GUIDED_KEYS = [
+  'genre',
+  'targetAudience',
+  'targetExperience',
+  'nonNegotiables',
+  'knownConcerns',
+  'excludedConcerns',
+] as const;
+
+/** Drop empty guided fields so an empty framing never switches the audit away from lazy mode. */
+function buildGuidedPayload(guided: GuidedContext): GuidedContext {
+  const payload: GuidedContext = {};
+  for (const key of GUIDED_KEYS) {
+    const value = guided[key]?.trim();
+    if (value) payload[key] = value;
+  }
+  return payload;
+}
+
+/** Drop rows without text and give unnamed artefacts a readable label. */
+function buildMaterialsPayload(materials: AuditMaterial[]): AuditMaterial[] {
+  return materials
+    .filter((material) => material.text.trim().length > 0)
+    .map((material, index) => ({
+      label:
+        material.label.trim() ||
+        t.form.materialFallbackLabel.replace('{n}', String(index + 1)),
+      text: material.text.trim(),
+    }));
+}
 
 // ─── Props ────────────────────────────────────────────────────────────
 
+export interface AuditFormSubmitInput {
+  text: string;
+  mediaType: MediaType;
+  guided?: GuidedContext;
+  materials?: AuditMaterial[];
+}
+
 interface AuditFormV2Props {
-  onSubmit: (input: { text: string; mediaType: MediaType }) => void;
+  onSubmit: (input: AuditFormSubmitInput) => void;
   isLoading?: boolean;
 }
 
@@ -40,7 +104,19 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
     setInputText,
     mediaType,
     setMediaType,
+    guided,
+    setGuided,
+    materials,
+    setMaterials,
   } = useAuditStateV3();
+
+  const guidedPanelId = React.useId();
+  const materialsPanelId = React.useId();
+
+  // Collapsible sections start closed — both are optional.
+  const [guidedOpen, setGuidedOpen] = React.useState(false);
+  const [materialsOpen, setMaterialsOpen] = React.useState(false);
+  const [fileError, setFileError] = React.useState<string | null>(null);
 
   // Local input with debounce (same pattern as AuditForm to avoid
   // excessive Zustand writes on every keystroke)
@@ -71,6 +147,43 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
     };
   }, []);
 
+  // ── Artefact handlers ──────────────────────────────────────────────
+
+  const addMaterial = () => {
+    setMaterials([...materials, { label: '', text: '' }]);
+  };
+
+  const removeMaterial = (index: number) => {
+    setMaterials(materials.filter((_, i) => i !== index));
+  };
+
+  const updateMaterial = (index: number, patch: Partial<AuditMaterial>) => {
+    setMaterials(materials.map((material, i) => (i === index ? { ...material, ...patch } : material)));
+  };
+
+  const handleMaterialFile = (index: number, file: File | undefined) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (!name.endsWith('.txt') && !name.endsWith('.md')) {
+      setFileError(t.form.fileTypeError);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => setFileError(t.form.fileReadError);
+    reader.onload = () => {
+      const content = typeof reader.result === 'string' ? reader.result : '';
+      const current = materials[index];
+      const nextText = current?.text.trim()
+        ? `${current.text}\n\n${content}`
+        : content;
+      updateMaterial(index, { text: nextText });
+      setFileError(null);
+    };
+    reader.readAsText(file);
+  };
+
+  // ── Submit / clear ─────────────────────────────────────────────────
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -83,12 +196,30 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
     }
     setInputText(localInput);
 
-    onSubmit({ text: localInput, mediaType });
+    const guidedPayload = buildGuidedPayload(guided);
+    const materialsPayload = buildMaterialsPayload(materials);
+
+    onSubmit({
+      text: localInput,
+      mediaType,
+      ...(Object.keys(guidedPayload).length > 0 ? { guided: guidedPayload } : {}),
+      ...(materialsPayload.length > 0 ? { materials: materialsPayload } : {}),
+    });
   };
 
   const handleClear = () => {
     setLocalInput('');
     setInputText('');
+    setGuided({
+      genre: '',
+      targetAudience: '',
+      targetExperience: '',
+      nonNegotiables: '',
+      knownConcerns: '',
+      excludedConcerns: '',
+    });
+    setMaterials([]);
+    setFileError(null);
   };
 
   return (
@@ -127,14 +258,14 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
 
           {/* Media Type Selection */}
           <div className="space-y-2">
-            <Label>Тип медиа</Label>
+            <Label htmlFor="audit-media-type">Тип медиа</Label>
             <Select
               value={mediaType}
               onValueChange={(v) => setMediaType(v as MediaType)}
               disabled={isLoading}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Выберите тип медиа" />
+              <SelectTrigger id="audit-media-type">
+                <SelectValue placeholder={t.form.mediaTypeSelect} />
               </SelectTrigger>
               <SelectContent>
                 {MEDIA_TYPE_OPTIONS.map((option) => (
@@ -149,6 +280,172 @@ export function AuditFormV2({ onSubmit, isLoading = false }: AuditFormV2Props) {
             </Select>
           </div>
         </CardContent>
+      </Card>
+
+      {/* Guided framing — v16 §2 GUIDED MODE */}
+      <Card className="py-4">
+        <button
+          type="button"
+          onClick={() => setGuidedOpen((open) => !open)}
+          aria-expanded={guidedOpen}
+          aria-controls={guidedPanelId}
+          className="flex w-full items-start justify-between gap-4 px-6 text-left"
+        >
+          <span className="min-w-0">
+            <span className="block text-base font-semibold">{t.form.guidedTitle}</span>
+            <span className="block text-sm text-muted-foreground">
+              {t.form.guidedDescription}
+            </span>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              'mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+              guidedOpen && 'rotate-180',
+            )}
+          />
+        </button>
+
+          <div id={guidedPanelId} hidden={!guidedOpen} className="px-6 pt-4 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              {GUIDED_TEXT_FIELDS.map((field) => (
+                <div key={field.key} className="space-y-2">
+                  <Label htmlFor={`guided-${field.key}`}>{field.label}</Label>
+                  <Input
+                    id={`guided-${field.key}`}
+                    value={guided[field.key] ?? ''}
+                    placeholder={field.placeholder}
+                    onChange={(e) => setGuided({ [field.key]: e.target.value })}
+                    disabled={isLoading}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {GUIDED_AREA_FIELDS.map((field) => (
+              <div key={field.key} className="space-y-2">
+                <Label htmlFor={`guided-${field.key}`}>{field.label}</Label>
+                <Textarea
+                  id={`guided-${field.key}`}
+                  value={guided[field.key] ?? ''}
+                  placeholder={field.placeholder}
+                  onChange={(e) => setGuided({ [field.key]: e.target.value })}
+                  className="min-h-[72px] resize-y"
+                  disabled={isLoading}
+                />
+              </div>
+            ))}
+
+            <p className="text-sm text-muted-foreground">{t.form.guidedHint}</p>
+          </div>
+      </Card>
+
+      {/* Additional artefacts — v16 §2 MATERIAL-AWARE MODE */}
+      <Card className="py-4">
+        <button
+          type="button"
+          onClick={() => setMaterialsOpen((open) => !open)}
+          aria-expanded={materialsOpen}
+          aria-controls={materialsPanelId}
+          className="flex w-full items-start justify-between gap-4 px-6 text-left"
+        >
+          <span className="min-w-0">
+            <span className="block text-base font-semibold">{t.form.materialsTitle}</span>
+            <span className="block text-sm text-muted-foreground">
+              {t.form.materialsDescription}
+            </span>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              'mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform',
+              materialsOpen && 'rotate-180',
+            )}
+          />
+        </button>
+
+          <div id={materialsPanelId} hidden={!materialsOpen} className="px-6 pt-4 space-y-4">
+            {materials.length === 0 && (
+              <p className="text-sm text-muted-foreground">{t.form.materialsHint}</p>
+            )}
+
+            {materials.map((material, index) => (
+              <div key={index} className="space-y-3 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">
+                    {t.form.materialRowTitle.replace('{n}', String(index + 1))}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeMaterial(index)}
+                    disabled={isLoading}
+                    aria-label={`${t.form.removeMaterial} ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor={`material-label-${index}`}>{t.form.materialLabel}</Label>
+                  <Input
+                    id={`material-label-${index}`}
+                    value={material.label}
+                    placeholder={t.form.materialLabelPlaceholder}
+                    onChange={(e) => updateMaterial(index, { label: e.target.value })}
+                    disabled={isLoading}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor={`material-text-${index}`}>{t.form.materialText}</Label>
+                  <Textarea
+                    id={`material-text-${index}`}
+                    value={material.text}
+                    placeholder={t.form.materialTextPlaceholder}
+                    onChange={(e) => updateMaterial(index, { text: e.target.value })}
+                    className="min-h-[120px] resize-y"
+                    disabled={isLoading}
+                  />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {t.form.materialChars.replace('{count}', String(material.text.length))}
+                    </span>
+                    <input
+                      type="file"
+                      accept=".txt,.md,text/plain,text/markdown"
+                      aria-label={`${t.form.materialUpload} ${index + 1}`}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = '';
+                        handleMaterialFile(index, file);
+                      }}
+                      disabled={isLoading}
+                      className="block w-full max-w-[260px] text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-input file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground hover:file:bg-accent disabled:pointer-events-none disabled:opacity-50"
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addMaterial}
+              disabled={isLoading}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              {t.form.addMaterial}
+            </Button>
+
+            {fileError && (
+              <p role="alert" className="text-sm text-severity-critical">
+                {fileError}
+              </p>
+            )}
+          </div>
       </Card>
 
       {/* Actions */}

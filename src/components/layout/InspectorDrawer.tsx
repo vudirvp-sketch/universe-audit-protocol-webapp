@@ -5,8 +5,20 @@ import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { PanelRight, Check, FileText, Code } from 'lucide-react';
-import type { BlockResult, PipelineMeta, ChecklistScoreResult, MediaType } from '@/lib/audit/types-v3';
+import { PanelRight, Check, FileText } from 'lucide-react';
+import type {
+  AuditVerdict,
+  BlockResult,
+  OrientationContext,
+  PipelineMeta,
+  MediaType,
+} from '@/lib/audit/types-v3';
+import {
+  bandSeverity,
+  bandValueLabel,
+  confidenceSeverity,
+  severityTextClass,
+} from '@/lib/audit/verdict-display';
 import { useSettings } from '@/hooks/useSettings';
 import { t } from '@/lib/i18n/ru';
 
@@ -19,7 +31,8 @@ interface InspectorDrawerProps {
   onOpenChange: (open: boolean) => void;
   meta: PipelineMeta | null;
   blocks: (BlockResult | null)[];
-  checklistScore: ChecklistScoreResult | null;
+  verdict: AuditVerdict | null;
+  orientationContext?: OrientationContext | null;
   mediaType: MediaType;
   currentBlock: 0 | 1 | 2 | 3 | 4 | 5;
   streamingText: string;
@@ -45,9 +58,9 @@ function InspectorSection({ title, children }: { title: string; children: React.
 function MetaRow({ label, value }: { label: string; value?: string | number | null }) {
   if (!value) return null;
   return (
-    <div className="flex justify-between text-sm py-1">
-      <span className="text-muted-foreground">{label}</span>
-      <span>{value}</span>
+    <div className="flex justify-between gap-3 text-sm py-1">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-right break-words">{value}</span>
     </div>
   );
 }
@@ -61,7 +74,8 @@ export function InspectorDrawer({
   onOpenChange,
   meta,
   blocks,
-  checklistScore,
+  verdict,
+  orientationContext,
   mediaType,
   currentBlock,
   streamingText,
@@ -74,17 +88,14 @@ export function InspectorDrawer({
   // Debug section state
   const [showRawMarkdown, setShowRawMarkdown] = React.useState(false);
 
-  // Verdict color for score display
-  const scorePercent = checklistScore?.scorePercent ?? 0;
-  const verdictColor =
-    scorePercent >= 75 ? 'text-severity-success' :
-    scorePercent >= 50 ? 'text-severity-warning' :
-    'text-severity-critical';
-
   const mediaLabel =
     mediaType === 'narrative' ? t.form.mediaNarrative :
     mediaType === 'game' ? t.form.mediaGame :
     mediaType === 'visual' ? t.form.mediaVisual : t.form.mediaTtrpg;
+
+  const auditModeLabel = orientationContext?.auditMode
+    ? t.modes[orientationContext.auditMode]
+    : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -102,6 +113,7 @@ export function InspectorDrawer({
               <MetaRow label={t.report.model} value={blocks[5]?.meta?.model || blocks[4]?.meta?.model || blocks[3]?.meta?.model || blocks[2]?.meta?.model || blocks[1]?.meta?.model} />
               <MetaRow label={t.report.provider} value={provider} />
               <MetaRow label={t.report.media} value={mediaLabel} />
+              <MetaRow label={t.rail.mode} value={auditModeLabel} />
               {meta?.tokensUsed && (
                 <MetaRow label={t.report.tokens} value={`${meta.tokensUsed.total.toLocaleString()}`} />
               )}
@@ -109,6 +121,13 @@ export function InspectorDrawer({
                 <MetaRow label={t.report.time} value={`${(meta.elapsedMs / 1000).toFixed(1)}с`} />
               )}
             </InspectorSection>
+
+            {/* Authorship hypothesis — v16 §4.2 (a hypothesis, not a label) */}
+            {orientationContext?.authorshipHypothesis && (
+              <InspectorSection title={t.rail.authorship}>
+                <p className="text-sm leading-snug">{orientationContext.authorshipHypothesis}</p>
+              </InspectorSection>
+            )}
 
             {/* Export section */}
             <InspectorSection title={t.report.export}>
@@ -148,6 +167,52 @@ export function InspectorDrawer({
               })}
             </InspectorSection>
 
+            {/* Verdict + capability frontier — v16 §26.S / §22 */}
+            <InspectorSection title={t.report.assessment}>
+              {!verdict ? (
+                <p className="text-sm text-muted-foreground">{t.verdict.pending}</p>
+              ) : verdict.bands.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t.verdict.fallback}</p>
+              ) : (
+                <div className="space-y-2">
+                  <ul className="space-y-1">
+                    {verdict.bands.map(band => (
+                      <li key={band.key} className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="text-muted-foreground">{t.verdict.bands[band.key] ?? band.label}</span>
+                        <span className={cn('font-medium text-right', severityTextClass(bandSeverity(band)))}>
+                          {bandValueLabel(band.value)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  {verdict.confidence && (
+                    <div className="flex items-baseline justify-between gap-3 text-sm pt-1 border-t">
+                      <span className="text-muted-foreground">{t.verdict.confidence}</span>
+                      <span className={cn('font-medium', severityTextClass(confidenceSeverity(verdict.confidence)))}>
+                        {bandValueLabel(verdict.confidence)}
+                      </span>
+                    </div>
+                  )}
+
+                  {verdict.frontier && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                        {t.verdict.frontier}
+                      </p>
+                      <ul className="space-y-0.5">
+                        {(Object.keys(verdict.frontier) as (keyof typeof verdict.frontier)[]).map(key => (
+                          <li key={key} className="flex items-baseline justify-between gap-3 text-sm">
+                            <span className="text-muted-foreground">{t.verdict.frontierLabels[key]}</span>
+                            <span className="font-mono tabular-nums">{verdict.frontier?.[key]}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </InspectorSection>
+
             {/* Debug section */}
             <InspectorSection title={t.report.debug}>
               <div className="flex flex-col gap-2">
@@ -171,20 +236,6 @@ export function InspectorDrawer({
                 </div>
               )}
             </InspectorSection>
-
-            {/* Checklist score summary */}
-            {checklistScore && (
-              <InspectorSection title={t.report.assessment}>
-                <div className="text-center py-2">
-                  <span className={cn('text-3xl font-bold', verdictColor)}>
-                    {checklistScore.scorePercent}%
-                  </span>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {checklistScore.fulfilled}/{checklistScore.totalApplicable} {t.report.criteria}
-                  </p>
-                </div>
-              </InspectorSection>
-            )}
           </div>
         </ScrollArea>
       </SheetContent>

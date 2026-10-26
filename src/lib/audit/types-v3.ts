@@ -1,27 +1,63 @@
 /**
- * Universe Audit Protocol v3 — Type Definitions
- * 5-block pipeline, free-form markdown output, minimal structured extraction.
+ * Universe Audit Protocol — Type Definitions
+ *
+ * Aligned with UNIVERSE_AUDIT_PROTOCOL_ULTIMATE_v16
+ * (Causal / Human / Experiential World Audit).
+ *
+ * 5-block pipeline, free-form markdown report, minimal structured extraction.
+ * The machine-readable layer is the optional v16 §27 JSON appended by Block 5.
  */
 
 // ============================================================
 // Core types
 // ============================================================
 
-/** Media type — determines prompt framing */
+/** Media type — determines prompt framing (v16 §16 medium restrictions) */
 export type MediaType = 'narrative' | 'game' | 'visual' | 'ttrpg';
 
-/** Audit mode — determined in Block 1 */
-export type AuditMode = 'conflict' | 'kishō' | 'hybrid';
+/**
+ * v16 §2 GUIDED MODE — author-supplied framing.
+ * Every field is optional; anything supplied changes weighting and applicability,
+ * never the underlying causal standard.
+ */
+export interface GuidedContext {
+  genre?: string;
+  targetAudience?: string;
+  targetExperience?: string;
+  /** Non-negotiable pillars the audit must not try to redesign away */
+  nonNegotiables?: string;
+  /** Weaknesses the author already knows about */
+  knownConcerns?: string;
+  /** Questions the audit must not open */
+  excludedConcerns?: string;
+}
 
-/** Author profile — determined in Block 1 */
-export type AuthorProfileType = 'gardener' | 'hybrid' | 'architect';
+/**
+ * v16 §2 MATERIAL-AWARE MODE — one additional supplied artefact.
+ * Artefacts are evidence layers, not alternate drafts to reconcile silently.
+ */
+export interface AuditMaterial {
+  /** Short human label, e.g. "Дизайн-документ", "Лор-библия" */
+  label: string;
+  text: string;
+}
+
+/** Audit mode — v16 §2. Determined in Block 1. */
+export type AuditMode = 'lazy' | 'guided' | 'material_aware';
+
+/** Fast screen answer — v16 §6 (YES / PARTIAL / NO / UNKNOWN / N/A) */
+export type FastScreenAnswer = 'YES' | 'PARTIAL' | 'NO' | 'UNKNOWN' | 'NA';
 
 /** Pipeline input */
 export interface AuditInput {
   text: string;
   mediaType: MediaType;
-  /** Whether to include reference comparison (Disco Elysium, Expedition 33, etc.) in Block 5 */
+  /** Whether to include the v16 §28 reference-calibration block in Block 5 */
   referenceComparison?: boolean;
+  /** Optional author framing — turns the audit into guided mode (v16 §2) */
+  guided?: GuidedContext;
+  /** Additional artefacts beyond the primary text — material-aware mode (v16 §2) */
+  materials?: AuditMaterial[];
 }
 
 /** LLM client configuration */
@@ -47,7 +83,7 @@ export interface BlockResult {
   blockNumber: 1 | 2 | 3 | 4 | 5;
   /** Full raw markdown output from LLM — rendered as-is */
   markdown: string;
-  /** Weaknesses summary extracted from end of LLM response (3-5 sentences).
+  /** Weaknesses summary extracted from end of LLM response.
    *  Empty string for Block 1 (no prior context to summarize).
    *  Used as context input for subsequent blocks. */
   weaknessesSummary: string;
@@ -89,23 +125,91 @@ export interface BlockMeta {
 // Extracted context (from Block 1 for use in Blocks 2-5)
 // ============================================================
 
-/** Structured context extracted from Block 1 output via regex.
- *  All fields are optional — if extraction fails, the raw markdown
- *  of Block 1 is used as context instead. */
-export interface ScreeningResult {
+/** One fast-screen answer — v16 §6 */
+export interface FastScreenResult {
+  /** Question text as emitted by the LLM (short form) */
   question: string;
-  answer: boolean;  // true = YES, false = NO
-  sectionRef: string;  // which sections to audit if NO
+  /** Parsed answer, null when the line could not be parsed */
+  answer: FastScreenAnswer | null;
 }
 
+/** Structured context extracted from Block 1 output via regex.
+ *  All fields are nullable — if extraction fails, the raw markdown
+ *  of Block 1 is used as context instead. */
 export interface OrientationContext {
+  /** v16 §2 audit mode (lazy / guided / material_aware) */
   auditMode: AuditMode | null;
-  authorProfileType: AuthorProfileType | null;
-  authorProfilePercentage: number | null;
-  /** Skeleton as a short text summary (key: value lines) */
+  /** v16 §4 narrative / experiential engine hypothesis (free text) */
+  narrativeEngine: string | null;
+  /** v16 §4.2 working authorship-risk hypothesis (free text, not a label) */
+  authorshipHypothesis: string | null;
+  /** v16 §5 skeleton as a short text summary (11 elements) */
   skeletonSummary: string | null;
-  /** Screening results from Block 1 quick screening (7 YES/NO checks) */
-  screeningResults: ScreeningResult[] | null;
+  /** v16 §5 FOUNDATION-LIMITED marker — material too thin for the skeleton */
+  foundationLimited: boolean;
+  /** v16 §6 seven fast-screen results */
+  fastScreen: FastScreenResult[] | null;
+}
+
+// ============================================================
+// Verdict (v16 §26.S / §27) — replaces the legacy checklist score
+// ============================================================
+
+/** Keys of the qualitative verdict bands — v16 §26.S */
+export type VerdictBandKey =
+  | 'world_foundation'
+  | 'systemic_depth'
+  | 'human_integration'
+  | 'experiential_integration'
+  | 'story_capacity'
+  | 'identity'
+  | 'overall_state';
+
+export interface VerdictBand {
+  key: VerdictBandKey;
+  /** Human-readable Russian label */
+  label: string;
+  /** Value exactly as returned by the LLM (e.g. coherent, developing) */
+  value: string;
+}
+
+export interface AuditVerdictIssue {
+  id: string;
+  failureClass: string;
+  diagnosis: string;
+  confidence: string;
+}
+
+export interface AuditVerdictRecommendation {
+  priority: number;
+  problem: string;
+  /** LOCAL / CONNECTIVE / STRUCTURAL / EXPERIMENTAL — v16 §21.2 */
+  interventionClass: string;
+}
+
+/** v16 §22 capability frontier buckets, counted */
+export interface CapabilityFrontierCounts {
+  demonstrated: number;
+  under_proven: number;
+  latent: number;
+  new_primitive_required: number;
+  experimental: number;
+  deferred: number;
+  contradicted_or_should_not_add: number;
+}
+
+/** Machine-readable verdict extracted from Block 5 */
+export interface AuditVerdict {
+  bands: VerdictBand[];
+  /** high / mixed / low — v16 §26.S */
+  confidence: string | null;
+  issues: AuditVerdictIssue[];
+  recommendations: AuditVerdictRecommendation[];
+  frontier: CapabilityFrontierCounts | null;
+  /** The closing sentence required by v16 §26.S */
+  closingStatement: string | null;
+  /** Which layer produced the verdict — JSON block first, markdown fallback */
+  source: 'json' | 'markdown';
 }
 
 // ============================================================
@@ -130,8 +234,8 @@ export interface PipelineStateV3 {
   orientationContext: OrientationContext | null;
   /** Accumulated weaknesses summaries from Blocks 2-4 (for Block 5 input) */
   accumulatedWeaknesses: string[];
-  /** Checklist score result (set after Block 5 completes via scoring LLM call) */
-  checklistScore: ChecklistScoreResult | null;
+  /** Machine-readable verdict (set after Block 5 completes, non-blocking) */
+  verdict: AuditVerdict | null;
   /** Pipeline-level metadata */
   meta: PipelineMeta;
   /** Error message (non-null only in 'error' phase) */
@@ -179,43 +283,9 @@ export interface PromptSet {
 
 /** Temperature per block */
 export const BLOCK_TEMPERATURES: Record<1 | 2 | 3 | 4 | 5, number> = {
-  1: 0.2,   // Precision: extract facts accurately
-  2: 0.45,  // Balance: analytical depth + accuracy
-  3: 0.45,  // Balance: character empathy + structural analysis
-  4: 0.45,  // Balance: philosophical depth + rigor
-  5: 0.6,   // Creativity: synthesis + recommendations
+  1: 0.2,   // Precision: extract facts and evidence status accurately
+  2: 0.4,   // Balance: systemic causal analysis
+  3: 0.4,   // Balance: epistemic and human diagnosis
+  4: 0.45,  // Balance: experiential and thematic reading
+  5: 0.55,  // Synthesis: root-cause compression and interventions
 };
-
-// ============================================================
-// Checklist scoring result
-// ============================================================
-
-export interface ChecklistScoreItem {
-  id: string;
-  block: string;
-  text: string;
-  level: string;
-  status: 'PASS' | 'FAIL' | 'INSUFFICIENT_DATA';
-  evidence: string;
-  applicable: boolean;
-}
-
-export interface ChecklistScoreResult {
-  items: ChecklistScoreItem[];
-  totalApplicable: number;
-  fulfilled: number;
-  scorePercent: number;
-  byLevel: Record<string, { applicable: number; fulfilled: number; percent: number }>;
-}
-
-// ============================================================
-// Checklist item (used only for prompt construction)
-// ============================================================
-
-/** Checklist item — used to build prompt content, NOT for parsing output */
-export interface ChecklistItem {
-  id: string;
-  name: string;
-  description: string;
-  level: 'L1' | 'L2' | 'L3' | 'L4';
-}

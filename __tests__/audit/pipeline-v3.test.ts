@@ -32,14 +32,15 @@ vi.mock('@/lib/audit/llm-streaming', () => ({
   callLLMStreaming: vi.fn(),
 }));
 
-// Mock scoring (non-blocking)
-vi.mock('@/lib/audit/scoring', () => ({
-  runChecklistScoring: vi.fn(() => Promise.resolve(null)),
+// Mock verdict extraction (non-blocking)
+vi.mock('@/lib/audit/verdict', () => ({
+  extractAuditVerdict: vi.fn(() => null),
 }));
 
 // Mock prompts-v3 to return simple prompts
 vi.mock('@/lib/audit/prompts-v3', () => ({
   buildBlock1Prompt: vi.fn(() => [{ system: 'system-1', user: 'user-1' }]),
+  buildExtraContextBlock: vi.fn(() => ''),
   buildBlock2SubPrompts: vi.fn(() => [
     { system: 'system-2a', user: 'user-2a' },
     { system: 'system-2b', user: 'user-2b' },
@@ -69,7 +70,7 @@ vi.mock('@/lib/audit/context-bridge', () => ({
 
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { callLLMStreaming } from '@/lib/audit/llm-streaming';
-import { runChecklistScoring } from '@/lib/audit/scoring';
+import { extractAuditVerdict } from '@/lib/audit/verdict';
 import type { LLMStreamingResult } from '@/lib/audit/llm-streaming';
 import type { LLMConfig, AuditInput } from '@/lib/audit/types-v3';
 
@@ -169,7 +170,7 @@ describe('runAuditPipelineV3 — successful execution', () => {
     expect(mockCallbacks.onBlockStart.mock.calls.length).toBeGreaterThanOrEqual(5);
   });
 
-  it('runs checklist scoring after all blocks complete', async () => {
+  it('extracts the machine-readable verdict after all blocks complete', async () => {
     const mockCallLLMStreaming = vi.mocked(callLLMStreaming);
     mockCallLLMStreaming.mockResolvedValue(
       makeStreamingResult('Block content')
@@ -181,7 +182,7 @@ describe('runAuditPipelineV3 — successful execution', () => {
       mockCallbacks,
     );
 
-    expect(runChecklistScoring).toHaveBeenCalledOnce();
+    expect(extractAuditVerdict).toHaveBeenCalledOnce();
   });
 
   it('concatenates chunked sub-results with --- separator', async () => {
@@ -295,14 +296,16 @@ describe('runAuditPipelineV3 — error handling', () => {
     expect(result.phase).toBe('error');
   });
 
-  it('continues pipeline even if checklist scoring fails', async () => {
+  it('continues pipeline even if verdict extraction fails', async () => {
     const mockCallLLMStreaming = vi.mocked(callLLMStreaming);
     mockCallLLMStreaming.mockResolvedValue(
       makeStreamingResult('Block content')
     );
 
-    // Make scoring throw
-    vi.mocked(runChecklistScoring).mockRejectedValueOnce(new Error('Scoring failed'));
+    // Make verdict extraction throw
+    vi.mocked(extractAuditVerdict).mockImplementationOnce(() => {
+      throw new Error('Verdict extraction failed');
+    });
 
     const result = await runAuditPipelineV3(
       defaultInput,
@@ -312,7 +315,7 @@ describe('runAuditPipelineV3 — error handling', () => {
 
     // Pipeline should still complete successfully
     expect(result.phase).toBe('done');
-    expect(result.checklistScore).toBeNull();
+    expect(result.verdict).toBeNull();
   });
 });
 

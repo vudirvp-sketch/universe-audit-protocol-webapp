@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useAuditStateV3 } from '@/hooks/useAuditStateV3';
 import { AuditFormV2 } from '@/components/audit/AuditFormV2';
+import type { AuditFormSubmitInput } from '@/components/audit/AuditFormV2';
 import { AuditReportViewV3 } from '@/components/audit/AuditReportViewV3';
 import { LeftRail } from '@/components/layout/LeftRail';
 import { MobileProgressFAB } from '@/components/layout/MobileProgressFAB';
@@ -11,13 +12,17 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   BookOpen,
+  Clock,
+  Globe,
   Moon,
+  Network,
   Sun,
   Sparkles,
   RotateCcw,
   AlertTriangle,
   PanelRight,
   Sidebar,
+  Users,
 } from 'lucide-react';
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { exportV3ToMarkdown, exportAuditJSON, exportAuditHTML } from '@/lib/audit/export-utils';
@@ -26,7 +31,7 @@ import { SettingsDialog } from '@/components/audit/SettingsDialog';
 import { useSettings, rehydrateSettings } from '@/hooks/useSettings';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import type { MediaType, PipelineStateV3 } from '@/lib/audit/types-v3';
+import type { PipelineStateV3 } from '@/lib/audit/types-v3';
 import type { AuditStateV3 } from '@/hooks/useAuditStateV3';
 import { t } from '@/lib/i18n/ru';
 
@@ -45,11 +50,23 @@ function buildPipelineState(state: AuditStateV3): PipelineStateV3 {
     block5: state.block5,
     orientationContext: state.orientationContext,
     accumulatedWeaknesses: [],
-    checklistScore: state.checklistScore,
+    verdict: state.verdict,
     meta: state.meta!,
     error: state.error,
   };
 }
+
+// ============================================================
+// Five coupled audit dimensions — v16 §3
+// ============================================================
+
+const DIMENSION_ICONS = {
+  world: Globe,
+  systemic: Network,
+  human: Users,
+  experience: BookOpen,
+  memory: Clock,
+} as const;
 
 export default function Home() {
   // =========================================================================
@@ -93,7 +110,7 @@ export default function Home() {
   const inputText = useAuditStateV3(s => s.inputText);
   const mediaType = useAuditStateV3(s => s.mediaType);
   const orientationContext = useAuditStateV3(s => s.orientationContext);
-  const checklistScore = useAuditStateV3(s => s.checklistScore);
+  const verdict = useAuditStateV3(s => s.verdict);
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
@@ -149,7 +166,7 @@ export default function Home() {
   // =========================================================================
   // Audit pipeline runner
   // =========================================================================
-  const startAudit = async (input: { text: string; mediaType: MediaType }) => {
+  const startAudit = async (input: AuditFormSubmitInput) => {
     const currentApiKey = useSettings.getState().apiKey;
     const currentProxyUrl = useSettings.getState().proxyUrl;
     const currentModel = useSettings.getState().model || undefined;
@@ -177,6 +194,8 @@ export default function Home() {
           text: input.text,
           mediaType: input.mediaType,
           referenceComparison: useSettings.getState().referenceComparison,
+          guided: input.guided,
+          materials: input.materials,
         },
         {
           provider: currentProvider,
@@ -219,9 +238,11 @@ export default function Home() {
         if (result.meta) {
           useAuditStateV3.getState().setMeta(result.meta);
         }
-        if (result.checklistScore) {
-          useAuditStateV3.getState().setChecklistScore(result.checklistScore);
+        if (result.orientationContext) {
+          useAuditStateV3.getState().setOrientationContext(result.orientationContext);
         }
+        // Qualitative verdict (v16 §26.S) — null when extraction failed
+        useAuditStateV3.getState().setVerdict(result.verdict);
       }
     } catch (err) {
       if (controller.signal.aborted) {
@@ -256,25 +277,30 @@ export default function Home() {
     URL.revokeObjectURL(url);
   };
 
+  const blocks = [null, block1, block2, block3, block4, block5] as const;
+
   // Export handlers (passed to InspectorDrawer)
-  const exportHandlers = React.useMemo(() => ({
-    onExportMD: () => {
-      const md = exportV3ToMarkdown(blocks);
-      downloadFile(md, 'audit-report.md', 'text/markdown');
-    },
-    onExportJSON: () => {
+  const exportHandlers = React.useMemo(() => {
+    const currentState = () => buildPipelineState(useAuditStateV3.getState());
+    const currentExtras = () => {
       const state = useAuditStateV3.getState();
-      const pipelineState = buildPipelineState(state);
-      const json = exportAuditJSON(pipelineState, state.checklistScore);
-      downloadFile(json, 'audit-report.json', 'application/json');
-    },
-    onExportHTML: () => {
-      const state = useAuditStateV3.getState();
-      const pipelineState = buildPipelineState(state);
-      const html = exportAuditHTML(pipelineState, state.checklistScore);
-      downloadFile(html, 'audit-report.html', 'text/html');
-    },
-  }), [block1, block2, block3, block4, block5]);
+      return { guided: state.guided, materials: state.materials };
+    };
+    return {
+      onExportMD: () => {
+        const md = exportV3ToMarkdown(currentState(), currentExtras());
+        downloadFile(md, 'audit-report.md', 'text/markdown');
+      },
+      onExportJSON: () => {
+        const json = exportAuditJSON(currentState(), currentExtras());
+        downloadFile(json, 'audit-report.json', 'application/json');
+      },
+      onExportHTML: () => {
+        const html = exportAuditHTML(currentState(), currentExtras());
+        downloadFile(html, 'audit-report.html', 'text/html');
+      },
+    };
+  }, []);
 
   // =========================================================================
   // Hydration guard
@@ -290,7 +316,6 @@ export default function Home() {
     );
   }
 
-  const blocks = [null, block1, block2, block3, block4, block5];
   const showRailButtons = phase === 'running' || phase === 'done';
 
   // =========================================================================
@@ -403,26 +428,28 @@ export default function Home() {
               <div className="text-center mb-8">
                 <h2 className="text-3xl font-bold mb-2">Universe Audit Protocol</h2>
                 <p className="text-muted-foreground max-w-2xl mx-auto">
-                  Анализ вымышленных миров: от скелета концепта до рекомендаций.
-                  Пять блоков — полный отчёт.
+                  Аудит вымышленных миров: от скелета концепта до качественного
+                  вердикта. Пять блоков — полный отчёт без числовых оценок.
                 </p>
               </div>
 
-              {/* Protocol Overview Cards (Section 4.1) */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                {[
-                  { level: 'L1', name: 'Механизм', question: 'Работает ли мир как система?', detail: '17 критериев живого мира', icon: '\u2699\uFE0F' },
-                  { level: 'L2+L3', name: 'Тело + Психика', question: 'Есть ли телесность и последствия?', detail: '5 слоёв персонажа, Архитектура Горя', icon: '\uD83E\uDEC0' },
-                  { level: 'L4', name: 'Мета', question: 'Задаёт ли вопрос реальной жизни?', detail: 'Корнелианская дилемма, зеркало агента', icon: '\uD83E\uDE9E' },
-                  { level: 'Блок 5', name: 'Синтез', question: 'Что конкретно исправить?', detail: 'Дерево решений, приоритеты, патчи', icon: '\uD83D\uDD27' },
-                ].map((item) => (
-                  <div key={item.level} className="text-center p-6 rounded-lg border bg-card hover:border-amber-500/30 transition-colors">
-                    <div className="text-4xl mb-2">{item.icon}</div>
-                    <div className="text-base font-semibold mb-1">{item.level}: {item.name}</div>
-                    <p className="text-sm text-muted-foreground mb-1">{item.question}</p>
-                    <p className="text-sm text-muted-foreground/70">{item.detail}</p>
-                  </div>
-                ))}
+              {/* Five coupled audit dimensions — v16 §3 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                {(Object.keys(t.levels) as (keyof typeof t.levels)[]).map((key) => {
+                  const dimension = t.levels[key];
+                  const Icon = DIMENSION_ICONS[key];
+                  return (
+                    <div
+                      key={key}
+                      className="p-4 rounded-lg border bg-card hover:border-amber-500/30 transition-colors"
+                    >
+                      <Icon className="h-5 w-5 text-amber-500 mb-2" />
+                      <div className="text-sm font-semibold mb-1">{dimension.name}</div>
+                      <p className="text-xs text-muted-foreground mb-1">{dimension.question}</p>
+                      <p className="text-xs text-muted-foreground/70">{dimension.focus}</p>
+                    </div>
+                  );
+                })}
               </div>
 
               <AuditFormV2
@@ -463,7 +490,7 @@ export default function Home() {
               onCancel={cancelAudit}
               currentBlockTotalChunks={currentBlockTotalChunks || undefined}
               currentChunkIndex={currentChunkIndex || undefined}
-              blocks={blocks}
+              blocks={[...blocks]}
               phase={phase}
               orientationContext={orientationContext}
               collapsed={sidebarCollapsed}
@@ -471,13 +498,13 @@ export default function Home() {
             />
             <main className="flex-1 min-w-0 py-6 px-4 md:px-8">
               <AuditReportViewV3
-                blocks={blocks}
+                blocks={[...blocks]}
                 meta={meta}
                 currentBlock={currentBlock}
                 streamingText={streamingText}
                 phase={phase}
-                checklistScore={checklistScore}
-                mediaType={mediaType}
+                verdict={verdict}
+                orientationContext={orientationContext}
               />
             </main>
           </div>
@@ -487,7 +514,7 @@ export default function Home() {
         {(phase === 'running' || phase === 'done') && (
           <MobileProgressFAB
             currentBlock={currentBlock}
-            blocks={blocks}
+            blocks={[...blocks]}
             phase={phase}
             onCancel={cancelAudit}
             currentBlockTotalChunks={currentBlockTotalChunks || undefined}
@@ -501,8 +528,9 @@ export default function Home() {
           open={inspectorOpen}
           onOpenChange={setInspectorOpen}
           meta={meta}
-          blocks={blocks}
-          checklistScore={checklistScore ?? null}
+          blocks={[...blocks]}
+          verdict={verdict}
+          orientationContext={orientationContext}
           mediaType={mediaType}
           currentBlock={currentBlock}
           streamingText={streamingText}

@@ -1,43 +1,231 @@
 /**
- * Export utilities for Universe Audit Protocol v3.
+ * Export utilities for the Universe Audit Protocol (v16).
  *
- * Provides v3 block-based markdown, JSON, and HTML export.
- * Legacy v2 exports are removed.
+ * Exports the five block markdowns, the qualitative verdict (§26.S),
+ * the capability frontier (§22) and session metadata.
+ * No checklist score, no percentages (§1.4, §29).
  */
 
-import type { BlockResult, PipelineStateV3, ChecklistScoreResult } from './types-v3';
+import type {
+  AuditMaterial,
+  AuditVerdict,
+  BlockResult,
+  GuidedContext,
+  PipelineStateV3,
+} from './types-v3';
+import { bandValueLabel, formatCount } from './verdict-display';
+import { t } from '@/lib/i18n/ru';
+
+/** Protocol identity carried by every export. */
+export const PROTOCOL_NAME = 'UNIVERSE AUDIT PROTOCOL ULTIMATE v16';
+
+/**
+ * Author-supplied extras that are not part of PipelineStateV3.
+ * They switch the audit to guided (§2) or material-aware (§2) mode.
+ */
+export interface AuditInputExtras {
+  guided?: GuidedContext;
+  materials?: AuditMaterial[];
+}
 
 // ============================================================
 // Block labels for export
 // ============================================================
 
 const BLOCK_LABELS: Record<number, string> = {
-  1: 'ОРИЕНТАЦИЯ',
-  2: 'МЕХАНИЗМ (L1)',
-  3: 'ТЕЛО + ПСИХИКА (L2+L3)',
-  4: 'МЕТА (L4)',
-  5: 'СИНТЕЗ + РЕКОМЕНДАЦИИ',
+  1: t.app.block1Label,
+  2: t.app.block2Label,
+  3: t.app.block3Label,
+  4: t.app.block4Label,
+  5: t.app.block5Label,
 };
 
+const FRONTIER_KEYS = [
+  'demonstrated',
+  'under_proven',
+  'latent',
+  'new_primitive_required',
+  'experimental',
+  'deferred',
+  'contradicted_or_should_not_add',
+] as const;
+
+function blockHeading(index: number): string {
+  const label = BLOCK_LABELS[index] ?? `Блок ${index}`;
+  return `Блок ${index}: ${label.toUpperCase()}`;
+}
+
 // ============================================================
-// Markdown Export (v3)
+// Shared verdict helpers
 // ============================================================
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function problemCount(verdict: AuditVerdict): string {
+  return formatCount(verdict.issues.length, t.verdict.counts.problems);
+}
+
+function recommendationCount(verdict: AuditVerdict): string {
+  return formatCount(verdict.recommendations.length, t.verdict.counts.recommendations);
+}
+
+// ============================================================
+// Input framing (guided / material-aware) — v16 §2
+// ============================================================
+
+const GUIDED_EXPORT_FIELDS: ReadonlyArray<{ key: keyof GuidedContext; label: string }> = [
+  { key: 'genre', label: t.form.guidedGenre },
+  { key: 'targetAudience', label: t.form.guidedAudience },
+  { key: 'targetExperience', label: t.form.guidedExperience },
+  { key: 'nonNegotiables', label: t.form.guidedNonNegotiables },
+  { key: 'knownConcerns', label: t.form.guidedKnownConcerns },
+  { key: 'excludedConcerns', label: t.form.guidedExcludedConcerns },
+];
+
+function exportableGuided(
+  guided?: GuidedContext,
+): Array<{ key: keyof GuidedContext; label: string; value: string }> {
+  if (!guided) return [];
+  const fields: Array<{ key: keyof GuidedContext; label: string; value: string }> = [];
+  for (const field of GUIDED_EXPORT_FIELDS) {
+    const value = guided[field.key]?.trim();
+    if (value) fields.push({ key: field.key, label: field.label, value });
+  }
+  return fields;
+}
+
+function exportableMaterials(materials?: AuditMaterial[]): AuditMaterial[] {
+  return (materials ?? [])
+    .filter((material) => material.text.trim().length > 0)
+    .map((material, index) => ({
+      label:
+        material.label.trim() ||
+        t.form.materialFallbackLabel.replace('{n}', String(index + 1)),
+      text: material.text.trim(),
+    }));
+}
+
+function hasFraming(extras?: AuditInputExtras): boolean {
+  return (
+    exportableGuided(extras?.guided).length > 0 ||
+    exportableMaterials(extras?.materials).length > 0
+  );
+}
+
+// ============================================================
+// Markdown Export
+// ============================================================
+
+/** Short author-framing sections — guided fields and artefact labels with text length. */
+function framingToMarkdown(extras?: AuditInputExtras): string[] {
+  if (!hasFraming(extras)) return [];
+
+  const guided = exportableGuided(extras?.guided);
+  const materials = exportableMaterials(extras?.materials);
+  const lines: string[] = [];
+
+  if (guided.length > 0) {
+    lines.push(`## ${t.report.framing}`, '');
+    for (const field of guided) {
+      lines.push(`- ${field.label}: ${field.value}`);
+    }
+    lines.push('');
+  }
+
+  if (materials.length > 0) {
+    lines.push(`## ${t.report.artefacts}`, '');
+    for (const material of materials) {
+      lines.push(
+        `- ${material.label} — ${t.report.artefactChars.replace('{count}', String(material.text.length))}`,
+      );
+    }
+    lines.push('');
+  }
+
+  return lines;
+}
+
+/** Verdict section as markdown — bands, confidence, counts, frontier, closing statement. */
+function verdictToMarkdown(verdict: AuditVerdict | null): string[] {
+  const lines: string[] = [];
+  lines.push(`## ${t.verdict.title}`);
+  lines.push('');
+
+  if (!verdict || verdict.bands.length === 0) {
+    lines.push(`*${t.verdict.fallback}*`);
+    lines.push('');
+    return lines;
+  }
+
+  lines.push(`| ${t.verdict.indicator} | ${t.verdict.valueCol} |`);
+  lines.push('|---|---|');
+  for (const band of verdict.bands) {
+    const label = t.verdict.bands[band.key] ?? band.label;
+    lines.push(`| ${label} | ${bandValueLabel(band.value)} |`);
+  }
+  lines.push('');
+
+  if (verdict.confidence) {
+    lines.push(`${t.verdict.confidence}: ${bandValueLabel(verdict.confidence)}`);
+  }
+  lines.push(`${t.verdict.issues}: ${problemCount(verdict)}`);
+  lines.push(`${t.verdict.recommendations}: ${recommendationCount(verdict)}`);
+  lines.push('');
+
+  if (verdict.frontier) {
+    lines.push(`### ${t.verdict.frontier}`);
+    lines.push('');
+    for (const key of FRONTIER_KEYS) {
+      lines.push(`- ${t.verdict.frontierLabels[key]}: ${verdict.frontier[key]}`);
+    }
+    lines.push('');
+  }
+
+  if (verdict.closingStatement) {
+    lines.push(`> ${verdict.closingStatement}`);
+    lines.push('');
+  }
+
+  return lines;
+}
+
 /**
- * Generate a markdown report from v3 block results.
- * Concatenates all 5 block markdowns with section headers.
+ * Generate a markdown report: header, optional author framing, qualitative
+ * verdict, then all five block markdowns and session metadata.
  */
-export function exportV3ToMarkdown(blocks: (BlockResult | null)[]): string {
+export function exportV3ToMarkdown(
+  state: PipelineStateV3,
+  extras?: AuditInputExtras,
+): string {
   const lines: string[] = [];
 
   lines.push('# Universe Audit Protocol — Отчёт');
   lines.push('');
+  lines.push(`Протокол: ${PROTOCOL_NAME}`);
+  lines.push('');
+
+  lines.push(...framingToMarkdown(extras));
+  lines.push(...verdictToMarkdown(state.verdict));
+
+  const blocks: (BlockResult | null)[] = [
+    null,
+    state.block1,
+    state.block2,
+    state.block3,
+    state.block4,
+    state.block5,
+  ];
 
   for (let i = 1; i <= 5; i++) {
     const block = blocks[i];
-    const label = BLOCK_LABELS[i] || `Блок ${i}`;
 
-    lines.push(`## Блок ${i}: ${label}`);
+    lines.push(`## ${blockHeading(i)}`);
     lines.push('');
 
     if (block?.markdown) {
@@ -52,39 +240,52 @@ export function exportV3ToMarkdown(blocks: (BlockResult | null)[]): string {
   }
 
   // Footer metadata from the last available block
-  const lastBlock = blocks[5] || blocks[4] || blocks[3] || blocks[2] || blocks[1];
-  if (lastBlock) {
-    lines.push(`Сгенерировано: ${new Date().toISOString()}`);
-    if (lastBlock.meta?.model) {
-      lines.push(`Модель: ${lastBlock.meta.model}`);
-    }
-    if (lastBlock.meta?.elapsedMs) {
-      lines.push(`Время последнего блока: ${(lastBlock.meta.elapsedMs / 1000).toFixed(1)}с`);
-    }
-    if (lastBlock.meta?.tokensUsed) {
-      lines.push(`Токены: prompt=${lastBlock.meta.tokensUsed.prompt}, completion=${lastBlock.meta.tokensUsed.completion}, total=${lastBlock.meta.tokensUsed.total}`);
-    }
+  const lastBlock = state.block5 || state.block4 || state.block3 || state.block2 || state.block1;
+  lines.push(`Сгенерировано: ${new Date().toISOString()}`);
+  if (lastBlock?.meta?.model) {
+    lines.push(`Модель: ${lastBlock.meta.model}`);
+  }
+  if (lastBlock?.meta?.elapsedMs) {
+    lines.push(`Время последнего блока: ${(lastBlock.meta.elapsedMs / 1000).toFixed(1)}с`);
+  }
+  if (lastBlock?.meta?.tokensUsed) {
+    lines.push(`Токены: prompt=${lastBlock.meta.tokensUsed.prompt}, completion=${lastBlock.meta.tokensUsed.completion}, total=${lastBlock.meta.tokensUsed.total}`);
   }
 
   return lines.join('\n');
 }
 
 // ============================================================
-// JSON Export (v3) — STEP 11.1
+// JSON Export
 // ============================================================
 
 /**
- * Export audit results as structured JSON.
- * Includes all block markdowns, orientation context, and checklist score.
+ * Export audit results as structured JSON: protocol identity, session meta,
+ * author framing / artefacts (§2), orientation context, five block markdowns
+ * and the qualitative verdict.
  */
 export function exportAuditJSON(
   state: PipelineStateV3,
-  checklistScore: ChecklistScoreResult | null,
+  extras?: AuditInputExtras,
 ): string {
+  const guided = exportableGuided(extras?.guided);
+  const materials = exportableMaterials(extras?.materials);
+
+  const input = {
+    text: state.meta.inputText,
+    mediaType: state.meta.mediaType,
+    ...(guided.length > 0
+      ? { guided: Object.fromEntries(guided.map((field) => [field.key, field.value])) }
+      : {}),
+    ...(materials.length > 0 ? { materials } : {}),
+  };
+
   return JSON.stringify({
+    protocol: PROTOCOL_NAME,
+    input,
     meta: state.meta,
     orientationContext: state.orientationContext,
-    checklistScore,
+    verdict: state.verdict,
     blocks: {
       1: state.block1?.markdown,
       2: state.block2?.markdown,
@@ -96,54 +297,80 @@ export function exportAuditJSON(
 }
 
 // ============================================================
-// HTML Export (v3) — STEP 11.2
+// HTML Export
 // ============================================================
 
+function framingSectionHtml(extras?: AuditInputExtras): string {
+  if (!hasFraming(extras)) return '';
+
+  const guided = exportableGuided(extras?.guided);
+  const materials = exportableMaterials(extras?.materials);
+
+  const guidedItems = guided
+    .map((field) => `<li><strong>${escapeHtml(field.label)}:</strong> ${escapeHtml(field.value)}</li>`)
+    .join('');
+
+  const materialItems = materials
+    .map((material) =>
+      `<li>${escapeHtml(material.label)} — ${escapeHtml(t.report.artefactChars.replace('{count}', String(material.text.length)))}</li>`,
+    )
+    .join('');
+
+  const guidedSection = guided.length > 0
+    ? `<h2>${escapeHtml(t.report.framing)}</h2><ul>${guidedItems}</ul>`
+    : '';
+  const materialsSection = materials.length > 0
+    ? `<h2>${escapeHtml(t.report.artefacts)}</h2><ul>${materialItems}</ul>`
+    : '';
+
+  return `${guidedSection}
+    ${materialsSection}`;
+}
+
+function verdictSectionHtml(verdict: AuditVerdict | null): string {
+  if (!verdict || verdict.bands.length === 0) {
+    return `<h2>${escapeHtml(t.verdict.title)}</h2><p><em>${escapeHtml(t.verdict.fallback)}</em></p>`;
+  }
+
+  const bandRows = verdict.bands
+    .map((band) => `<tr>
+        <td style="padding:6px;border:1px solid #e5e7eb;font-size:13px;">${escapeHtml(t.verdict.bands[band.key] ?? band.label)}</td>
+        <td style="padding:6px;border:1px solid #e5e7eb;font-size:13px;font-weight:600;">${escapeHtml(bandValueLabel(band.value))}</td>
+      </tr>`)
+    .join('');
+
+  const frontierRows = verdict.frontier
+    ? `<h3>${escapeHtml(t.verdict.frontier)}</h3><ul>${FRONTIER_KEYS
+        .map((key) => `<li>${escapeHtml(t.verdict.frontierLabels[key])}: ${verdict.frontier?.[key] ?? 0}</li>`)
+        .join('')}</ul>`
+    : '';
+
+  const closing = verdict.closingStatement
+    ? `<blockquote style="border-left:4px solid #e5e7eb;margin:16px 0;padding-left:12px;color:#374151;">${escapeHtml(verdict.closingStatement)}</blockquote>`
+    : '';
+
+  const confidence = verdict.confidence
+    ? `<p style="font-size:13px;"><strong>${escapeHtml(t.verdict.confidence)}:</strong> ${escapeHtml(bandValueLabel(verdict.confidence))}</p>`
+    : '';
+
+  return `<h2>${escapeHtml(t.verdict.title)}</h2>
+    <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+      <tbody>${bandRows}</tbody>
+    </table>
+    ${confidence}
+    <p style="font-size:13px;">${escapeHtml(t.verdict.issues)}: ${escapeHtml(problemCount(verdict))} · ${escapeHtml(t.verdict.recommendations)}: ${escapeHtml(recommendationCount(verdict))}</p>
+    ${frontierRows}
+    ${closing}`;
+}
+
 /**
- * Export audit results as a printable HTML page with styled checklist table.
+ * Export audit results as a printable HTML page with the author framing,
+ * the qualitative verdict and the five block markdowns.
  */
 export function exportAuditHTML(
   state: PipelineStateV3,
-  checklistScore: ChecklistScoreResult | null,
+  extras?: AuditInputExtras,
 ): string {
-  const statusBadge = (status: string) => {
-    const colors: Record<string, string> = {
-      PASS: 'background:#dcfce7;color:#166534;padding:2px 8px;border-radius:4px;font-size:12px;',
-      FAIL: 'background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:4px;font-size:12px;',
-      INSUFFICIENT_DATA: 'background:#f3f4f6;color:#6b7280;padding:2px 8px;border-radius:4px;font-size:12px;',
-    };
-    return `<span style="${colors[status] || colors.INSUFFICIENT_DATA}">${status}</span>`;
-  };
-
-  let checklistSection = '';
-  if (checklistScore) {
-    const rows = checklistScore.items
-      .filter(item => item.applicable)
-      .map(item => `<tr>
-        <td style="padding:6px;border:1px solid #e5e7eb;font-family:monospace;font-size:12px;">${item.id}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;font-size:13px;">${item.text}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;font-size:12px;text-align:center;">${item.level}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;text-align:center;">${statusBadge(item.status)}</td>
-        <td style="padding:6px;border:1px solid #e5e7eb;font-size:12px;color:#6b7280;">${item.evidence}</td>
-      </tr>`)
-      .join('');
-
-    checklistSection = `
-      <h2>Оценка чеклиста: ${checklistScore.fulfilled}/${checklistScore.totalApplicable} (${checklistScore.scorePercent}%)</h2>
-      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-        <thead>
-          <tr style="background:#f9fafb;">
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;font-size:12px;">ID</th>
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;font-size:12px;">Критерий</th>
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:center;font-size:12px;">Уровень</th>
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:center;font-size:12px;">Статус</th>
-            <th style="padding:8px;border:1px solid #e5e7eb;text-align:left;font-size:12px;">Доказательство</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
-  }
-
   const blockMap: Record<number, BlockResult | null> = {
     1: state.block1,
     2: state.block2,
@@ -151,13 +378,13 @@ export function exportAuditHTML(
     4: state.block4,
     5: state.block5,
   };
+
   const blockSections = [1, 2, 3, 4, 5].map(i => {
     const block = blockMap[i];
-    const label = BLOCK_LABELS[i];
     const content = block?.markdown
-      ? block.markdown.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      ? escapeHtml(block.markdown)
       : '<em>(данные отсутствуют)</em>';
-    return `<h2>Блок ${i}: ${label}</h2><div style="white-space:pre-wrap;font-size:14px;line-height:1.6;margin-bottom:24px;">${content}</div>`;
+    return `<h2>${escapeHtml(blockHeading(i))}</h2><div style="white-space:pre-wrap;font-size:14px;line-height:1.6;margin-bottom:24px;">${content}</div>`;
   }).join('\n');
 
   return `<!DOCTYPE html>
@@ -170,12 +397,15 @@ export function exportAuditHTML(
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 960px; margin: 0 auto; padding: 24px; color: #111827; }
     h1 { font-size: 24px; border-bottom: 2px solid #e5e7eb; padding-bottom: 8px; }
     h2 { font-size: 18px; margin-top: 24px; color: #374151; }
+    h3 { font-size: 15px; margin-top: 16px; color: #374151; }
     table { font-size: 13px; }
   </style>
 </head>
 <body>
   <h1>Universe Audit Protocol — Отчёт</h1>
-  ${checklistSection}
+  <p style="font-size:13px;color:#6b7280;">Протокол: ${escapeHtml(PROTOCOL_NAME)}</p>
+  ${framingSectionHtml(extras)}
+  ${verdictSectionHtml(state.verdict)}
   ${blockSections}
   <p style="color:#9ca3af;font-size:12px;margin-top:32px;">Сгенерировано: ${new Date().toISOString()}</p>
 </body>

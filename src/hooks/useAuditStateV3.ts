@@ -1,7 +1,7 @@
 /**
- * Universe Audit Protocol v3 — State Management
+ * Universe Audit Protocol — State Management
  * Zustand store with localStorage persistence.
- * 5-block pipeline, markdown-based results.
+ * v16: 5-block pipeline, markdown-based results, qualitative verdict.
  */
 
 import { create } from 'zustand';
@@ -13,7 +13,9 @@ import type {
   LLMConfig,
   MediaType,
   PipelinePhase,
-  ChecklistScoreResult,
+  AuditVerdict,
+  AuditMaterial,
+  GuidedContext,
 } from '../lib/audit/types-v3';
 
 // ============================================================
@@ -38,7 +40,12 @@ export interface AuditStateV3 {
   llmConfig: LLMConfig | null;
   inputText: string;
   mediaType: MediaType;
-  checklistScore: ChecklistScoreResult | null;
+  /** Optional author framing — switches the audit to guided mode (v16 §2) */
+  guided: GuidedContext;
+  /** Additional artefacts beyond the main text — material-aware mode (v16 §2) */
+  materials: AuditMaterial[];
+  /** Qualitative verdict (v16 §26.S) — replaces the legacy checklist score */
+  verdict: AuditVerdict | null;
 
   // Actions
   startAudit: () => void;
@@ -52,7 +59,10 @@ export interface AuditStateV3 {
   setLlmConfig: (config: LLMConfig) => void;
   setInputText: (text: string) => void;
   setMediaType: (type: MediaType) => void;
-  setChecklistScore: (score: ChecklistScoreResult | null) => void;
+  /** Merge a partial guided framing; empty strings are kept as-is and omitted at submit time */
+  setGuided: (partial: Partial<GuidedContext>) => void;
+  setMaterials: (materials: AuditMaterial[]) => void;
+  setVerdict: (verdict: AuditVerdict | null) => void;
   reset: () => void;
 }
 
@@ -77,7 +87,9 @@ const initialState = {
   llmConfig: null as LLMConfig | null,
   inputText: '',
   mediaType: 'narrative' as MediaType,
-  checklistScore: null as ChecklistScoreResult | null,
+  guided: {} as GuidedContext,
+  materials: [] as AuditMaterial[],
+  verdict: null as AuditVerdict | null,
 };
 
 const AUDIT_STATE_V3_STORAGE_KEY = 'audit-state-v3';
@@ -106,7 +118,7 @@ export const useAuditStateV3 = create<AuditStateV3>()(
           meta: null,
           streamingText: '',
           error: null,
-          checklistScore: null,
+          verdict: null,
         }),
 
       setBlockResult: (blockNumber, result) =>
@@ -150,7 +162,12 @@ export const useAuditStateV3 = create<AuditStateV3>()(
 
       setMediaType: (type) => set({ mediaType: type }),
 
-      setChecklistScore: (score) => set({ checklistScore: score }),
+      setGuided: (partial) =>
+        set((state) => ({ guided: { ...state.guided, ...partial } })),
+
+      setMaterials: (materials) => set({ materials }),
+
+      setVerdict: (verdict) => set({ verdict }),
 
       reset: () => set({ ...initialState }),
     }),
@@ -173,7 +190,9 @@ export const useAuditStateV3 = create<AuditStateV3>()(
         llmConfig: state.llmConfig,
         inputText: state.inputText,
         mediaType: state.mediaType,
-        checklistScore: state.checklistScore,
+        guided: state.guided,
+        materials: state.materials,
+        verdict: state.verdict,
       }),
       onRehydrateStorage: () => {
         return (state) => {
@@ -193,7 +212,7 @@ export const useAuditStateV3 = create<AuditStateV3>()(
                 meta: null,
                 streamingText: '',
                 error: null,
-                checklistScore: null,
+                verdict: null,
               });
             });
           }

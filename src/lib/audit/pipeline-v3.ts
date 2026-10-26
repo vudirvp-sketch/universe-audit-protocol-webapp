@@ -1,14 +1,15 @@
 /**
- * Pipeline V3 — 5-block sequential pipeline for Universe Audit Protocol v3.
+ * Pipeline V3 — 5-block sequential pipeline for UNIVERSE AUDIT PROTOCOL
+ * Ultimate Edition v16 (Causal / Human / Experiential World Audit).
  *
  * Each block = one or more focused LLM calls (chunked for free-plan compatibility).
- * Output = free-form markdown.
- * No structured parsing. Minimal context bridge between blocks.
+ * 13 requests total: 1 + 4 + 3 + 3 + 2.
+ * Output = free-form markdown report; Block 5 also emits the v16 §27 JSON block,
+ * which `extractAuditVerdict` parses into the qualitative verdict (no numeric score).
  *
- * v2 (F3): Blocks 2-3 are split into sub-requests (chunks) that each
+ * v2 (F3): Blocks 2-5 are split into sub-requests (chunks) that each
  * complete within the 300s proxy timeout on Cloudflare Workers free plan.
- * Blocks 4-5 are also chunked into 2 sub-requests each.
- * 3s delay between sub-requests avoids rate limits on free-tier models.
+ * RPM-based delay between sub-requests avoids rate limits on free-tier models.
  */
 
 import type {
@@ -31,13 +32,14 @@ import {
   buildBlock3SubPrompts,
   buildBlock4SubPrompts,
   buildBlock5SubPrompts,
+  buildExtraContextBlock,
 } from './prompts-v3';
 import {
   extractOrientationContext,
   extractWeaknessesSummary,
 } from './context-bridge';
 import { classifyLLMError } from './error-handler';
-import { runChecklistScoring } from './scoring';
+import { extractAuditVerdict } from './verdict';
 
 // Re-export for consumers
 export type { StreamingCallbacksV3 } from './types-v3';
@@ -79,7 +81,7 @@ export async function runAuditPipelineV3(
     block5: null,
     orientationContext: null,
     accumulatedWeaknesses: [],
-    checklistScore: null,
+    verdict: null,
     meta: {
       inputText: input.text,
       mediaType: input.mediaType,
@@ -104,8 +106,12 @@ export async function runAuditPipelineV3(
     // Default: 3 RPM → 20s delay; 60 RPM → 1s delay; minimum 1 second
     const rpmDelayMs = Math.max(1_000, Math.floor(60_000 / (llmConfig.rpmLimit || 3)));
 
+    // v16 §2 — author framing (guided mode) and additional artefacts
+    // (material-aware mode). Rendered once and injected into every request.
+    const extraContext = buildExtraContextBlock(input);
+
     // ============================================================
-    // Block 1: Orientation (single request)
+    // Block 1: Context and intent, world skeleton, fast screen (v16 §4-6)
     // ============================================================
     const block1Result = await executeChunkedBlock(
       1,
@@ -115,7 +121,7 @@ export async function runAuditPipelineV3(
       modelCaps,
       callbacks,
       abortSignal,
-      () => [buildBlock1Prompt(input.text, input.mediaType)],
+      () => [buildBlock1Prompt(input.text, input.mediaType, extraContext)],
       rpmDelayMs,
     );
     state.block1 = block1Result;
@@ -124,7 +130,7 @@ export async function runAuditPipelineV3(
     state.orientationContext = extractOrientationContext(block1Result.markdown);
 
     // ============================================================
-    // Block 2: Mechanism (L1) — chunked into 4 sub-requests
+    // Block 2: Level 1 — world mechanism (v16 §7.1-7.12) — 4 sub-requests
     // ============================================================
     const block2Result = await executeChunkedBlock(
       2,
@@ -134,14 +140,14 @@ export async function runAuditPipelineV3(
       modelCaps,
       callbacks,
       abortSignal,
-      () => buildBlock2SubPrompts(input.text, input.mediaType, state.orientationContext!, state.block1?.markdown),
+      () => buildBlock2SubPrompts(input.text, input.mediaType, state.orientationContext!, state.block1?.markdown, extraContext),
       rpmDelayMs,
     );
     state.block2 = block2Result;
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block2Result.markdown));
 
     // ============================================================
-    // Block 3: Body + Psyche (L2+L3) — chunked into 2 sub-requests
+    // Block 3: Levels 1B-3 — epistemic, human, cultural, characters, psyche (v16 §8-12) — 3 sub-requests
     // ============================================================
     const block3Result = await executeChunkedBlock(
       3,
@@ -157,6 +163,7 @@ export async function runAuditPipelineV3(
         state.orientationContext!,
         state.accumulatedWeaknesses[0], // Block 2 weaknesses
         state.block1?.markdown,
+        extraContext,
       ),
       rpmDelayMs,
     );
@@ -164,7 +171,7 @@ export async function runAuditPipelineV3(
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block3Result.markdown));
 
     // ============================================================
-    // Block 4: Meta (L4) — chunked into 2 sub-requests
+    // Block 4: Levels 4-8 — experience, story capacity, theme, medium, memorability (v16 §13-17) — 3 sub-requests
     // ============================================================
     const block4Result = await executeChunkedBlock(
       4,
@@ -181,6 +188,7 @@ export async function runAuditPipelineV3(
         state.accumulatedWeaknesses[0], // Block 2 weaknesses
         state.accumulatedWeaknesses[1], // Block 3 weaknesses
         state.block1?.markdown,
+        extraContext,
       ),
       rpmDelayMs,
     );
@@ -188,7 +196,8 @@ export async function runAuditPipelineV3(
     state.accumulatedWeaknesses.push(extractWeaknessesSummary(block4Result.markdown));
 
     // ============================================================
-    // Block 5: Synthesis + Recommendations — chunked into 2 sub-requests
+    // Block 5: Level 9 + synthesis — failure classes, root issues, recommendations,
+    // capability frontier, verdict (v16 §18-27) — 2 sub-requests
     // ============================================================
     const block5Result = await executeChunkedBlock(
       5,
@@ -207,27 +216,24 @@ export async function runAuditPipelineV3(
         state.accumulatedWeaknesses[2], // Block 4
         state.block1?.markdown,
         input.referenceComparison,
+        extraContext,
       ),
       rpmDelayMs,
     );
     state.block5 = block5Result;
 
     // ============================================================
-    // Run final checklist scoring (non-blocking — audit always completes)
+    // Extract the machine-readable verdict (v16 §26.S / §27)
+    // Non-blocking — a malformed JSON block never breaks the audit.
     // ============================================================
-    const allMarkdowns = [
-      state.block1?.markdown,
-      state.block2?.markdown,
-      state.block3?.markdown,
-      state.block4?.markdown,
-      state.block5?.markdown,
-    ].filter(Boolean) as string[];
+    const finalMarkdown = state.block5?.markdown ?? '';
 
     try {
-      state.checklistScore = await runChecklistScoring(allMarkdowns, input.mediaType, llmConfig, abortSignal);
-    } catch (scoringError) {
-      // Scoring failure must not break the pipeline
-      console.warn('Checklist scoring failed (non-blocking):', scoringError);
+      state.verdict = extractAuditVerdict(finalMarkdown);
+    } catch (verdictError) {
+      // Verdict extraction failure must not break the pipeline
+      console.warn('Verdict extraction failed (non-blocking):', verdictError);
+      state.verdict = null;
     }
 
     // ============================================================
