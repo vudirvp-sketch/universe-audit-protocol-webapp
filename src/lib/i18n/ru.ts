@@ -217,13 +217,18 @@ export const t = {
     model: 'Модель',
     modelDefault: 'По умолчанию: {model}',
     modelDocsLink: 'Список актуальных моделей →',
+    refreshModels: 'Обновить список моделей',
+    modelListHint:
+      'Список моделей подтягивается из API провайдера и запоминается на сутки — обновлять вручную не нужно. Кнопка справа запрашивает список заново (например, если провайдер выпустил новую модель).',
+    modelNotInCatalog:
+      'Этой модели нет в текущем списке провайдера: она могла устареть. Выберите модель из подсказок или нажмите «Обновить список».',
     apiKey: 'API Ключ',
     apiKeyPlaceholder: 'Введите ваш API ключ...',
     transport: 'Подключение к LLM',
     transportDirect: 'Напрямую из браузера',
     transportRelay: 'Локальный релей (127.0.0.1)',
     transportHint:
-      'Всё выполняется на вашей машине. «Напрямую» — браузер сам обращается к API провайдера (нужна поддержка CORS). «Локальный релей» — маленький сервер на 127.0.0.1 пересылает запрос за вас; нужен только для провайдеров без CORS и умеет держать ключ у себя.',
+      '«Напрямую» — браузер сам обращается к API провайдера (CORS проверен 26.10.2026: Gemini, Anthropic, OpenAI, OpenRouter, DeepSeek, Groq, Mistral, xAI, Qwen, Kimi, Z.AI). «Локальный релей» — маленький сервер на 127.0.0.1:8787; нужен только там, где браузерные запросы блокируются (например, Together AI), и умеет держать ключ у себя.',
     relayUrl: 'URL локального релея',
     relayUrlHint:
       'Запустите релей командой `node relay/relay.mjs` (или `npm run relay`) и оставьте http://127.0.0.1:8787. Ключ можно задать в переменной окружения LLM_API_KEY — тогда в браузере его вводить не нужно.',
@@ -320,16 +325,16 @@ export const t = {
         step3: 'Очень конкурентные цены',
       },
       qwen: {
-        step1Text: 'Перейдите в Alibaba DashScope',
-        step1Url: 'https://dashscope.console.aliyun.com/',
+        step1Text: 'Перейдите в Alibaba Cloud Model Studio (международный)',
+        step1Url: 'https://modelstudio.console.alibabacloud.com/',
         step2: 'Создайте API ключ',
-        step3: '',
+        step3: 'Ключ .com-региона не подойдёт: приложение ходит на dashscope-intl',
       },
       kimi: {
-        step1Text: 'Перейдите на Платформу Moonshot',
-        step1Url: 'https://platform.moonshot.cn/',
+        step1Text: 'Перейдите на Платформу Moonshot (международная)',
+        step1Url: 'https://platform.moonshot.ai/',
         step2: 'Создайте API ключ',
-        step3: '',
+        step3: 'Ключ от .cn-региона не подойдёт к api.moonshot.ai',
       },
       xai: {
         step1Text: 'Перейдите в Консоль xAI',
@@ -338,10 +343,10 @@ export const t = {
         step3: '',
       },
       zai: {
-        step1Text: 'Обратитесь в Z.AI для получения доступа к API',
-        step1Url: '',
-        step2: 'Введите ваш API ключ здесь',
-        step3: '',
+        step1Text: 'Перейдите в Z.AI (международная платформа GLM)',
+        step1Url: 'https://z.ai/',
+        step2: 'Создайте API ключ в консоли',
+        step3: 'OpenAI-совместимый endpoint: api.z.ai/api/paas/v4',
       },
     },
   },

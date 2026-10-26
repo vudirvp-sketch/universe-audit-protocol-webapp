@@ -4,7 +4,7 @@
 // to prevent React hydration mismatch in static-export Next.js apps.
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { LLM_PROVIDERS, RELAY_URL_DEFAULT } from '@/lib/llm-client';
+import { LLM_PROVIDERS, RELAY_URL_DEFAULT, resolveRetiredModel } from '@/lib/llm-client';
 import type { LLMProvider, LLMTransport } from '@/lib/llm-client';
 import { createSafeStorage } from '@/lib/safe-storage';
 
@@ -265,14 +265,11 @@ export const useSettings = create<SettingsState>()(
             if (!state.rpmLimit || state.rpmLimit <= 0) {
               state.rpmLimit = PROVIDER_RPM_DEFAULTS[state.provider] || PROVIDER_RPM_DEFAULTS.zai;
             }
-            // Migration: auto-upgrade outdated default models
-            // gemini-2.0-flash → gemini-2.5-flash (Google's recommended default)
-            if (state.provider === 'google' && state.model === 'gemini-2.0-flash') {
-              state.model = 'gemini-2.5-flash';
-            }
-            // claude-3-5-sonnet-20241022 → claude-sonnet-4-6 (Anthropic's recommended default)
-            if (state.provider === 'anthropic' && (state.model === 'claude-3-5-sonnet-20241022' || state.model === 'claude-3-5-sonnet')) {
-              state.model = 'claude-sonnet-4-6';
+            // Migration: a saved model that the provider has since retired is
+            // replaced with the current default instead of failing with 404.
+            const replacement = resolveRetiredModel(state.provider, state.model);
+            if (replacement) {
+              state.model = replacement;
             }
             // If model is null, set from provider's defaultModel
             if (!state.model) {

@@ -64,17 +64,21 @@ describe('buildProviderAuthHeaders — direct browser transport', () => {
 });
 
 describe('browser CORS support table', () => {
-  it('marks the providers the app supports directly in the browser', () => {
+  it('marks the providers verified to answer a browser Origin with CORS headers', () => {
+    // Verified 2026-10-26 by probing each API with an Origin header.
     expect(PROVIDER_BROWSER_CORS.google).toBe('yes');
     expect(PROVIDER_BROWSER_CORS.anthropic).toBe('yes');
     expect(PROVIDER_BROWSER_CORS.openrouter).toBe('yes');
     expect(PROVIDER_BROWSER_CORS.deepseek).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.openai).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.groq).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.mistral).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.xai).toBe('yes');
   });
 
-  it('marks CORS-blocked / unverified providers so the UI can suggest the relay', () => {
-    expect(PROVIDER_BROWSER_CORS.openai).toBe('no');
-    expect(PROVIDER_BROWSER_CORS.groq).toBe('unknown');
-    expect(PROVIDER_BROWSER_CORS.mistral).toBe('unknown');
+  it('leaves unverified providers as unknown instead of pretending both ways', () => {
+    expect(PROVIDER_BROWSER_CORS.together).toBe('unknown');
+    expect(PROVIDER_BROWSER_CORS.custom).toBe('unknown');
   });
 });
 

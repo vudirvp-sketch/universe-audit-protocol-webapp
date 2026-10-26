@@ -40,20 +40,22 @@ export interface LLMProviderConfig {
  */
 export type BrowserCorsSupport = 'yes' | 'no' | 'unknown';
 
+// Verified 2026-10-26 by probing each API with a browser Origin header
+// (`Access-Control-Allow-Origin` on GET and on the OPTIONS preflight).
 export const PROVIDER_BROWSER_CORS: Record<LLMProvider, BrowserCorsSupport> = {
   google: 'yes',
-  anthropic: 'yes',
-  openrouter: 'yes',
+  anthropic: 'yes', // yes only with `anthropic-dangerous-direct-browser-access`
+  openrouter: 'yes', // the model list is even public
   deepseek: 'yes',
-  openai: 'no',
-  mistral: 'unknown',
-  groq: 'unknown',
-  together: 'unknown',
-  xai: 'unknown',
+  openai: 'yes',
+  mistral: 'yes',
+  groq: 'yes',
+  xai: 'yes',
+  qwen: 'yes',
+  kimi: 'yes',
+  zai: 'yes',
+  together: 'unknown', // Cloudflare answers 403 without CORS headers from some networks
   huggingface: 'unknown',
-  qwen: 'unknown',
-  kimi: 'unknown',
-  zai: 'unknown',
   custom: 'unknown',
 };
 
@@ -322,25 +324,65 @@ export function resolveMaxOutputTokens(
 // ============================================================================
 
 /**
- * Recommended models per provider — known-good names with reliable availability.
- * Useful for UI "recommended" badges or default selections.
+ * Offline fallback catalogs (last verified 2026-10-26).
+ *
+ * The settings screen loads the live catalog from each provider's API and uses
+ * these lists only when that call cannot be made (no key yet, relay down,
+ * network/CORS failure). Treat them as a floor, not as the source of truth:
+ * `src/lib/model-catalog.ts` owns the live discovery.
  */
 export const PREFERRED_MODELS: Record<LLMProvider, string[]> = {
-  zai:         ['default'],
-  openai:      ['gpt-4.1-mini', 'gpt-4o-mini'],
-  anthropic:   ['claude-sonnet-4-6', 'claude-sonnet-4-20250514', 'claude-3-5-haiku'],
-  google:      ['gemini-2.5-flash', 'gemini-2.0-flash'],
-  mistral:     ['mistral-large-latest'],
-  deepseek:    ['deepseek-chat', 'deepseek-reasoner'],
-  qwen:        ['qwen-turbo'],
-  kimi:        ['moonshot-v1-8k'],
-  groq:        ['llama-3.3-70b-versatile', 'qwen3-32b'],
-  openrouter:  ['anthropic/claude-sonnet-4'],
-  huggingface: ['meta-llama/Llama-3.2-3B-Instruct'],
-  together:    ['meta-llama/Llama-3.2-3B-Instruct-Turbo'],
-  xai:         ['grok-3-mini-fast'],
+  zai:         ['glm-5.3', 'glm-5.3-flash', 'glm-5.2', 'glm-4.6'],
+  openai:      ['gpt-6.1-sol', 'gpt-6-luna', 'gpt-6-astra', 'gpt-6.1-sol-pro', 'gpt-6-luna-pro'],
+  anthropic:   ['claude-sonnet-5.5', 'claude-opus-5.5', 'claude-haiku-5.5', 'claude-fable-5.1'],
+  google:      ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-4-argon'],
+  mistral:     ['mistral-large-4-0', 'mistral-medium-3-5', 'ministral-14b-2512', 'devstral-2512'],
+  deepseek:    ['deepseek-v4.1-flash', 'deepseek-v4-pro', 'deepseek-v4-flash', 'deepseek-v3.2'],
+  qwen:        ['qwen3.8-max', 'qwen3.8-flash', 'qwen3.8-plus', 'qwen-plus'],
+  kimi:        ['kimi-k3.1-pro', 'kimi-k3', 'kimi-k2.7-code', 'kimi-k2.6'],
+  groq:        ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'llama-3.3-70b-versatile'],
+  openrouter:  [
+    'anthropic/claude-sonnet-5.5',
+    'google/gemini-3.8-flash',
+    'deepseek/deepseek-v4.1-flash',
+    'openai/gpt-6-luna',
+    'qwen/qwen3.8-max-prime',
+  ],
+  huggingface: ['meta-llama/Llama-3.3-70B-Instruct', 'meta-llama/Llama-3.2-3B-Instruct'],
+  together:    ['deepseek-ai/DeepSeek-V4', 'Qwen/Qwen3.8-235B'],
+  xai:         ['grok-4.7', 'grok-4.6', 'grok-4.5', 'grok-4.20'],
   custom:      [],
 };
+
+/**
+ * Model ids that older releases wrote into saved settings and that providers
+ * have since retired, keyed `provider/model`. `useSettings` migrates them to
+ * the current default on rehydration instead of failing every request with 404.
+ */
+export const RETIRED_DEFAULT_MODELS: Record<string, string> = {
+  'google/gemini-2.5-flash': 'gemini-3.8-flash',
+  'google/gemini-2.0-flash': 'gemini-3.8-flash',
+  'google/gemini-1.5-flash': 'gemini-3.8-flash',
+  'anthropic/claude-sonnet-4-6': 'claude-sonnet-5.5',
+  'anthropic/claude-sonnet-4-20250514': 'claude-sonnet-5.5',
+  'anthropic/claude-3-5-sonnet': 'claude-sonnet-5.5',
+  'anthropic/claude-3-5-haiku': 'claude-haiku-5.5',
+  'openai/gpt-4.1-mini': 'gpt-6-luna',
+  'openai/gpt-4o-mini': 'gpt-6-luna',
+  'deepseek/deepseek-chat': 'deepseek-v4.1-flash',
+  'deepseek/deepseek-reasoner': 'deepseek-v4-pro',
+  'mistral/mistral-large-latest': 'mistral-large-4-0',
+  'kimi/moonshot-v1-8k': 'kimi-k3.1-pro',
+  'qwen/qwen-turbo': 'qwen3.8-flash',
+  'xai/grok-3-mini-fast': 'grok-4.7',
+  'zai/default': 'glm-5.3',
+};
+
+/** Replacement for a retired saved model id, or null when it is still current. */
+export function resolveRetiredModel(provider: LLMProvider, model: string | null | undefined): string | null {
+  if (!model) return null;
+  return RETIRED_DEFAULT_MODELS[`${provider}/${model}`] ?? null;
+}
 
 // ============================================================================
 // PROVIDER URL MAPPING
@@ -376,12 +418,12 @@ export function getProviderUrl(provider: LLMProvider, model: string): string {
     case 'groq':        return 'https://api.groq.com/openai/v1/chat/completions';
     case 'openrouter':  return 'https://openrouter.ai/api/v1/chat/completions';
     case 'mistral':     return 'https://api.mistral.ai/v1/chat/completions';
-    case 'qwen':        return 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
-    case 'kimi':        return 'https://api.moonshot.cn/v1/chat/completions';
+    case 'qwen':        return 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions';
+    case 'kimi':        return 'https://api.moonshot.ai/v1/chat/completions';
     case 'xai':         return 'https://api.x.ai/v1/chat/completions';
     case 'together':    return 'https://api.together.xyz/v1/chat/completions';
     case 'huggingface': return `https://api-inference.huggingface.co/models/${safeModelPath}`;
-    case 'zai':         return 'https://api.z.ai/v1/chat/completions';
+    case 'zai':         return 'https://api.z.ai/api/paas/v4/chat/completions';
     default:            return ''; // Custom provider URL entered by user
   }
 }
@@ -461,7 +503,9 @@ export function buildProviderAuthHeaders(
     case 'anthropic':
       return {
         'x-api-key': apiKey,
-        'anthropic-version': '2024-10-22',
+        // 2023-06-01 is the only version value Anthropic accepts; the old
+        // 2024-10-22 was the date of a beta header, not an API version.
+        'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       };
     case 'google':
@@ -522,18 +566,18 @@ function combineAbortSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal | un
 
 export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
   zai: {
-    name: 'Z.AI',
-    baseUrl: 'https://api.z.ai/v1',
-    defaultModel: 'default',
+    name: 'Z.AI (GLM)',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    defaultModel: 'glm-5.3',
     headers: { 'X-Z-AI-From': 'Z' },
-    modelDocsUrl: 'https://z.ai/docs',
+    modelDocsUrl: 'https://docs.z.ai/guides/overview/pricing',
   },
 
   openai: {
     name: 'OpenAI',
     baseUrl: 'https://api.openai.com/v1',
     apiKeyPrefix: 'sk-',
-    defaultModel: 'gpt-4.1-mini',
+    defaultModel: 'gpt-6.1-sol',
     modelDocsUrl: 'https://platform.openai.com/docs/models',
   },
 
@@ -541,14 +585,14 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     name: 'Anthropic (Claude)',
     baseUrl: 'https://api.anthropic.com/v1',
     apiKeyPrefix: 'sk-ant-',
-    defaultModel: 'claude-sonnet-4-6',
+    defaultModel: 'claude-sonnet-5.5',
     modelDocsUrl: 'https://docs.anthropic.com/en/docs/about-claude/models',
   },
 
   google: {
     name: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-    defaultModel: 'gemini-2.5-flash',
+    defaultModel: 'gemini-3.8-flash',
     modelDocsUrl: 'https://ai.google.dev/gemini-api/docs/models',
   },
 
@@ -556,7 +600,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     name: 'Mistral AI',
     baseUrl: 'https://api.mistral.ai/v1',
     apiKeyPrefix: 'sk-',
-    defaultModel: 'mistral-large-latest',
+    defaultModel: 'mistral-large-4-0',
     modelDocsUrl: 'https://docs.mistral.ai/getting-started/models/models_overview/',
   },
 
@@ -564,41 +608,43 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
     name: 'DeepSeek',
     baseUrl: 'https://api.deepseek.com/v1',
     apiKeyPrefix: 'sk-',
-    defaultModel: 'deepseek-chat',
+    defaultModel: 'deepseek-v4.1-flash',
     modelDocsUrl: 'https://api-docs.deepseek.com/quick_start/pricing',
   },
 
   qwen: {
     name: 'Alibaba Qwen (通义千问)',
-    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    // The .com host is the China region; international keys live on dashscope-intl.
+    baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
     apiKeyPrefix: 'sk-',
-    defaultModel: 'qwen-turbo',
-    modelDocsUrl: 'https://help.aliyun.com/zh/model-studio/getting-started/models',
+    defaultModel: 'qwen3.8-max',
+    modelDocsUrl: 'https://www.alibabacloud.com/help/en/model-studio/models',
   },
 
   kimi: {
     name: 'Moonshot Kimi',
-    baseUrl: 'https://api.moonshot.cn/v1',
+    // .ai is the international endpoint, .cn is China-only.
+    baseUrl: 'https://api.moonshot.ai/v1',
     apiKeyPrefix: 'sk-',
-    defaultModel: 'moonshot-v1-8k',
-    modelDocsUrl: 'https://platform.moonshot.cn/docs/intro',
+    defaultModel: 'kimi-k3.1-pro',
+    modelDocsUrl: 'https://platform.moonshot.ai/docs/intro',
   },
 
   groq: {
     name: 'Groq',
     baseUrl: 'https://api.groq.com/openai/v1',
     apiKeyPrefix: 'gsk_',
-    defaultModel: 'llama-3.3-70b-versatile',
+    defaultModel: 'openai/gpt-oss-120b',
     modelDocsUrl: 'https://console.groq.com/docs/models',
   },
 
   openrouter: {
     name: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    defaultModel: 'anthropic/claude-sonnet-4',
+    defaultModel: 'anthropic/claude-sonnet-5.5',
     modelDocsUrl: 'https://openrouter.ai/models',
     headers: {
-      'HTTP-Referer': 'https://universe-audit-protocol.pages.dev',
+      'HTTP-Referer': 'https://vudirvp-sketch.github.io/universe-audit-protocol-webapp/',
       'X-Title': 'Universe Audit Protocol',
     },
   },
@@ -606,21 +652,21 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
   huggingface: {
     name: 'Hugging Face',
     baseUrl: 'https://api-inference.huggingface.co/models',
-    defaultModel: 'meta-llama/Llama-3.2-3B-Instruct',
+    defaultModel: 'meta-llama/Llama-3.3-70B-Instruct',
     modelDocsUrl: 'https://huggingface.co/docs/api-inference/index',
   },
 
   together: {
     name: 'Together AI',
     baseUrl: 'https://api.together.xyz/v1',
-    defaultModel: 'meta-llama/Llama-3.2-3B-Instruct-Turbo',
+    defaultModel: 'deepseek-ai/DeepSeek-V4',
     modelDocsUrl: 'https://docs.together.ai/docs/inference-models',
   },
 
   xai: {
     name: 'xAI (Grok)',
     baseUrl: 'https://api.x.ai/v1',
-    defaultModel: 'grok-3-mini-fast',
+    defaultModel: 'grok-4.7',
     modelDocsUrl: 'https://docs.x.ai/docs/models',
   },
 

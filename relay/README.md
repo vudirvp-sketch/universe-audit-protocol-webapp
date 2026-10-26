@@ -93,13 +93,33 @@ Auth injected by the relay (the client's own headers are not forwarded):
 
 | provider | headers added |
 | --- | --- |
-| `anthropic` | `x-api-key: <key>`, `anthropic-version: 2024-10-22` |
+| `anthropic` | `x-api-key: <key>`, `anthropic-version: 2023-06-01` |
 | `google` | `x-goog-api-key: <key>` (header — the key is **not** added to the URL) |
 | `openrouter` | `Authorization: Bearer <key>`, `HTTP-Referer`, `X-Title` |
 | everything else, incl. `custom` | `Authorization: Bearer <key>` |
 
 The upstream status code and response body are returned as-is.
 `Cache-Control: no-store` is always set on `/api/*`.
+
+### `POST /api/models`
+
+Forwards a provider's model-list `GET` so the settings screen can show the live
+catalog even when the browser cannot reach the provider directly:
+
+```json
+{ "provider": "openai", "apiKey": "sk-... (optional with an env key)", "targetUrl": "https://api.openai.com/v1/models" }
+```
+
+- Same provider allowlist and the same host pinning as `/api/llm`: the host in
+  `targetUrl` must be one of that provider's API hosts.
+- The relay injects the same auth headers as for chat calls and answers with the
+  provider's status and JSON body unchanged (the browser parses it, so the relay
+  carries no per-provider schema).
+- `openrouter` is the only provider allowed **without** a key — its catalog is
+  public. Every other provider answers `400 missing_api_key` when neither the
+  body nor the environment supplies one.
+- Methods other than `POST` → `405`. Always `Cache-Control: no-store`; the key
+  and the body are never logged.
 
 **Streaming.** Send `Accept: text/event-stream`; when the provider answers
 `2xx`, the response body is forwarded chunk by chunk (headers are flushed
@@ -157,9 +177,10 @@ node relay/relay.mjs --port 8787 --dir out
   A poisoned browser `Host` (`evil.example`) gets `403` before routing.
 - **Origin guard.** Browser `Origin` must be loopback or listed in
   `ALLOWED_ORIGINS`. No wildcard CORS headers are ever emitted.
-- **No open relay.** `targetUrl` is pinned to the declared provider's API host;
-  `custom` requires an explicit `ALLOWED_CUSTOM_HOSTS` entry. `https://` only,
-  no credentials in the URL, default port only.
+- **No open relay.** `targetUrl` is pinned to the declared provider's API host
+  (for both `/api/llm` and `/api/models`); `custom` requires an explicit
+  `ALLOWED_CUSTOM_HOSTS` entry. `https://` only, no credentials in the URL,
+  default port only.
 - **Key handling.** With `LLM_API_KEY`/`LLM_API_KEY_<PROVIDER>` set, the key
   never enters the page or the request body. The relay never writes a key,
   a request body, or a full target URL to the log; it logs only
@@ -194,8 +215,9 @@ npx vitest run __tests__/relay --reporter=dot
 The suite is in-process (no listening sockets, provider `fetch` is stubbed) and
 covers: static serving + SPA fallback + traversal, Host/Origin guards, provider
 host pinning, per-provider auth headers, env-key precedence, real-byte body
-limit, health, no-store headers, streaming passthrough, timeouts, and the
-"no key/body in logs" rule.
+limit, health, no-store headers, streaming passthrough, timeouts, the
+`/api/models` catalog proxy (including the keyless OpenRouter exception), and
+the "no key/body in logs" rule.
 
 ## 8. Library API
 

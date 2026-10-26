@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server, ShieldCheck } from 'lucide-react';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server, ShieldCheck, RefreshCw } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
@@ -39,7 +39,6 @@ import {
   type LLMProvider,
   type LLMTransport,
   createLLMClient,
-  PREFERRED_MODELS,
   getModelCapabilities,
   validateApiKey,
   validateRelayUrl,
@@ -47,6 +46,12 @@ import {
   PROVIDER_BROWSER_CORS,
   RELAY_URL_DEFAULT,
 } from '@/lib/llm-client';
+import {
+  getStaticModels,
+  isPublicModelList,
+  loadModelCatalog,
+  type ModelCatalogResult,
+} from '@/lib/model-catalog';
 import { t } from '@/lib/i18n/ru';
 
 interface SettingsDialogProps {
@@ -97,6 +102,61 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     success: false,
     error: null,
   });
+  // Live model catalog: fetched from the provider's own API, cached for a day.
+  const [catalog, setCatalog] = React.useState<ModelCatalogResult | null>(null);
+  const [catalogLoading, setCatalogLoading] = React.useState(false);
+
+  type CatalogInputs = { key: string; transport: LLMTransport; relay: string };
+
+  const refreshCatalog = React.useCallback(async (force: boolean, inputs: CatalogInputs) => {
+    // Yield first: the effect that calls this must not set state synchronously.
+    await Promise.resolve();
+    const trimmedKey = inputs.key.trim() || apiKey || '';
+
+    if (inputs.transport === 'direct' && !trimmedKey && !isPublicModelList(provider)) {
+      setCatalog({
+        ids: getStaticModels(provider),
+        source: 'fallback',
+        fetchedAt: null,
+        error: 'Сначала укажите API-ключ — пока показан встроенный список моделей.',
+      });
+      return;
+    }
+
+    setCatalogLoading(true);
+    try {
+      const result = await loadModelCatalog({
+        provider,
+        apiKey: trimmedKey,
+        transport: inputs.transport,
+        relayUrl: inputs.relay,
+        // Opening the dialog trusts a fresh cache; the refresh button does not.
+        preferCache: !force,
+      });
+      setCatalog(result);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, [provider, apiKey]);
+
+  const currentCatalogInputs: CatalogInputs = {
+    key: inputKey,
+    transport: inputTransport,
+    relay: inputRelayUrl || RELAY_URL_DEFAULT,
+  };
+
+  // Refresh when the dialog opens or the provider/transport changes. A fresh
+  // cache answers immediately; a stale one is re-fetched in the background.
+  // Typing a key must not refetch on every keystroke — the button does that.
+  React.useEffect(() => {
+    if (!open) return;
+    // Deferred so the refresh never sets state synchronously inside the effect.
+    const timer = setTimeout(() => {
+      void refreshCatalog(false, currentCatalogInputs);
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, provider, inputTransport]);
 
   // Sync inputs with stored settings when dialog opens
   React.useEffect(() => {
@@ -294,6 +354,35 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     ? normalizeCustomBaseUrl(inputBaseUrl.trim()).error ?? null
     : null;
 
+  // Model picker: live provider catalog, falling back to the bundled list.
+  const staticModels = getStaticModels(provider);
+  const catalogIds = catalog?.ids ?? [];
+  const modelOptions = Array.from(new Set([
+    ...catalogIds,
+    ...staticModels,
+    ...(inputModel.trim() ? [inputModel.trim()] : []),
+  ]));
+  const catalogFetchedAt = catalog?.fetchedAt
+    ? new Date(catalog.fetchedAt).toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+  const modelMissingFromCatalog = Boolean(
+    catalog?.source === 'api' && inputModel.trim() && !catalogIds.includes(inputModel.trim()),
+  );
+  const catalogStatusText = catalogLoading
+    ? 'Запрашиваем список моделей у провайдера…'
+    : !catalog
+      ? ''
+      : catalog.source === 'api'
+        ? `Список из API: ${catalogIds.length} моделей, обновлён ${catalogFetchedAt}`
+        : catalog.source === 'cache'
+          ? `Список из кэша: ${catalogIds.length} моделей (${catalogFetchedAt})`
+          : `Встроенный список: ${staticModels.length} моделей. ${catalog.error ?? ''}`.trim();
+
   // The settings form body — shared between Dialog (desktop) and Sheet (mobile)
   const settingsForm = (
     <>
@@ -385,23 +474,46 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               <Globe className="h-4 w-4" />
               {t.settings.model}
             </Label>
-            <Input
-              placeholder={currentProvider?.defaultModel || 'model-name'}
-              value={inputModel}
-              onChange={(e) => setInputModel(e.target.value)}
-              list={`model-list-${provider}`}
-            />
-            {/* Datalist with recommended models for auto-detection (11.3) */}
-            {PREFERRED_MODELS[provider] && PREFERRED_MODELS[provider].length > 0 && (
-              <datalist id={`model-list-${provider}`}>
-                {PREFERRED_MODELS[provider].map((m) => (
-                  <option key={m} value={m} />
-                ))}
-              </datalist>
-            )}
+            <div className="flex gap-2">
+              <Input
+                placeholder={currentProvider?.defaultModel || 'model-name'}
+                value={inputModel}
+                onChange={(e) => setInputModel(e.target.value)}
+                list={`model-list-${provider}`}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                onClick={() => void refreshCatalog(true, currentCatalogInputs)}
+                disabled={catalogLoading}
+                title={t.settings.refreshModels}
+                aria-label={t.settings.refreshModels}
+              >
+                <RefreshCw className={`h-4 w-4 ${catalogLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+            {/* Datalist from the provider's live catalog (cached for a day) */}
+            <datalist id={`model-list-${provider}`}>
+              {modelOptions.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
             <p className="text-sm text-muted-foreground">
               {t.settings.modelDefault.replace('{model}', currentProvider?.defaultModel || '')}
             </p>
+            {catalogStatusText && (
+              <p className={`text-sm ${catalog?.source === 'fallback' ? 'text-severity-warning' : 'text-muted-foreground'}`}>
+                {catalogStatusText}
+              </p>
+            )}
+            {modelMissingFromCatalog && (
+              <p className="text-sm text-severity-warning">
+                {t.settings.modelNotInCatalog}
+              </p>
+            )}
+            <p className="text-sm text-muted-foreground">{t.settings.modelListHint}</p>
             {currentProvider?.modelDocsUrl && (
               <p className="text-sm">
                 <a
@@ -690,15 +802,14 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 return (
                   <ol className="list-decimal list-inside space-y-1">
                     <li>
-                      {instructions.step1Url ? (
+                      {instructions.step1Text}
+                      {instructions.step1Url && (
                         <>
-                          {instructions.step1Text}{' '}
+                          {' '}
                           <a href={instructions.step1Url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
                             {instructions.step1Url.replace(/https?:\/\//, '').split('/')[0]}
                           </a>
                         </>
-                      ) : (
-                        instructions.step1Text
                       )}
                     </li>
                     <li>{instructions.step2}</li>

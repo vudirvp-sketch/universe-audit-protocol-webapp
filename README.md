@@ -123,22 +123,44 @@ No export contains a checklist score, a percentage or an `X/52` counter.
 
 | Provider | Browser (CORS) | Auth Method | Default Model | Free Tier? |
 |----------|----------------|-------------|---------------|------------|
-| Z.AI | unknown → relay | Bearer token | default | - |
-| OpenAI | **no → relay** | Bearer token | gpt-4.1-mini | - |
-| Anthropic | yes | x-api-key + `anthropic-dangerous-direct-browser-access` | claude-sonnet-4-6 | - |
-| Google Gemini | yes | `x-goog-api-key` header | gemini-2.5-flash | Yes |
-| Mistral | unknown → relay | Bearer token | mistral-large-latest | - |
-| DeepSeek | yes | Bearer token | deepseek-chat | - |
-| Qwen | unknown → relay | Bearer token | qwen-turbo | - |
-| Kimi | unknown → relay | Bearer token | moonshot-v1-8k | - |
-| Groq | unknown → relay | Bearer token | llama-3.3-70b-versatile | Yes |
-| OpenRouter | yes | Bearer token | anthropic/claude-sonnet-4 | Yes |
-| HuggingFace | unknown → relay | Bearer token | - | Yes |
-| Together AI | unknown → relay | Bearer token | - | Yes |
-| xAI | unknown → relay | Bearer token | grok-3-mini-fast | - |
+| Z.AI (GLM) | yes | Bearer token | glm-5.3 | - |
+| OpenAI | yes | Bearer token | gpt-6.1-sol | - |
+| Anthropic | yes (opt-in header) | x-api-key + `anthropic-dangerous-direct-browser-access` | claude-sonnet-5.5 | - |
+| Google Gemini | yes | `x-goog-api-key` header | gemini-3.8-flash | Yes |
+| Mistral | yes | Bearer token | mistral-large-4-0 | - |
+| DeepSeek | yes | Bearer token | deepseek-v4.1-flash | - |
+| Qwen (intl) | yes | Bearer token | qwen3.8-max | - |
+| Kimi (intl) | yes | Bearer token | kimi-k3.1-pro | - |
+| Groq | yes | Bearer token | openai/gpt-oss-120b | Yes |
+| OpenRouter | yes | Bearer token (optional for the catalog) | anthropic/claude-sonnet-5.5 | Yes |
+| HuggingFace | unknown → relay | Bearer token | meta-llama/Llama-3.3-70B-Instruct | Yes |
+| Together AI | unknown → relay | Bearer token | deepseek-ai/DeepSeek-V4 | Yes |
+| xAI | yes | Bearer token | grok-4.7 | - |
 | Custom / Ollama / LM Studio | depends on endpoint | Bearer token | - | - |
 
-> **Note**: Default models are synced with `src/lib/llm-client.ts` (`LLM_PROVIDERS`). If a model becomes deprecated, it is automatically migrated in `src/hooks/useSettings.ts` via rehydration logic. "Unknown" CORS support means the UI warns you; if a direct call fails, switch the transport to the local relay. Local runtimes need CORS enabled on their side (`OLLAMA_ORIGINS`, LM Studio's CORS toggle).
+CORS was probed on 2026-10-26 with a real browser origin (`Origin` header + `OPTIONS`
+preflight, then a browser `fetch` from a loopback page): OpenAI, Groq, Mistral,
+xAI, DeepSeek, Qwen-intl, Kimi, Z.AI and OpenRouter answer readable responses.
+Anthropic needs its opt-in header on every call (the app sends it). Gemini could
+not be probed from this machine (its host was unreachable) and Together AI is
+Cloudflare-gated here — both keep the relay hint in the UI.
+
+### Model lists are discovered, not hardcoded
+
+The settings screen loads each provider's live catalog from the provider's own
+`/models` endpoint (`src/lib/model-catalog.ts`) — Gemini `v1beta/models`,
+Anthropic/OpenAI-compatible `v1/models`, OpenRouter `api/v1/models` — and caches
+it in `localStorage` for 24 hours. A refresh button forces a new fetch; the
+bundled list is used only when the call cannot be made (no key yet, relay down,
+CORS/network failure) and the UI says which source it is showing. Model
+capabilities still come from `llm-client.ts`; if a provider changes context
+windows, override them in «Расширенные настройки».
+
+> **Note**: Default models are synced with `src/lib/llm-client.ts`
+> (`LLM_PROVIDERS`). A retired model saved in an older release is migrated to the
+> current default on rehydration (`RETIRED_DEFAULT_MODELS`, see
+> `src/hooks/useSettings.ts`). Local runtimes need CORS enabled on their side
+> (`OLLAMA_ORIGINS`, LM Studio's CORS toggle).
 
 ## Architecture
 

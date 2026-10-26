@@ -30,7 +30,9 @@ export const DEFAULT_PORT = 8787;
 export const DEFAULT_ROOT_DIR = 'out';
 export const DEFAULT_MAX_BODY_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 export const PROVIDER_TIMEOUT_MS = 300_000; // 300 s (matches worker v9)
-export const ANTHROPIC_VERSION = '2024-10-22';
+// 2023-06-01 is the only API version Anthropic accepts (the old 2024-10-22 was
+// a beta-header date, not a version).
+export const ANTHROPIC_VERSION = '2023-06-01';
 
 /**
  * Every known provider may only be called on its own API host.
@@ -44,8 +46,10 @@ export const PROVIDER_HOSTS = Object.freeze({
   groq: Object.freeze(['api.groq.com']),
   openrouter: Object.freeze(['openrouter.ai']),
   mistral: Object.freeze(['api.mistral.ai']),
-  qwen: Object.freeze(['dashscope.aliyuncs.com']),
-  kimi: Object.freeze(['api.moonshot.cn']),
+  // International and China-region hosts are both pinned: a user may hold a key
+  // for either region, and neither host can be reached through the other one.
+  qwen: Object.freeze(['dashscope-intl.aliyuncs.com', 'dashscope.aliyuncs.com']),
+  kimi: Object.freeze(['api.moonshot.ai', 'api.moonshot.cn']),
   xai: Object.freeze(['api.x.ai']),
   together: Object.freeze(['api.together.xyz']),
   huggingface: Object.freeze(['api-inference.huggingface.co']),
@@ -677,6 +681,128 @@ async function handleLlm(req, res, ctx, origin) {
   );
 }
 
+// ── /api/models ─────────────────────────────────────────────────────────
+
+/** Providers whose model list is public (no key needed). */
+export const PUBLIC_MODEL_LIST_PROVIDERS = Object.freeze(['openrouter']);
+
+/**
+ * Forward `GET {provider list endpoint}` and return the provider's JSON as-is.
+ * The browser parses it, so the relay never needs a copy of each provider's
+ * schema — and the target host is pinned to the declared provider exactly like
+ * /api/llm, which keeps this from becoming a general-purpose GET proxy.
+ */
+async function handleModels(req, res, ctx, origin) {
+  const bodyResult = await readBody(req, ctx.maxBodySize);
+  if (bodyResult.tooLarge) {
+    sendJson(res, 413, payloadTooLarge(ctx.maxBodySize), origin);
+    return;
+  }
+  if (bodyResult.error) {
+    sendJson(res, 400, { error: 'invalid_body', message: 'Could not read the request body.' }, origin);
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(bodyResult.text);
+  } catch {
+    sendJson(res, 400, { error: 'invalid_json', message: 'Request body must be valid JSON.' }, origin);
+    return;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    sendJson(res, 400, { error: 'invalid_json', message: 'Request body must be a JSON object.' }, origin);
+    return;
+  }
+
+  const { provider, apiKey, targetUrl } = parsed;
+
+  if (!provider || typeof provider !== 'string') {
+    sendJson(res, 400, { error: 'missing_provider', message: 'Field provider is required.' }, origin);
+    return;
+  }
+  if (!PROVIDER_IDS.includes(provider)) {
+    sendJson(res, 400, { error: 'unknown_provider', message: `Provider "${provider}" is not supported by this relay.` }, origin);
+    return;
+  }
+  if (typeof targetUrl !== 'string' || !targetUrl) {
+    sendJson(res, 400, { error: 'missing_fields', message: 'Field targetUrl is required.' }, origin);
+    return;
+  }
+
+  const target = validateTargetUrl(targetUrl, provider, ctx.customHosts);
+  if (!target.valid) {
+    const status = target.code === 'custom_provider_disabled' ? 403 : 400;
+    sendJson(res, status, { error: target.code, message: target.error }, origin);
+    return;
+  }
+
+  const resolvedKey = resolveApiKey(provider, apiKey, ctx.env);
+  const keylessAllowed = PUBLIC_MODEL_LIST_PROVIDERS.includes(provider);
+  if (!resolvedKey && !keylessAllowed) {
+    sendJson(
+      res,
+      400,
+      {
+        error: 'missing_api_key',
+        message:
+          'No API key: send apiKey in the body or set LLM_API_KEY / LLM_API_KEY_<PROVIDER> for the relay.',
+      },
+      origin,
+    );
+    return;
+  }
+
+  const headers = resolvedKey ? buildUpstreamHeaders(provider, resolvedKey.key) : { Accept: 'application/json' };
+  headers.Accept = 'application/json';
+  const startTime = Date.now();
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    try {
+      controller.abort();
+    } catch {
+      // already aborted
+    }
+  }, ctx.timeoutMs);
+
+  let upstream;
+  try {
+    upstream = await ctx.fetchImpl(target.url, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    clearTimeout(timeoutId);
+    sendUpstreamFailure(res, error, origin, ctx, provider);
+    return;
+  }
+
+  let text;
+  try {
+    text = await upstream.text();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    sendUpstreamFailure(res, error, origin, ctx, provider);
+    return;
+  }
+  clearTimeout(timeoutId);
+
+  res.writeHead(upstream.status, {
+    'Content-Type': upstream.headers.get('content-type') || 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    ...corsHeaders(origin),
+  });
+  res.end(text);
+
+  ctx.logger.log(
+    `[relay] models provider=${provider} keySource=${resolvedKey ? resolvedKey.source : 'none'}` +
+      ` status=${upstream.status} ms=${Date.now() - startTime}`,
+  );
+}
+
 // ── request routing ─────────────────────────────────────────────────────
 
 async function handleApi(req, res, ctx, method, pathname) {
@@ -731,6 +857,17 @@ async function handleApi(req, res, ctx, method, pathname) {
       return;
     }
     await handleLlm(req, res, ctx, allowedOrigin);
+    return;
+  }
+
+  if (pathname === '/api/models') {
+    if (method !== 'POST') {
+      sendJson(res, 405, { error: 'method_not_allowed' }, allowedOrigin, {
+        Allow: 'POST, OPTIONS',
+      });
+      return;
+    }
+    await handleModels(req, res, ctx, allowedOrigin);
     return;
   }
 
@@ -874,6 +1011,7 @@ export function parseArgs(argv) {
 const USAGE = `Usage: node relay/relay.mjs [--port 8787] [--dir out]
 
 Serves the Next.js static export and proxies POST /api/llm to LLM providers.
+POST /api/models forwards a provider's GET model-list call (same host pinning).
 
 Options:
   --port, -p <port>  loopback port to listen on (default ${DEFAULT_PORT})

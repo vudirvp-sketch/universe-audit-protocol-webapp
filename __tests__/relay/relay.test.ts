@@ -894,3 +894,161 @@ describe('relay: CLI contract', () => {
     expect(server.listening).toBe(false);
   });
 });
+
+// ── /api/models ─────────────────────────────────────────────────────────
+
+describe('relay: model catalog proxy', () => {
+  const MODELS_TARGET = 'https://api.openai.com/v1/models';
+
+  function modelsBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return { provider: 'openai', apiKey: API_KEY, targetUrl: MODELS_TARGET, ...overrides };
+  }
+
+  function catalogResponse(): Response {
+    return new Response(JSON.stringify({ data: [{ id: 'gpt-6.1-sol' }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
+
+  it('forwards a GET to the pinned provider host with injected auth', async () => {
+    const { fetchImpl, calls } = stubFetch(catalogResponse);
+    const res = await call(
+      makeHandler({ fetchImpl }),
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify(modelsBody()) }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(json(res)).toEqual({ data: [{ id: 'gpt-6.1-sol' }] });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe(MODELS_TARGET);
+    expect(calls[0]?.init.method).toBe('GET');
+    expect(calls[0]?.init.headers?.Authorization).toBe(`Bearer ${API_KEY}`);
+    expect(header(res, 'cache-control')).toBe('no-store');
+  });
+
+  it('rejects a target on another host without calling the provider', async () => {
+    const { fetchImpl, calls } = stubFetch(catalogResponse);
+    const res = await call(
+      makeHandler({ fetchImpl }),
+      makeReq({
+        method: 'POST',
+        url: '/api/models',
+        body: JSON.stringify(modelsBody({ targetUrl: 'https://attacker.example/models' })),
+      }),
+    );
+    expect(res.statusCode).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('rejects an unknown provider and a missing targetUrl', async () => {
+    const handler = makeHandler();
+    const unknown = await call(
+      handler,
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify(modelsBody({ provider: 'evil' })) }),
+    );
+    expect(unknown.statusCode).toBe(400);
+
+    const missing = await call(
+      handler,
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify({ provider: 'openai', apiKey: API_KEY }) }),
+    );
+    expect(missing.statusCode).toBe(400);
+  });
+
+  it('prefers the env key and never returns it to the browser', async () => {
+    const { fetchImpl, calls } = stubFetch(catalogResponse);
+    const res = await call(
+      makeHandler({ fetchImpl, env: { LLM_API_KEY_OPENAI: ENV_PROVIDER_KEY } }),
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify(modelsBody()) }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(calls[0]?.init.headers?.Authorization).toBe(`Bearer ${ENV_PROVIDER_KEY}`);
+    expect(res.bodyText()).not.toContain(ENV_PROVIDER_KEY);
+    expect(res.bodyText()).not.toContain(API_KEY);
+  });
+
+  it('allows a keyless call only for the public OpenRouter catalog', async () => {
+    const { fetchImpl, calls } = stubFetch(catalogResponse);
+    const handler = makeHandler({ fetchImpl });
+
+    const keyless = await call(
+      handler,
+      makeReq({
+        method: 'POST',
+        url: '/api/models',
+        body: JSON.stringify({ provider: 'openrouter', targetUrl: 'https://openrouter.ai/api/v1/models' }),
+      }),
+    );
+    expect(keyless.statusCode).toBe(200);
+    expect(calls[0]?.init.headers?.Authorization).toBeUndefined();
+
+    const blocked = await call(
+      handler,
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify({ provider: 'openai', targetUrl: MODELS_TARGET }) }),
+    );
+    expect(blocked.statusCode).toBe(400);
+    expect(json(blocked).error).toBe('missing_api_key');
+  });
+
+  it('forwards the provider status instead of masking it', async () => {
+    const { fetchImpl } = stubFetch(
+      () => new Response(JSON.stringify({ error: 'bad key' }), { status: 401 }),
+    );
+    const res = await call(
+      makeHandler({ fetchImpl }),
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify(modelsBody()) }),
+    );
+    expect(res.statusCode).toBe(401);
+    expect(res.bodyText()).toContain('bad key');
+  });
+
+  it('accepts the international Qwen / Kimi hosts and rejects plain GET', async () => {
+    const { fetchImpl, calls } = stubFetch(catalogResponse);
+    const handler = makeHandler({ fetchImpl });
+
+    const qwen = await call(
+      handler,
+      makeReq({
+        method: 'POST',
+        url: '/api/models',
+        body: JSON.stringify(modelsBody({
+          provider: 'qwen',
+          targetUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/models',
+        })),
+      }),
+    );
+    expect(qwen.statusCode).toBe(200);
+
+    const kimi = await call(
+      handler,
+      makeReq({
+        method: 'POST',
+        url: '/api/models',
+        body: JSON.stringify(modelsBody({
+          provider: 'kimi',
+          targetUrl: 'https://api.moonshot.ai/v1/models',
+        })),
+      }),
+    );
+    expect(kimi.statusCode).toBe(200);
+
+    const get = await call(handler, makeReq({ method: 'GET', url: '/api/models' }));
+    expect(get.statusCode).toBe(405);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('never logs the key on the models route', async () => {
+    const { fetchImpl } = stubFetch(catalogResponse);
+    const capture = captureLogger();
+    await call(
+      makeHandler({ fetchImpl, env: { LLM_API_KEY_OPENAI: ENV_PROVIDER_KEY }, logger: capture.logger }),
+      makeReq({ method: 'POST', url: '/api/models', body: JSON.stringify(modelsBody()) }),
+    );
+    const logged = capture.lines.join('\n');
+    expect(logged).toContain('models provider=openai');
+    expect(logged).not.toContain(ENV_PROVIDER_KEY);
+    expect(logged).not.toContain(API_KEY);
+  });
+});
