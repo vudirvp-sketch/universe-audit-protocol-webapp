@@ -122,8 +122,9 @@ export default function Home() {
 
   const [theme, setTheme] = React.useState<'light' | 'dark'>('dark');
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
-  const { provider, apiKey, model, proxyUrl, baseUrl } = useSettings();
-  const [proxyUnavailable, setProxyUnavailable] = React.useState(false);
+  const transport = useSettings((s) => s.transport);
+  const relayUrl = useSettings((s) => s.relayUrl);
+  const [relayUnavailable, setRelayUnavailable] = React.useState(false);
 
   // New state: inspector drawer + sidebar collapse
   const [inspectorOpen, setInspectorOpen] = React.useState(false);
@@ -145,26 +146,29 @@ export default function Home() {
     closeInspector,
   });
 
-  // ── Health-check ────
+  // ── Local relay health-check (only when the relay transport is selected) ──
   React.useEffect(() => {
-    if (!proxyUrl) return;
+    if (transport !== 'relay' || !relayUrl) {
+      setRelayUnavailable(false);
+      return;
+    }
     const checkHealth = async () => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const base = proxyUrl.replace(/\/+$/, '');
-        const response = await fetch(`${base}/health`, {
+        const base = relayUrl.replace(/\/+$/, '');
+        const response = await fetch(`${base}/api/health`, {
           method: 'GET',
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
-        setProxyUnavailable(!response.ok);
+        setRelayUnavailable(!response.ok);
       } catch {
-        setProxyUnavailable(true);
+        setRelayUnavailable(true);
       }
     };
     checkHealth();
-  }, [proxyUrl]);
+  }, [transport, relayUrl]);
 
   // Toggle theme
   React.useEffect(() => {
@@ -176,17 +180,22 @@ export default function Home() {
   // =========================================================================
   const startAudit = async (input: AuditFormSubmitInput) => {
     const currentApiKey = useSettings.getState().apiKey;
-    const currentProxyUrl = useSettings.getState().proxyUrl;
+    const currentTransport = useSettings.getState().transport;
+    const currentRelayUrl = useSettings.getState().relayUrl;
     const currentModel = useSettings.getState().model || undefined;
     const currentProvider = useSettings.getState().provider;
 
-    if (!currentApiKey) {
+    // In relay mode the key may live in the relay's env (LLM_API_KEY): send a
+    // placeholder and let the relay substitute it. Direct mode needs a real key.
+    const effectiveKey = currentApiKey || (currentTransport === 'relay' ? 'env' : '');
+
+    if (!effectiveKey) {
       useAuditStateV3.getState().setError('API-ключ не указан. Откройте Настройки и введите ключ.');
       return;
     }
 
-    if (!currentProxyUrl) {
-      useAuditStateV3.getState().setError('URL прокси не настроен. Откройте Настройки.');
+    if (currentTransport === 'relay' && !currentRelayUrl) {
+      useAuditStateV3.getState().setError('URL локального релея не задан. Откройте Настройки.');
       return;
     }
 
@@ -207,9 +216,10 @@ export default function Home() {
         },
         {
           provider: currentProvider,
-          apiKey: currentApiKey,
+          apiKey: effectiveKey,
           model: currentModel || '',
-          proxyUrl: currentProxyUrl,
+          transport: currentTransport,
+          relayUrl: currentRelayUrl,
           baseUrl: useSettings.getState().baseUrl || undefined,
           customContextWindow: useSettings.getState().customContextWindow || undefined,
           customMaxOutputTokens: useSettings.getState().customMaxOutputTokens || undefined,
@@ -334,10 +344,10 @@ export default function Home() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-background text-foreground">
-        {/* Proxy health-check banner */}
-        {proxyUnavailable && (
+        {/* Local relay health-check banner (relay transport only) */}
+        {relayUnavailable && (
           <div className="bg-severity-warning/90 text-white text-center py-2 px-4 text-sm font-medium">
-            Прокси недоступен — проверьте интернет или настройки прокси
+            {t.settings.proxyHealthCheckBanner}
           </div>
         )}
 

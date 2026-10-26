@@ -1,39 +1,80 @@
 /**
- * Client-side API-connection contract: what the browser is willing to send the
- * API key to, and how user-controlled model/base URLs are constrained.
+ * Client-side API-connection contract: how the browser talks to providers
+ * directly or through the local relay, and how user-controlled model/base URLs
+ * are constrained.
  */
 import { describe, expect, it } from 'vitest';
 import {
   getProviderUrl,
   normalizeCustomBaseUrl,
   validateApiKey,
-  validateProxyUrl,
+  validateRelayUrl,
+  buildProviderAuthHeaders,
+  PROVIDER_BROWSER_CORS,
+  RELAY_URL_DEFAULT,
 } from '@/lib/llm-client';
 
-describe('validateProxyUrl', () => {
+describe('validateRelayUrl', () => {
   it.each([
-    ['https://universe-audit-proxy.vudirvp.workers.dev', true],
-    ['https://proxy.example.com/cors', true],
-    ['http://localhost:8787', true],
+    [RELAY_URL_DEFAULT, true],
     ['http://127.0.0.1:8787', true],
-    ['http://proxy.example.com', false],
-    ['ftp://proxy.example.com', false],
-    ['https://user:pass@proxy.example.com', false],
-    ['https://proxy.example.com/?x=1', false],
+    ['http://localhost:8787', true],
+    ['http://example.com:8787', false],
+    ['https://relay.example.com', true],
+    ['ftp://relay.example.com', false],
+    ['https://user:pass@relay.example.com', false],
+    ['https://relay.example.com/?x=1', false],
     ['', false],
     ['   ', false],
     ['not a url', false],
-    ['https://proxy.example.com with space', false],
   ])('%s → valid=%s', (raw, valid) => {
-    expect(validateProxyUrl(raw).valid).toBe(valid);
+    expect(validateRelayUrl(raw).valid).toBe(valid);
   });
 
-  it('never accepts a plain-http proxy outside loopback', () => {
-    expect(validateProxyUrl('http://example.com').valid).toBe(false);
+  it('never accepts a plain-http relay outside loopback (the key is posted there)', () => {
+    expect(validateRelayUrl('http://example.com').valid).toBe(false);
   });
 
-  it('normalizes a trailing slash away so /health checks stay correct', () => {
-    expect(validateProxyUrl('https://proxy.example.com/').normalized).toBe('https://proxy.example.com');
+  it('normalizes a trailing slash away so /api/health checks stay correct', () => {
+    expect(validateRelayUrl('http://127.0.0.1:8787/').normalized).toBe('http://127.0.0.1:8787');
+  });
+});
+
+describe('buildProviderAuthHeaders — direct browser transport', () => {
+  it('uses x-api-key + browser-access flag for Anthropic (required for browser calls)', () => {
+    const headers = buildProviderAuthHeaders('anthropic', 'sk-ant-test');
+    expect(headers['x-api-key']).toBe('sk-ant-test');
+    expect(headers['anthropic-version']).toBeTruthy();
+    expect(headers['anthropic-dangerous-direct-browser-access']).toBe('true');
+    expect(headers['Authorization']).toBeUndefined();
+  });
+
+  it('sends the Gemini key in a header, never in the URL', () => {
+    const headers = buildProviderAuthHeaders('google', 'AIza-test');
+    expect(headers['x-goog-api-key']).toBe('AIza-test');
+    expect(getProviderUrl('google', 'gemini-2.5-flash')).not.toContain('AIza-test');
+    expect(getProviderUrl('google', 'gemini-2.5-flash')).not.toContain('key=');
+  });
+
+  it('uses Bearer for OpenAI-compatible providers and custom endpoints', () => {
+    expect(buildProviderAuthHeaders('openai', 'sk-test')['Authorization']).toBe('Bearer sk-test');
+    expect(buildProviderAuthHeaders('openrouter', 'sk-or')['Authorization']).toBe('Bearer sk-or');
+    expect(buildProviderAuthHeaders('custom', 'sk-x')['Authorization']).toBe('Bearer sk-x');
+  });
+});
+
+describe('browser CORS support table', () => {
+  it('marks the providers the app supports directly in the browser', () => {
+    expect(PROVIDER_BROWSER_CORS.google).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.anthropic).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.openrouter).toBe('yes');
+    expect(PROVIDER_BROWSER_CORS.deepseek).toBe('yes');
+  });
+
+  it('marks CORS-blocked / unverified providers so the UI can suggest the relay', () => {
+    expect(PROVIDER_BROWSER_CORS.openai).toBe('no');
+    expect(PROVIDER_BROWSER_CORS.groq).toBe('unknown');
+    expect(PROVIDER_BROWSER_CORS.mistral).toBe('unknown');
   });
 });
 

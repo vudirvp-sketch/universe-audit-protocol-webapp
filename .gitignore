@@ -49,10 +49,5 @@ local-*
 dev.log
 dev.out.log
 
-# Cloudflare / OpenNext auto-generated files (should NOT be committed)
-wrangler.jsonc
-open-next.config.ts
+# Local tooling state
 .dev.vars
-.open-next/
-# Wrangler local state (worker/)
-worker/.wrangler/

@@ -87,7 +87,8 @@ export async function callLLMStreaming(options: LLMStreamingOptions): Promise<LL
     apiKey: llmConfig.apiKey,
     model: llmConfig.model,
     baseUrl: llmConfig.baseUrl,
-    proxyUrl: llmConfig.proxyUrl,
+    transport: llmConfig.transport,
+    relayUrl: llmConfig.relayUrl,
   }, customOverrides);
 
   const messages = [

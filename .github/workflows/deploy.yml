@@ -1,4 +1,4 @@
-name: Deploy to Cloudflare
+name: Build and deploy
 
 on:
   push:
@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main]
 
-# Least privilege: the workflow only reads the repository; Cloudflare
-# credentials come from repository secrets, not from GITHUB_TOKEN scopes.
+# Least privilege: the build job only reads the repository. The deploy job
+# additionally gets the Pages scopes it needs below.
 permissions:
   contents: read
 
@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Actions are pinned by commit SHA (tags can be moved): supply-chain hygiene.
+      # Actions are pinned by commit SHA (tags can be moved).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -24,47 +24,23 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - name: Upload build artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: static-site
-          path: out/
-          retention-days: 7
 
-  deploy-pages:
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
         with:
-          name: static-site
-          path: out/
-      # cloudflare/pages-action is retired; wrangler deploys the static export.
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@9681c2997648301493e78cacbfb790a9f19c833f # v3.9.0
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: '4'
-          command: pages deploy out --project-name=universe-audit-protocol
+          path: out
 
-  deploy-worker:
+  deploy:
     needs: build
-    runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          # Wrangler 4 requires Node >= 22; Node 20 silently broke this job.
-          node-version: 22
-      - name: Deploy CORS Proxy Worker
-        working-directory: worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          npm ci
-          npx wrangler deploy
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

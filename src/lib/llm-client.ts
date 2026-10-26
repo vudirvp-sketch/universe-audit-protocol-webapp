@@ -1,6 +1,6 @@
-// Universal LLM API client supporting multiple providers
-// Routes all requests through a CORS proxy (Cloudflare Worker) for browser compatibility
-// No process.env references — all config comes from client-side settings
+// Universal LLM API client supporting multiple providers.
+// Two transports: direct browser calls (CORS providers) or a local relay on
+// 127.0.0.1. No process.env references — all config comes from client-side settings.
 
 // ============================================================================
 // TYPES
@@ -32,11 +32,48 @@ export interface LLMProviderConfig {
   modelDocsUrl?: string;
 }
 
-export interface ProxyRequest {
+/**
+ * Can a browser call this provider directly (CORS)?
+ * - 'yes'     — verified: provider sends CORS headers for browser origins;
+ * - 'no'      — verified: browser requests are blocked, a local relay is required;
+ * - 'unknown' — not verified; the UI warns instead of pretending.
+ */
+export type BrowserCorsSupport = 'yes' | 'no' | 'unknown';
+
+export const PROVIDER_BROWSER_CORS: Record<LLMProvider, BrowserCorsSupport> = {
+  google: 'yes',
+  anthropic: 'yes',
+  openrouter: 'yes',
+  deepseek: 'yes',
+  openai: 'no',
+  mistral: 'unknown',
+  groq: 'unknown',
+  together: 'unknown',
+  xai: 'unknown',
+  huggingface: 'unknown',
+  qwen: 'unknown',
+  kimi: 'unknown',
+  zai: 'unknown',
+  custom: 'unknown',
+};
+
+/**
+ * How requests reach the provider:
+ * - 'direct' — the browser calls the provider API itself (no backend at all);
+ * - 'relay'  — an optional local relay (`node relay/relay.mjs` on 127.0.0.1)
+ *              forwards the request; needed for providers that block CORS and
+ *              lets the key stay out of the browser (LLM_API_KEY in env).
+ */
+export type LLMTransport = 'direct' | 'relay';
+
+/** Default address of the local relay (`node relay/relay.mjs`). */
+export const RELAY_URL_DEFAULT = 'http://127.0.0.1:8787';
+
+/** Envelope accepted by POST {relayUrl}/api/llm. */
+export interface RelayRequest {
   provider: LLMProvider;
   apiKey: string;
   targetUrl: string;
-  headers?: Record<string, string>;
   payload: string; // JSON stringified request body for the provider
 }
 
@@ -45,7 +82,8 @@ export interface LLMClientConfig {
   apiKey: string;
   model?: string;
   baseUrl?: string; // For custom providers
-  proxyUrl?: string; // CORS proxy URL (Cloudflare Worker)
+  transport?: LLMTransport; // default 'direct'
+  relayUrl?: string; // default RELAY_URL_DEFAULT
 }
 
 export interface ChatMessage {
@@ -61,8 +99,6 @@ export interface ChatCompletionOptions {
   stream?: boolean;
   /** AbortSignal to cancel the request (e.g. for timeout). Passed to fetch(). */
   signal?: AbortSignal;
-  /** If true, tells the proxy to skip server-side 429 retries (for test connections). */
-  skipProxyRetry?: boolean;
   /**
    * Desired response format from the LLM.
    * - 'markdown' (default): No JSON mode forcing — model returns free-form text/markdown.
@@ -312,7 +348,7 @@ export const PREFERRED_MODELS: Record<LLMProvider, string[]> = {
 
 /**
  * Get the target API URL for a given provider and model.
- * The proxy uses this URL to forward the request.
+ * Shared by the direct transport and by the local relay.
  */
 /**
  * Encode a model id used as a URL path.
@@ -351,7 +387,7 @@ export function getProviderUrl(provider: LLMProvider, model: string): string {
 }
 
 // ============================================================================
-// URL VALIDATION (proxy + custom provider)
+// URL VALIDATION (local relay + custom provider)
 // ============================================================================
 
 export interface UrlValidationResult {
@@ -401,12 +437,38 @@ function validateEndpointUrl(raw: string, label: string): UrlValidationResult {
 }
 
 /**
- * Validate the CORS proxy URL before sending anything to it.
- * The client never posts the API key to a plain-http or malformed endpoint
- * (loopback is allowed so `wrangler dev` works locally).
+ * Validate the local relay URL. The relay is expected to run on loopback, so
+ * plain http is accepted only for localhost/127.0.0.1; anything remote must be
+ * https — the API key is posted to this endpoint.
  */
-export function validateProxyUrl(raw: string): UrlValidationResult {
-  return validateEndpointUrl(raw, 'URL прокси');
+export function validateRelayUrl(raw: string): UrlValidationResult {
+  return validateEndpointUrl(raw, 'URL локального релея');
+}
+
+/**
+ * Provider auth headers for a direct browser request.
+ *
+ * - Anthropic requires `anthropic-dangerous-direct-browser-access` for browser
+ *   calls and takes the key in `x-api-key`;
+ * - Google takes `x-goog-api-key` (keeps the key out of the URL/logs);
+ * - everything else (OpenAI-compatible, Hugging Face, custom) uses Bearer.
+ */
+export function buildProviderAuthHeaders(
+  provider: LLMProvider,
+  apiKey: string,
+): Record<string, string> {
+  switch (provider) {
+    case 'anthropic':
+      return {
+        'x-api-key': apiKey,
+        'anthropic-version': '2024-10-22',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      };
+    case 'google':
+      return { 'x-goog-api-key': apiKey };
+    default:
+      return { 'Authorization': `Bearer ${apiKey}` };
+  }
 }
 
 /**
@@ -576,7 +638,7 @@ export const LLM_PROVIDERS: Record<LLMProvider, LLMProviderConfig> = {
 /**
  * Build the request body for a given provider.
  * The client always builds the body in the provider's native format.
- * The proxy only handles auth header injection.
+ * Auth headers are attached by the client (direct) or the local relay (relay).
  */
 function buildProviderRequestBody(
   provider: LLMProvider,
@@ -684,7 +746,7 @@ function buildProviderRequestBody(
 
 /**
  * Transform provider-specific response into the standard ChatCompletionResponse format.
- * This runs client-side after receiving the raw response from the proxy.
+ * This runs client-side after receiving the provider's raw response.
  */
 function normalizeProviderResponse(
   provider: LLMProvider,
@@ -867,17 +929,19 @@ export function getEffectiveModelCapabilities(
 }
 
 /**
- * Creates an LLM API client that routes requests through the CORS proxy.
- * All requests go through the proxy — no direct browser-to-provider calls.
+ * Creates an LLM API client.
  *
- * IMPORTANT: This client does NOT retry on 429/503/502 errors.
- * The Cloudflare Worker proxy already handles transport-level retries (up to 2).
- * Adding client-side retries on top would cause an exponential cascade:
- *   client_retry × proxy_retry = 3 × 2 = 6 total attempts per logical call,
- *   and with audit-step.ts doing its own logical retries, this could reach
- *   3 × 2 × 3 = 18 API calls for a single failed step.
- * Instead, we throw immediately on transport errors and let the higher layer
- * (audit-step.ts) decide whether to retry for logical reasons (invalid JSON, etc.).
+ * Two transports, no third-party server:
+ * - `direct` (default): the browser calls the provider API itself. Works for
+ *   providers that send CORS headers (Gemini, Anthropic, OpenRouter, DeepSeek…).
+ * - `relay`: the request goes to a local relay on 127.0.0.1 (`node relay/relay.mjs`),
+ *   which forwards it to the provider. Needed for CORS-blocked providers, and
+ *   the relay can hold the key itself (`LLM_API_KEY`), so the key never enters
+ *   the browser.
+ *
+ * IMPORTANT: this client does NOT retry transport errors. The local relay does
+ * not retry either — retries belong to the pipeline layer, which knows whether
+ * the failure was logical (bad JSON) or transport-level.
  */
 export function createLLMClient(
   config: LLMClientConfig,
@@ -885,183 +949,133 @@ export function createLLMClient(
 ) {
   const providerConfig = LLM_PROVIDERS[config.provider];
   const model = config.model || providerConfig.defaultModel;
+  const transport: LLMTransport = config.transport ?? 'direct';
+  const relayUrl = (config.relayUrl || RELAY_URL_DEFAULT).replace(/\/+$/, '');
 
   /**
-   * Make a chat completion request via the CORS proxy.
-   * No client-side retry loop — the proxy handles transport-level retries.
+   * Build the fetch target/headers/body for the configured transport.
+   * Direct mode talks to the provider itself; relay mode posts the same
+   * envelope the local relay understands.
+   */
+  function buildRequest(
+    targetUrl: string,
+    payload: string,
+    extraHeaders?: Record<string, string>,
+  ): { url: string; headers: Record<string, string>; body: string } {
+    if (transport === 'relay') {
+      const validation = validateRelayUrl(relayUrl);
+      if (!validation.valid) {
+        throw new Error(
+          `${validation.error}. Укажите URL локального релея в Настройки → Подключение.`
+        );
+      }
+      const relayRequest: RelayRequest = {
+        provider: config.provider,
+        apiKey: config.apiKey,
+        targetUrl,
+        payload,
+      };
+      return {
+        url: `${relayUrl}/api/llm`,
+        headers: { 'Content-Type': 'application/json', ...(extraHeaders || {}) },
+        body: JSON.stringify(relayRequest),
+      };
+    }
+
+    // Direct: the browser posts the provider-native payload with provider auth.
+    return {
+      url: targetUrl,
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildProviderAuthHeaders(config.provider, config.apiKey),
+        ...(extraHeaders || {}),
+      },
+      body: payload,
+    };
+  }
+
+  /** Turn a failed transport call into an actionable Russian error. */
+  function networkError(fetchError: unknown): Error {
+    if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
+      return new Error(
+        'Запрос отменён по таймауту. Попробуйте более быструю модель или более короткий текст.'
+      );
+    }
+    if (fetchError instanceof TypeError) {
+      if (transport === 'relay') {
+        return new Error(
+          'Не удалось связаться с локальным релеем. Запустите его командой `node relay/relay.mjs` ' +
+          'и проверьте URL в Настройки → Подключение.'
+        );
+      }
+      return new Error(
+        `Браузер не смог обратиться к API «${providerConfig.name}». ` +
+        'Если ключ и интернет в порядке, провайдер, скорее всего, блокирует браузерные запросы (CORS) — ' +
+        'переключите транспорт на «Локальный релей».'
+      );
+    }
+    return new Error(
+      `Ошибка сети: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+    );
+  }
+
+  /**
+   * Make a chat completion request.
+   * No client-side retry loop — retries belong to the pipeline layer.
    */
   async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse> {
     const effectiveModel = options.model || model;
 
-    // Determine target URL (custom base URLs are validated here)
     const targetUrl = resolveTargetUrl(config.provider, effectiveModel, config.baseUrl);
 
-    if (!targetUrl) {
-      throw new Error(`URL провайдера не задан для «${config.provider}». Укажите baseUrl в настройках.`);
-    }
-
-    // Build the request body in the provider's native format
     const payload = buildProviderRequestBody(config.provider, options, effectiveModel, customOverrides);
 
-    // Build the proxy request
-    const proxyRequest: ProxyRequest = {
-      provider: config.provider,
-      apiKey: config.apiKey,
-      targetUrl,
-      payload,
-    };
-
-    // ── Preflight validation — catch missing fields before hitting the proxy ──
-    if (!proxyRequest.apiKey || proxyRequest.apiKey.trim() === '') {
+    // ── Preflight validation — catch missing fields before any request ──
+    if (!config.apiKey || config.apiKey.trim() === '') {
       throw new Error(
-        'API-ключ не задан. Укажите его в Настройки → API-ключ.'
+        'API-ключ не задан. Укажите его в Настройки → API-ключ (или задайте LLM_API_KEY для локального релея).'
       );
     }
-    if (!proxyRequest.targetUrl || proxyRequest.targetUrl.trim() === '') {
+    if (!targetUrl || targetUrl.trim() === '') {
       throw new Error(
         `URL провайдера не определён для «${config.provider}» с моделью «${effectiveModel}». ` +
         'Проверьте настройки провайдера и модели.'
       );
     }
-    if (!proxyRequest.payload || proxyRequest.payload.trim() === '' || proxyRequest.payload === '{}') {
+    if (!payload || payload.trim() === '' || payload === '{}') {
       throw new Error(
         'Пустой payload — проверьте настройки модели и попробуйте снова.'
       );
     }
 
-    // Determine proxy URL — validated so the key is never posted to a
-    // plain-http or malformed endpoint.
-    const proxyUrl = config.proxyUrl || '';
-    const proxyValidation = validateProxyUrl(proxyUrl);
-    if (!proxyValidation.valid) {
-      throw new Error(
-        `${proxyValidation.error}. Укажите корректный URL в Настройки → Расширенные настройки → URL прокси.`
-      );
-    }
+    const request = buildRequest(targetUrl, payload);
 
-    // Build fetch headers — include X-No-Retry if test connection wants to skip proxy retries
-    const fetchHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (options.skipProxyRetry) {
-      fetchHeaders['X-No-Retry'] = 'true';
-    }
-
-    // ── Single request attempt ──────────────────────────────────────────
-    // The proxy already retries 429/503 server-side. We do NOT retry here
-    // to avoid the exponential cascade (client_retry × proxy_retry).
-    // Client-side timeout: 300 seconds default if no signal provided.
-    // Increased from 120s because complex audit prompts on slow free-tier models
-    // (e.g. nvidia/nemotron on OpenRouter) can take 120-180s per request.
-    // The Cloudflare Worker proxy now also has a 300s timeout (previously 25s),
-    // so the client timeout should match or slightly exceed the proxy timeout.
+    // Client-side timeout: 300 seconds. Complex audit prompts on slow free-tier
+    // models can take 120-180s, so a 300s ceiling matches the former proxy.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300_000);
     const signal = combineAbortSignals(options.signal, controller.signal);
 
     let response: Response;
     try {
-      response = await fetch(proxyUrl, {
+      response = await fetch(request.url, {
         method: 'POST',
-        headers: fetchHeaders,
-        body: JSON.stringify(proxyRequest),
+        headers: request.headers,
+        body: request.body,
         signal,
       });
     } catch (fetchError: unknown) {
-      // Handle proxy-down / network errors with user-friendly messages
-      if (fetchError instanceof TypeError) {
-        // TypeError: Failed to fetch — proxy unreachable or network error
-        throw new Error(
-          'Не удалось подключиться к прокси. Проверьте интернет-соединение. ' +
-          'Если проблема сохраняется — прокси может быть временно недоступен.'
-        );
-      }
-      if (fetchError instanceof DOMException && fetchError.name === 'AbortError') {
-        // Request was aborted (timeout or user cancellation)
-        throw new Error(
-          'Запрос отменён по таймауту. Попробуйте более быструю модель или более короткий текст.'
-        );
-      }
-      // Unknown fetch error — rethrow with context
-      throw new Error(
-        `Ошибка сети при обращении к прокси: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
-      );
+      throw networkError(fetchError);
     } finally {
       // Always clear the timeout — an early throw used to leave it armed.
       clearTimeout(timeoutId);
     }
 
-    // ── 504 Gateway Timeout (from proxy) ─────────────────────────────────
-    // Proxy timed out waiting for the provider to respond.
-    if (response.status === 504) {
-      let proxyMessage = '';
-      try { const errData = await response.json() as { message?: string }; proxyMessage = errData.message || ''; } catch { /* ignore */ }
-      throw new Error(
-        proxyMessage ||
-        'Таймаут. Модель думает слишком долго. Попробуйте более быструю модель (Gemini Flash, GPT-4o-mini) или более короткий текст.'
-      );
-    }
 
-    // ── 413 Payload Too Large (from proxy) ──────────────────────────────
-    // Request body exceeded the proxy's size limit.
-    if (response.status === 413) {
-      let proxyMessage = '';
-      try { const errData = await response.json() as { message?: string }; proxyMessage = errData.message || ''; } catch { /* ignore */ }
-      throw new Error(
-        proxyMessage ||
-        'Слишком большой запрос. Текст будет разбит на части автоматически (chunking).'
-      );
-    }
-
-    // ── 429 Rate Limit ──────────────────────────────────────────────────
-    // Proxy already retried — throw immediately with actionable advice.
-    if (response.status === 429) {
-      const proxyRetries = response.headers.get('X-Proxy-Retried');
-      const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
-      throw new Error(
-        `Превышен лимит запросов к провайдеру «${providerConfig.name}»${proxyRetryInfo}. ` +
-        `Прокси уже делал повторы. Рекомендации:\n` +
-        `1. Подождите 1-2 минуты и попробуйте снова\n` +
-        `2. Уменьшите RPM-лимит в Настройках (например, до 3)\n` +
-        `3. Смените провайдера на того, у кого выше лимиты (Google Gemini, Groq)\n` +
-        `4. Используйте платный API-ключ для более высоких лимитов`
-      );
-    }
-
-    // ── 500 / 502 Proxy Errors ──────────────────────────────────────────
-    // Proxy itself had an error (not the provider).
-    if (response.status === 500 || response.status === 502) {
-      let errorDetail = '';
-      try { const errData = await response.json() as { error?: string; message?: string; details?: string }; errorDetail = errData.message || errData.error || errData.details || ''; } catch { /* ignore */ }
-      // Distinguish between proxy errors and provider errors
-      if (errorDetail.includes('proxy_error') || errorDetail.includes('Внутренняя ошибка прокси')) {
-        throw new Error(
-          'Прокси временно недоступен. Подождите минуту и попробуйте снова. ' +
-          'Если проблема сохраняется — прокси может быть временно недоступен.'
-        );
-      }
-      // Provider-side 502/503 — proxy already retried
-      const proxyRetries = response.headers.get('X-Proxy-Retried');
-      const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
-      throw new Error(
-        `Провайдер «${providerConfig.name}» временно недоступен (${response.status})${proxyRetryInfo}. ` +
-        `Прокси уже делал повторы. Попробуйте позже или смените модель/провайдера.` +
-        (errorDetail ? ` Детали: ${errorDetail}` : '')
-      );
-    }
-
-    // ── 503 Service Unavailable ─────────────────────────────────────────
-    if (response.status === 503) {
-      const proxyRetries = response.headers.get('X-Proxy-Retried');
-      const proxyRetryInfo = proxyRetries ? ` (прокси уже пытался ${proxyRetries} раз)` : '';
-      throw new Error(
-        `Провайдер «${providerConfig.name}» перегружен (503)${proxyRetryInfo}. ` +
-        `Прокси уже делал повторы. Попробуйте позже или смените модель/провайдера.`
-      );
-    }
-
-    // ── Other non-OK responses ──────────────────────────────────────────
+    // ── Transport/provider errors ────────────────────────────────────────
     if (!response.ok) {
       const errorText = await response.text();
-      // Surface the proxy's / provider's own message instead of raw JSON.
+      // Surface the provider's / relay's own message instead of raw JSON.
       let detail = errorText;
       try {
         const parsed = JSON.parse(errorText) as {
@@ -1073,10 +1087,34 @@ export function createLLMClient(
           || errorText;
       } catch { /* not JSON — keep raw text */ }
 
-      if (response.status === 403) {
-        throw new Error(`Прокси отклонил запрос (403): ${detail}`);
+      const endpointName = transport === 'relay'
+        ? 'локальный релей'
+        : `провайдер «${providerConfig.name}»`;
+
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(`${endpointName}: API-ключ отклонён (${response.status}). ${detail}`);
       }
-      throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${detail}`);
+      if (response.status === 402) {
+        throw new Error(`${endpointName}: нужны кредиты/оплата (402). ${detail}`);
+      }
+      if (response.status === 404) {
+        throw new Error(`${endpointName}: модель или endpoint не найден (404). ${detail}`);
+      }
+      if (response.status === 413) {
+        throw new Error(detail || 'Слишком большой запрос. Уменьшите текст или выберите модель с большим контекстом.');
+      }
+      if (response.status === 429) {
+        throw new Error(
+          `${endpointName}: превышен лимит запросов (429). Подождите 1–2 минуты, уменьшите RPM в Настройках или смените модель. ${detail}`
+        );
+      }
+      if (response.status === 504) {
+        throw new Error(detail || 'Таймаут: провайдер не ответил вовремя. Попробуйте более быструю модель или более короткий текст.');
+      }
+      if (response.status === 500 || response.status === 502 || response.status === 503) {
+        throw new Error(`${endpointName} временно недоступен (${response.status}). Попробуйте позже. ${detail}`);
+      }
+      throw new Error(`${endpointName} вернул ошибку (${response.status}): ${detail}`);
     }
 
     // ── Success — parse and normalize ───────────────────────────────────
@@ -1085,12 +1123,12 @@ export function createLLMClient(
   }
 
   /**
-   * Make a streaming chat completion request via the CORS proxy.
-   * Returns the full text after streaming completes, calling onChunk
-   * for each delta received from the provider.
+   * Make a streaming chat completion request (direct provider or local relay).
+   * Returns the full text after streaming completes, calling onChunk for each
+   * delta received from the provider.
    *
-   * For HuggingFace (which doesn't support streaming), falls back to
-   * the buffered chatCompletion method.
+   * For HuggingFace (which doesn't support streaming), falls back to the
+   * buffered chatCompletion method.
    */
   async function chatCompletionStream(
     options: ChatCompletionOptions,
@@ -1138,24 +1176,15 @@ export function createLLMClient(
     const { payload: streamingPayload, targetUrl: streamingTargetUrl } =
       enableStreamingInPayload(config.provider, rawPayload, targetUrl);
 
-    // Determine proxy URL — validated so the key is never posted to a
-    // plain-http or malformed endpoint.
-    const proxyUrl = config.proxyUrl || '';
-    const proxyValidation = validateProxyUrl(proxyUrl);
-    if (!proxyValidation.valid) {
-      throw new Error(
-        `${proxyValidation.error}. Укажите корректный URL в Настройки → Расширенные настройки → URL прокси.`
-      );
-    }
+    const request = buildRequest(streamingTargetUrl, streamingPayload);
 
-    // Execute streaming request
+    // Execute streaming request (direct provider or local relay, same SSE stream)
     let streamFinishReason = 'stop';
     const fullText = await streamChatCompletion({
       provider: config.provider,
-      proxyUrl,
-      apiKey: config.apiKey,
-      targetUrl: streamingTargetUrl,
-      payload: streamingPayload,
+      url: request.url,
+      headers: request.headers,
+      body: request.body,
       signal: options.signal,
       onChunk: (chunk) => {
         if (chunk.finishReason) streamFinishReason = chunk.finishReason;
@@ -1243,6 +1272,7 @@ export function getProviderInfo(provider: LLMProvider) {
     apiKeyPrefix: config.apiKeyPrefix,
     hasFreeTier: ['google', 'groq', 'huggingface', 'openrouter', 'together'].includes(provider),
     modelDocsUrl: config.modelDocsUrl,
+    browserCors: PROVIDER_BROWSER_CORS[provider],
   };
 }
 
@@ -1256,6 +1286,7 @@ export const AVAILABLE_PROVIDERS = Object.entries(LLM_PROVIDERS)
     name: config.name,
     defaultModel: config.defaultModel,
     hasFreeTier: ['google', 'groq', 'huggingface', 'openrouter', 'together'].includes(id),
+    browserCors: PROVIDER_BROWSER_CORS[id as LLMProvider],
   }));
 
 export type LLMClient = ReturnType<typeof createLLMClient>;

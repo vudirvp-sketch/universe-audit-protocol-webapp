@@ -10,8 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "deploy:pages": "npm run build && npx wrangler pages deploy out --project-name=universe-audit-protocol",
-    "preview:pages": "npm run build && npx wrangler pages dev out"
+    "relay": "node relay/relay.mjs --dir out",
+    "preview": "npm run build && node relay/relay.mjs --dir out"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",

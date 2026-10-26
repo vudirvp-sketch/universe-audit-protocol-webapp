@@ -11,7 +11,8 @@ const BASE: AppSettings = {
   provider: 'google',
   apiKey: 'sk-live-SECRET-1234',
   model: 'gemini-2.5-flash',
-  proxyUrl: 'https://universe-audit-proxy.vudirvp.workers.dev',
+  transport: 'relay',
+  relayUrl: 'http://127.0.0.1:8787',
   rpmLimit: 10,
   baseUrl: null,
   customContextWindow: null,
@@ -43,7 +44,8 @@ describe('selectPersistedSettings', () => {
     const persisted = selectPersistedSettings({ ...BASE, keyMemoryOnly: true });
     expect(persisted.provider).toBe(BASE.provider);
     expect(persisted.model).toBe(BASE.model);
-    expect(persisted.proxyUrl).toBe(BASE.proxyUrl);
+    expect(persisted.transport).toBe(BASE.transport);
+    expect(persisted.relayUrl).toBe(BASE.relayUrl);
     expect(persisted.rpmLimit).toBe(BASE.rpmLimit);
   });
 });

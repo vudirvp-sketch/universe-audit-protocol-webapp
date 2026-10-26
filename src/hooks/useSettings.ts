@@ -1,10 +1,11 @@
-// Settings hook for managing LLM provider, API key, and proxy URL
+// Settings hook for managing LLM provider, API key, and transport
+// (direct browser calls or a local relay on 127.0.0.1).
 // Uses Zustand persist middleware with skipHydration (same pattern as useAuditState)
 // to prevent React hydration mismatch in static-export Next.js apps.
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { LLM_PROVIDERS } from '@/lib/llm-client';
-import type { LLMProvider } from '@/lib/llm-client';
+import { LLM_PROVIDERS, RELAY_URL_DEFAULT } from '@/lib/llm-client';
+import type { LLMProvider, LLMTransport } from '@/lib/llm-client';
 import { createSafeStorage } from '@/lib/safe-storage';
 
 const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
@@ -58,7 +59,9 @@ export interface AppSettings {
   provider: LLMProvider;
   apiKey: string | null;
   model: string | null;
-  proxyUrl: string;
+  /** 'direct' — browser calls the provider; 'relay' — local relay on 127.0.0.1 */
+  transport: LLMTransport;
+  relayUrl: string;
   rpmLimit: number;
   // Custom provider base URL (for 'custom' provider type)
   baseUrl: string | null;
@@ -82,7 +85,8 @@ interface SettingsState extends AppSettings {
   setProvider: (provider: LLMProvider) => void;
   setApiKey: (key: string | null) => void;
   setModel: (model: string | null) => void;
-  setProxyUrl: (url: string) => void;
+  setTransport: (transport: LLMTransport) => void;
+  setRelayUrl: (url: string) => void;
   setRpmLimit: (limit: number) => void;
   setBaseUrl: (url: string | null) => void;
   setCustomContextWindow: (value: number | null) => void;
@@ -95,23 +99,12 @@ interface SettingsState extends AppSettings {
   clearSettings: () => void;
 }
 
-// Default proxy URL — pre-configured CORS proxy for this app.
-// This proxy is already deployed and working. Do not change unless
-// you are self-hosting your own proxy.
-export const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
-const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
-
 // One adapter for the lifetime of the module: a failed write must not throw out
 // of every settings setter (quota / private mode), and the failure flag has to
 // survive across calls.
 const settingsStorage = createSafeStorage(
   () => (typeof window === 'undefined' ? null : window.localStorage),
 );
-
-/** Check if the proxy URL is still the unconfigured placeholder */
-export function isProxyUrlPlaceholder(url: string): boolean {
-  return url.includes(PROXY_URL_PLACEHOLDER);
-}
 
 /**
  * Get the default model for a given provider.
@@ -125,7 +118,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   provider: 'google',
   apiKey: null,
   model: getDefaultModelForProvider('google'),  // gemini-2.5-flash — synced with LLM_PROVIDERS
-  proxyUrl: PROXY_URL_DEFAULT,
+  transport: 'direct',
+  relayUrl: RELAY_URL_DEFAULT,
   rpmLimit: PROVIDER_RPM_DEFAULTS.google,
   baseUrl: null,
   customContextWindow: null,
@@ -146,7 +140,8 @@ export function selectPersistedSettings(state: AppSettings): AppSettings {
     provider: state.provider,
     apiKey: state.keyMemoryOnly ? null : state.apiKey,
     model: state.model,
-    proxyUrl: state.proxyUrl,
+    transport: state.transport,
+    relayUrl: state.relayUrl,
     rpmLimit: state.rpmLimit,
     baseUrl: state.baseUrl,
     customContextWindow: state.customContextWindow,
@@ -187,8 +182,12 @@ export const useSettings = create<SettingsState>()(
         set({ model });
       },
 
-      setProxyUrl: (proxyUrl: string) => {
-        set({ proxyUrl });
+      setTransport: (transport: LLMTransport) => {
+        set({ transport });
+      },
+
+      setRelayUrl: (relayUrl: string) => {
+        set({ relayUrl });
       },
 
       setRpmLimit: (rpmLimit: number) => {
@@ -254,9 +253,13 @@ export const useSettings = create<SettingsState>()(
       onRehydrateStorage: () => {
         return (state) => {
           if (state) {
-            // Apply PROXY_URL_DEFAULT if proxyUrl is empty
-            if (!state.proxyUrl) {
-              state.proxyUrl = PROXY_URL_DEFAULT;
+            // Migrate/repair transport settings (old versions stored a proxyUrl;
+            // those users land on 'direct' with the default local relay URL).
+            if (state.transport !== 'direct' && state.transport !== 'relay') {
+              state.transport = 'direct';
+            }
+            if (!state.relayUrl) {
+              state.relayUrl = RELAY_URL_DEFAULT;
             }
             // Apply provider-specific RPM if rpmLimit is 0 or missing
             if (!state.rpmLimit || state.rpmLimit <= 0) {

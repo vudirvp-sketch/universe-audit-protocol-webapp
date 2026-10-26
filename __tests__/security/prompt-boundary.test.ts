@@ -79,10 +79,9 @@ describe('stream without a finish event', () => {
     const chunks: Array<{ done: boolean; finishReason?: string }> = [];
     const text = await streamChatCompletion({
       provider: 'openai' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://api.openai.com/v1/chat/completions',
-      payload: '{}',
+      url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
       onChunk: (chunk) => chunks.push({ done: chunk.done, finishReason: chunk.finishReason }),
     });
 
@@ -111,10 +110,9 @@ describe('stream without a finish event', () => {
     const chunks: Array<{ finishReason?: string }> = [];
     await streamChatCompletion({
       provider: 'openai' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://api.openai.com/v1/chat/completions',
-      payload: '{}',
+      url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
       onChunk: (chunk) => chunks.push({ finishReason: chunk.finishReason }),
     });
 

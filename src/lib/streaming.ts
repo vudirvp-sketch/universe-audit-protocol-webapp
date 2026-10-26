@@ -7,14 +7,13 @@
  * Streaming Support — SSE parser and utilities for real-time LLM output.
  *
  * This module handles:
- * 1. Parsing Server-Sent Events (SSE) from the CORS proxy
+ * 1. Parsing Server-Sent Events (SSE) from a provider or the local relay
  * 2. Normalizing streaming chunks from different provider formats
  *    (OpenAI, Anthropic, Google Gemini, HuggingFace)
  * 3. Providing an async iterable interface for consuming streaming responses
  *
- * The CORS proxy (worker/cors-proxy.js) already supports streaming passthrough
- * when the client sends `Accept: text/event-stream`. The proxy forwards the
- * ReadableStream from the provider without buffering.
+ * Both transports stream: the browser can read the provider's SSE stream
+ * directly, and the local relay forwards it without buffering.
  *
  * Provider-specific SSE formats:
  * - OpenAI-compatible (openai, deepseek, groq, mistral, openrouter, together, xai, zai, qwen, kimi):
@@ -51,14 +50,12 @@ export type OnChunkCallback = (chunk: StreamingChunk) => void;
 export interface StreamingConfig {
   /** The LLM provider — determines how SSE events are parsed */
   provider: LLMProvider;
-  /** The CORS proxy URL */
-  proxyUrl: string;
-  /** The API key for the provider */
-  apiKey: string;
-  /** The target URL for the provider's API */
-  targetUrl: string;
-  /** The JSON-stringified request body for the provider */
-  payload: string;
+  /** Provider endpoint (direct transport) or relay /api/llm (relay transport) */
+  url: string;
+  /** Provider auth headers (direct) or relay envelope headers (relay) */
+  headers: Record<string, string>;
+  /** Request body: provider-native JSON (direct) or relay envelope JSON (relay) */
+  body: string;
   /** AbortSignal for cancelling the stream */
   signal?: AbortSignal;
   /** Callback for each chunk of text received */
@@ -220,10 +217,10 @@ const STREAMING_TIMEOUT_MS = 300_000;
 // ============================================================================
 
 /**
- * Execute a streaming LLM request through the CORS proxy.
+ * Execute a streaming LLM request (direct provider or local relay).
  *
  * This function:
- * 1. Sends the request to the proxy with `Accept: text/event-stream`
+ * 1. Sends the request with `Accept: text/event-stream`
  * 2. Reads the response as a ReadableStream
  * 3. Parses SSE events and extracts text deltas
  * 4. Calls onChunk for each delta with accumulated text
@@ -237,16 +234,7 @@ const STREAMING_TIMEOUT_MS = 300_000;
  * @returns The complete text accumulated from all streaming chunks
  */
 export async function streamChatCompletion(config: StreamingConfig): Promise<string> {
-  const { provider, proxyUrl, apiKey, targetUrl, payload, signal, onChunk } = config;
-
-  // Build the proxy request body — same format as buffered requests
-  // but the proxy will detect Accept: text/event-stream and switch to streaming mode
-  const proxyRequestBody = JSON.stringify({
-    provider,
-    apiKey,
-    targetUrl,
-    payload,
-  });
+  const { provider, url, headers, body, signal, onChunk } = config;
 
   // ── Client-side timeout for streaming requests ──────────────────────
   // If the caller didn't provide a signal (or the signal has no timeout),
@@ -258,16 +246,16 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
     ? AbortSignal.any([signal, timeoutController.signal])
     : timeoutController.signal;
 
-  // Make the streaming request
+  // Make the streaming request: direct provider endpoint or local relay.
   let response: Response;
   try {
-    response = await fetch(proxyUrl, {
+    response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        ...headers,
         'Accept': 'text/event-stream',
       },
-      body: proxyRequestBody,
+      body,
       signal: combinedSignal,
     });
   } catch (fetchError: unknown) {
@@ -280,7 +268,8 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
     }
     if (fetchError instanceof TypeError) {
       throw new Error(
-        'Не удалось подключиться к прокси для streaming-запроса. Проверьте интернет-соединение.'
+        'Не удалось подключиться к API. Проверьте интернет и транспорт в Настройках ' +
+        '(«Напрямую» или «Локальный релей»).'
       );
     }
     throw fetchError;
@@ -295,8 +284,11 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
       // "body already consumed" error if json() partially reads the stream
       const errorBody = await response.text();
       try {
-        const errData = JSON.parse(errorBody) as { message?: string; error?: string; details?: string };
-        errorMessage = errData.message || errData.error || errData.details || '';
+        const errData = JSON.parse(errorBody) as { message?: string; error?: string | { message?: string }; details?: string };
+        errorMessage = errData.message
+          || (typeof errData.error === 'string' ? errData.error : errData.error?.message)
+          || errData.details
+          || '';
       } catch {
         errorMessage = errorBody;
       }
@@ -305,13 +297,18 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
     }
 
     switch (response.status) {
+      case 401:
+      case 403:
+        throw new Error(`API-ключ отклонён (${response.status})${errorMessage ? `: ${errorMessage}` : ''}`);
+      case 404:
+        throw new Error(`Модель или endpoint не найден (404)${errorMessage ? `: ${errorMessage}` : ''}`);
       case 504:
         throw new Error(
           errorMessage || 'Таймаут. Модель думает слишком долго. Попробуйте более быструю модель или более короткий текст.'
         );
       case 413:
         throw new Error(
-          errorMessage || 'Слишком большой запрос. Текст будет разбит на части автоматически (chunking).'
+          errorMessage || 'Слишком большой запрос. Уменьшите текст или выберите модель с большим контекстом.'
         );
       case 429:
         throw new Error(
@@ -319,11 +316,12 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
         );
       case 500:
       case 502:
+      case 503:
         throw new Error(
-          errorMessage || 'Прокси временно недоступен. Подождите минуту и попробуйте снова.'
+          errorMessage || 'Провайдер временно недоступен. Подождите минуту и попробуйте снова.'
         );
       default:
-        throw new Error(`Ошибка прокси (${response.status}): ${errorMessage}`);
+        throw new Error(`Ошибка API (${response.status})${errorMessage ? `: ${errorMessage}` : ''}`);
     }
   }
 

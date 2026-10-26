@@ -259,10 +259,9 @@ describe('streamChatCompletion', () => {
 
     const fullText = await streamChatCompletion({
       provider: 'openai' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://api.openai.com/v1/chat/completions',
-      payload: JSON.stringify({ model: 'gpt-4o', messages: [], stream: true }),
+      url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', messages: [], stream: true }),
       onChunk: (chunk) => {
         receivedChunks.push(chunk.delta);
       },
@@ -289,10 +288,9 @@ describe('streamChatCompletion', () => {
 
     const fullText = await streamChatCompletion({
       provider: 'anthropic' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://api.anthropic.com/v1/messages',
-      payload: JSON.stringify({ model: 'claude-3', messages: [], stream: true }),
+      url: 'https://api.anthropic.com/v1/messages',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-3', messages: [], stream: true }),
       onChunk: () => {},
     });
 
@@ -314,10 +312,9 @@ describe('streamChatCompletion', () => {
 
     const fullText = await streamChatCompletion({
       provider: 'google' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
-      payload: JSON.stringify({ contents: [] }),
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [] }),
       onChunk: () => {},
     });
 
@@ -336,10 +333,9 @@ describe('streamChatCompletion', () => {
 
     const fullText = await streamChatCompletion({
       provider: 'openai' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://api.openai.com/v1/chat/completions',
-      payload: JSON.stringify({ model: 'gpt-4o', messages: [] }),
+      url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'gpt-4o', messages: [] }),
       onChunk: () => {},
     });
 
@@ -360,10 +356,9 @@ describe('streamChatCompletion', () => {
     await expect(
       streamChatCompletion({
         provider: 'openai' as LLMProvider,
-        proxyUrl: 'https://proxy.example.com',
-        apiKey: 'test-key',
-        targetUrl: 'https://api.openai.com/v1/chat/completions',
-        payload: '{}',
+        url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
         onChunk: () => {},
       })
     ).rejects.toThrow();
@@ -381,10 +376,9 @@ describe('streamChatCompletion', () => {
     await expect(
       streamChatCompletion({
         provider: 'openai' as LLMProvider,
-        proxyUrl: 'https://proxy.example.com',
-        apiKey: 'test-key',
-        targetUrl: 'https://api.openai.com/v1/chat/completions',
-        payload: '{}',
+        url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
         onChunk: () => {},
       })
     ).rejects.toThrow();
@@ -402,10 +396,9 @@ describe('streamChatCompletion', () => {
     await expect(
       streamChatCompletion({
         provider: 'openai' as LLMProvider,
-        proxyUrl: 'https://proxy.example.com',
-        apiKey: 'test-key',
-        targetUrl: 'https://api.openai.com/v1/chat/completions',
-        payload: '{}',
+        url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
         onChunk: () => {},
       })
     ).rejects.toThrow();
@@ -421,10 +414,9 @@ describe('streamChatCompletion', () => {
 
     const fullText = await streamChatCompletion({
       provider: 'openai' as LLMProvider,
-      proxyUrl: 'https://proxy.example.com',
-      apiKey: 'test-key',
-      targetUrl: 'https://api.openai.com/v1/chat/completions',
-      payload: '{}',
+      url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
       onChunk: () => {},
     });
 
@@ -451,10 +443,9 @@ describe('streamChatCompletion', () => {
     await expect(
       streamChatCompletion({
         provider: 'openai' as LLMProvider,
-        proxyUrl: 'https://proxy.example.com',
-        apiKey: 'test-key',
-        targetUrl: 'https://api.openai.com/v1/chat/completions',
-        payload: '{}',
+        url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
         onChunk: () => {},
       })
     ).rejects.toThrow('Connection lost');
@@ -471,10 +462,9 @@ describe('streamChatCompletion', () => {
     await expect(
       streamChatCompletion({
         provider: 'openai' as LLMProvider,
-        proxyUrl: 'https://proxy.example.com',
-        apiKey: 'test-key',
-        targetUrl: 'https://api.openai.com/v1/chat/completions',
-        payload: '{}',
+        url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
         onChunk: () => {},
       })
     ).rejects.toThrow('no readable body');
@@ -492,10 +482,9 @@ describe('streamChatCompletion', () => {
     await expect(
       streamChatCompletion({
         provider: 'openai' as LLMProvider,
-        proxyUrl: 'https://proxy.example.com',
-        apiKey: 'test-key',
-        targetUrl: 'https://api.openai.com/v1/chat/completions',
-        payload: '{}',
+        url: 'https://api.openai.com/v1/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
         signal: controller.signal,
         onChunk: () => {},
       })

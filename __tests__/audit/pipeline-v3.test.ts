@@ -83,7 +83,6 @@ const defaultLLMConfig: LLMConfig = {
   provider: 'google',
   apiKey: 'test-key',
   model: 'gemini-2.0-flash',
-  proxyUrl: 'https://proxy.test',
   rpmLimit: 60,
 };
 

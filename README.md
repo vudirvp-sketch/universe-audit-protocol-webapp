@@ -1,41 +1,48 @@
 # Universe Audit Protocol v16
 
-AI-powered tool for auditing fictional worlds and narratives through a 5-block sequential pipeline and five coupled audit dimensions. The verdict is qualitative: no numeric scores, no checklist percentages. No deployment, no downloads — just open the link, enter your API key, and start analyzing.
+AI-powered tool for auditing fictional worlds and narratives through a 5-block sequential pipeline and five coupled audit dimensions. The verdict is qualitative: no numeric scores, no checklist percentages. There is no backend and no third-party proxy: the app is a static page, and the API calls happen on your machine.
 
 The canonical specification is [`UNIVERSE_AUDIT_PROTOCOL_ULTIMATE_v16`](./UNIVERSE_AUDIT_PROTOCOL_ULTIMATE_v16) in the repository root.
 
 ## Quick Start
 
-1. **Open the app**: [universe-audit-protocol.pages.dev](https://universe-audit-protocol.pages.dev)
-2. **Click the gear icon** (Settings) in the header
-3. **Select your LLM provider** (Google Gemini and Groq have free tiers!)
-4. **Enter your API key**
-5. **Click Save** — that's it!
+1. **Open the app** (any static hosting, or run it locally — see below).
+2. **Click the gear icon** (Settings) in the header.
+3. **Select your LLM provider** (Google Gemini, OpenRouter and DeepSeek work directly from the browser; Groq has a free tier via the relay).
+4. **Choose how to connect**: «Напрямую из браузера» for CORS-capable providers, or «Локальный релей» for everything else.
+5. **Enter your API key** (or leave it empty when the local relay runs with `LLM_API_KEY`).
+6. **Click Save** — that's it.
 
-The CORS proxy is pre-configured. You don't need to deploy anything.
+## Connectivity: direct browser or local relay
+
+Everything runs on the user's machine; there is no Cloudflare Worker, no account and no domain to register.
+
+- **Direct** (default): the browser calls the provider API itself. Works for providers that send CORS headers — Google Gemini, Anthropic, OpenRouter, DeepSeek — and for local runtimes (Ollama, LM Studio) reachable on `localhost`. The key is attached in a header (`x-goog-api-key` for Gemini, `x-api-key` for Anthropic, Bearer elsewhere) and never goes through a third party.
+- **Local relay** (optional): `node relay/relay.mjs` starts a small zero-dependency server on `127.0.0.1:8787`. It serves the built app and forwards `/api/llm` requests to the provider. Needed for providers that block browser CORS (OpenAI, Groq, Mistral, …), and it can hold the key itself (`LLM_API_KEY`), so the key never enters the browser at all.
+
+```bash
+npm run build          # static export in out/
+npm run relay          # http://127.0.0.1:8787
+# or, with the key kept out of the browser:
+LLM_API_KEY=sk-... npm run relay
+```
+
+The relay only listens on loopback, pins `targetUrl` to the declared provider's API host, checks the `Host`/`Origin` headers (DNS-rebinding and foreign-site protections), and never logs keys or request bodies. See [`relay/README.md`](./relay/README.md).
 
 ## Security and API key handling
-
-The app is a static site: there is no backend and no server-side provider secret. Your API key is entered in the browser and used for requests you start.
 
 Where the key lives:
 
 - **Default:** `localStorage` under `universe-audit-settings`, so it survives reloads and browser restarts. It is plaintext — anyone with access to the browser profile, a full-disk backup, or an extension with host permissions can read it.
 - **Session-only:** enable «Не сохранять ключ на диск» in Settings. The key is then written to `sessionStorage` only (survives a reload of the tab, dies when the tab closes) and the `localStorage` entry stores `apiKey: null`.
+- **Not in the browser at all:** run the local relay with `LLM_API_KEY` (or `LLM_API_KEY_<PROVIDER>`) and leave the field empty in Settings.
 
 Where the key travels:
 
-- The browser sends it to the CORS proxy configured in Settings → Advanced, which forwards it to the provider. With the bundled proxy (`universe-audit-proxy.vudirvp.workers.dev`) the proxy operator can technically observe traffic, so for maximum privacy deploy your own worker from [`worker/`](./worker) and point Settings at it.
-- The proxy does not store or log keys (v9 logs contain no key material in any form), and every response is `no-store`.
-- Before sending anything, the client validates the proxy URL (https only, except `localhost` for local development) and, for custom providers, the base URL. `http://` proxies are refused so a key cannot be posted in cleartext.
+- **Direct mode:** browser → provider. The app's own code is the only intermediary.
+- **Relay mode:** browser → `127.0.0.1` → provider. The key crosses only the loopback interface (or not at all, with `LLM_API_KEY`). The relay validates the relay URL client-side (https, or plain http only for loopback) and the provider base URL before anything is sent.
 
-Proxy hardening (v9):
-
-- **No open relay.** The worker accepts only the API host of the provider named in the request (`api.openai.com` for `openai`, etc.). Custom endpoints are disabled unless the host is listed in `ALLOWED_CUSTOM_HOSTS` (empty by default).
-- **Origin allowlist.** `Access-Control-Allow-Origin` is echoed only for allowlisted app origins (production Pages domain, Pages previews of the same project, `localhost:3000`); it is never `*`. A custom domain must be added to `ALLOWED_ORIGINS`.
-- **Real body-size limit**, enforced on received bytes rather than `Content-Length`; streaming stall timeout; no key in logs or error payloads.
-
-Residual risks worth knowing: a malicious browser extension or a compromise of the proxy deployment can still read the key while it is in use; disabling persistence (session-only mode) and using your own proxy are the two mitigations this app offers. Prompt-injected model output cannot exfiltrate the key: rendered report HTML is escaped and raw HTML from the model is not enabled.
+Residual risks worth knowing: a malicious browser extension, a compromised dependency, or disk access to the browser profile can still read a persisted key. Session-only mode and the env-key relay are the mitigations this app offers. Prompt-injected model output cannot exfiltrate the key: rendered report HTML is escaped and raw HTML from the model is not enabled.
 
 ## What it does
 
@@ -114,42 +121,36 @@ No export contains a checklist score, a percentage or an `X/52` counter.
 
 ## Supported LLM Providers
 
-| Provider | Auth Method | Default Model | Free Tier? |
-|----------|-------------|---------------|------------|
-| Z.AI | Bearer token | default | - |
-| OpenAI | Bearer token | gpt-4.1-mini | - |
-| Anthropic | x-api-key | claude-sonnet-4-6 | - |
-| Google Gemini | Query string | gemini-2.5-flash | Yes |
-| Mistral | Bearer token | mistral-large-latest | - |
-| DeepSeek | Bearer token | deepseek-chat | - |
-| Qwen | Bearer token | qwen-turbo | - |
-| Kimi | Bearer token | moonshot-v1-8k | - |
-| Groq | Bearer token | llama-3.3-70b-versatile | Yes |
-| OpenRouter | Bearer token | anthropic/claude-sonnet-4 | Yes |
-| HuggingFace | Bearer token | - | Yes |
-| Together AI | Bearer token | - | Yes |
-| xAI | Bearer token | grok-3-mini-fast | - |
-| Custom | Bearer token | - | - |
+| Provider | Browser (CORS) | Auth Method | Default Model | Free Tier? |
+|----------|----------------|-------------|---------------|------------|
+| Z.AI | unknown → relay | Bearer token | default | - |
+| OpenAI | **no → relay** | Bearer token | gpt-4.1-mini | - |
+| Anthropic | yes | x-api-key + `anthropic-dangerous-direct-browser-access` | claude-sonnet-4-6 | - |
+| Google Gemini | yes | `x-goog-api-key` header | gemini-2.5-flash | Yes |
+| Mistral | unknown → relay | Bearer token | mistral-large-latest | - |
+| DeepSeek | yes | Bearer token | deepseek-chat | - |
+| Qwen | unknown → relay | Bearer token | qwen-turbo | - |
+| Kimi | unknown → relay | Bearer token | moonshot-v1-8k | - |
+| Groq | unknown → relay | Bearer token | llama-3.3-70b-versatile | Yes |
+| OpenRouter | yes | Bearer token | anthropic/claude-sonnet-4 | Yes |
+| HuggingFace | unknown → relay | Bearer token | - | Yes |
+| Together AI | unknown → relay | Bearer token | - | Yes |
+| xAI | unknown → relay | Bearer token | grok-3-mini-fast | - |
+| Custom / Ollama / LM Studio | depends on endpoint | Bearer token | - | - |
 
-> **Note**: Default models are synced with `src/lib/llm-client.ts` (`LLM_PROVIDERS`). If a model becomes deprecated, it is automatically migrated in `src/hooks/useSettings.ts` via rehydration logic.
+> **Note**: Default models are synced with `src/lib/llm-client.ts` (`LLM_PROVIDERS`). If a model becomes deprecated, it is automatically migrated in `src/hooks/useSettings.ts` via rehydration logic. "Unknown" CORS support means the UI warns you; if a direct call fails, switch the transport to the local relay. Local runtimes need CORS enabled on their side (`OLLAMA_ORIGINS`, LM Studio's CORS toggle).
 
 ## Architecture
 
 ```
-Browser (Next.js Static SPA)
-       |
-       | fetch() with CORS
-       v
-Cloudflare Worker (CORS Proxy)
-       |
-       v
-LLM Provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
+Direct:  Browser (Next.js static SPA) ──fetch──> LLM provider
+Relay:   Browser (Next.js static SPA) ──fetch──> node relay/relay.mjs (127.0.0.1)
+                                               ──fetch──> LLM provider
 ```
 
-- **Frontend**: Next.js static SPA deployed on Cloudflare Pages
-- **CORS Proxy**: Cloudflare Worker that handles provider-specific request transformations
-- **State**: Browser localStorage via Zustand with `persist` middleware
-- **No server, no database**: Everything runs client-side
+- **Frontend**: Next.js static export — no server, no database; state in `localStorage` via Zustand `persist`
+- **Local relay** (optional): zero-dependency Node script that serves the same static build and forwards `/api/llm`; it exists only to work around provider CORS and to keep the key out of the browser
+- **No Cloudflare, no accounts, no domain**: the app itself is just static files
 
 ## Tech Stack
 
@@ -159,7 +160,7 @@ LLM Provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 - **shadcn/ui** - UI components
 - **Zustand** - State management with localStorage persistence
 - **Vitest** - Testing framework
-- **Cloudflare Workers** - CORS proxy
+- **Node.js** - Local relay only (`relay/relay.mjs`, no dependencies)
 
 ---
 
@@ -168,8 +169,8 @@ LLM Provider (OpenAI, Anthropic, Google, DeepSeek, etc.)
 
 ### Prerequisites
 
-- Node.js 20+
-- An LLM API key (OpenAI, Anthropic, Google, DeepSeek, etc.)
+- Node.js 22+
+- An LLM API key for the provider you want to use (or a local Ollama / LM Studio endpoint)
 
 ### Local Development
 
@@ -200,70 +201,27 @@ npm run test:coverage
 npx vitest run __tests__/audit/export-utils.test.ts
 ```
 
-### Deploying the CORS Proxy Worker
+### Run locally (no hosting at all)
 
 ```bash
-cd worker
-npm ci
-npx wrangler login
-npx wrangler deploy
+npm install
+npm run build      # static export in out/
+npm run relay      # serves the app on http://127.0.0.1:8787
 ```
 
-Security configuration lives in [`worker/wrangler.toml`](./worker/wrangler.toml) `[vars]`:
+With `LLM_API_KEY` (or `LLM_API_KEY_<PROVIDER>`) in the environment, the relay forwards provider requests itself, and the browser never sees the key. All requests are same-origin to `127.0.0.1`, so provider CORS does not matter.
 
-- `ALLOWED_ORIGINS` — comma-separated browser origins allowed to call the proxy. Unset means the production Pages domain, its previews, and localhost:3000.
-- `ALLOWED_CUSTOM_HOSTS` — comma-separated hostnames for `provider: "custom"`. Empty (default) disables custom endpoints on this proxy.
+### Deploy as a static site (no domain needed)
 
-After deploying, verify the hardening:
+Any static host works — the build output is plain files in `out/`:
 
-```bash
-curl -s https://<your-worker>.workers.dev/health           # expects "version":"v9"
-curl -si -X OPTIONS https://<your-worker>.workers.dev/ -H "Origin: https://evil.example"  # expects 403
-```
+- **GitHub Pages**: `.github/workflows/deploy.yml` builds, tests and deploys on every push to `main`. Enable it once in _Settings → Pages → Source: GitHub Actions_. The site appears at `https://<user>.github.io/<repo>/`, no custom domain.
+- **Netlify / Vercel (free)**: build command `npm run build`, publish directory `out`. Their free `*.netlify.app` / `*.vercel.app` subdomains need no domain registration.
+- **Any static hosting** (S3, nginx, `python -m http.server`): upload `out/`.
 
-### Deploying the Frontend (Cloudflare Pages)
+When the page is served over https, direct browser calls work for CORS providers; the local relay is reachable at `http://127.0.0.1:8787` (localhost is exempt from mixed-content blocking).
 
-**Important**: This project uses `output: 'export'` in `next.config.ts`, which produces a fully static build in the `out/` directory. It must be deployed as **Cloudflare Pages** (static), NOT as a Cloudflare Worker.
-
-**Option A: Cloudflare Dashboard (recommended)**
-
-1. Go to Cloudflare Dashboard -> Workers & Pages -> Create -> Pages -> Connect to Git
-2. Select the repository
-3. Build settings:
-   - Framework preset: **Next.js (Static Export)**
-   - Build command: `npm run build`
-   - Build output directory: `out`
-   - **Do NOT use** `npx wrangler deploy` as the deploy command
-4. Click **Save and Deploy**
-
-**Option B: Wrangler CLI**
-
-```bash
-npm run build
-npx wrangler pages deploy out --project-name=universe-audit-protocol
-```
-
-Or use the convenience script:
-```bash
-npm run deploy:pages
-```
-
-**Option C: GitHub Actions (automatic)**
-
-Configure `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub Secrets, then push to `main`.
-
-### Common Deployment Error
-
-If you see this error:
-```
-Error: ENOENT: no such file or directory, open '.next/standalone/.next/server/pages-manifest.json'
-```
-
-It means Cloudflare is trying to deploy as a **Worker** (using OpenNext) instead of as a **Pages static site**. To fix:
-1. In Cloudflare Dashboard, go to your Pages project settings
-2. Ensure the framework preset is **Next.js (Static Export)**
-3. Build output directory must be `out` (not `.next`)
-4. The deploy command should NOT be `npx wrangler deploy`
+**Limits of static hosting:** GitHub Pages cannot set custom HTTP headers, so `public/_headers` (CSP etc.) is honoured by Netlify and by any host that reads it, but ignored by GitHub Pages. The app still works there; only the extra defence-in-depth headers are lost.
 
 </details>
 
@@ -277,9 +235,11 @@ The test suite covers:
 
 - **Export utilities**: protocol identity, verdict serialisation, five block markdowns, HTML escaping, absence of any score artefact
 - **Error handler**: all `AuditErrorType` classifications, retry logic, Russian messages, abort handling
-- **Streaming**: SSE line parsing, provider-specific delta extraction (OpenAI, Anthropic, Google)
-- **Context bridge**: orientation extraction (audit mode, authorship hypothesis, skeleton, fast screen)
+- **Streaming**: SSE line parsing, provider-specific delta extraction (OpenAI, Anthropic, Google), finish-reason normalisation, truncated streams
+- **Context bridge / prompts**: orientation extraction, deterministic audit mode, material fencing
 - **Pipeline**: sequential block execution, chunking, partial-text recovery
+- **Local relay**: static serving, provider-host pinning, auth injection, Origin/Host guards, env-key override, body limits, no key in logs
+- **Client security**: relay URL validation, provider auth headers, key custody (session-only storage)
 
 ## Key Protocol Rules Implemented
 

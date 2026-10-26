@@ -126,7 +126,6 @@ describe('useAuditStateV3 — persisted shape', () => {
       provider: 'openai',
       model: 'gpt-test',
       apiKey: 'sk-secret-value',
-      proxyUrl: 'https://proxy.example',
     });
     // Any state write flushes the persisted snapshot.
     store.getState().setInputText('черновик');

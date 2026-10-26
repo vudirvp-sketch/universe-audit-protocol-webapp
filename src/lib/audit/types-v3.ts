@@ -66,7 +66,10 @@ export interface LLMConfig {
   model: string;
   apiKey: string;
   baseUrl?: string;
-  proxyUrl?: string;
+  /** 'direct' (browser → provider) or 'relay' (browser → local relay → provider) */
+  transport?: 'direct' | 'relay';
+  /** Local relay URL, used when transport === 'relay' */
+  relayUrl?: string;
   customContextWindow?: number;
   customMaxOutputTokens?: number;
   customSupportsJSONMode?: boolean | null;

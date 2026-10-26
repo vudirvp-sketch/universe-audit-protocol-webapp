@@ -31,18 +31,21 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server, ShieldCheck } from 'lucide-react';
-import { useSettings, isProxyUrlPlaceholder, PROXY_URL_DEFAULT } from '@/hooks/useSettings';
+import { useSettings } from '@/hooks/useSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   LLM_PROVIDERS,
   AVAILABLE_PROVIDERS,
   type LLMProvider,
+  type LLMTransport,
   createLLMClient,
   PREFERRED_MODELS,
   getModelCapabilities,
   validateApiKey,
-  validateProxyUrl,
+  validateRelayUrl,
   normalizeCustomBaseUrl,
+  PROVIDER_BROWSER_CORS,
+  RELAY_URL_DEFAULT,
 } from '@/lib/llm-client';
 import { t } from '@/lib/i18n/ru';
 
@@ -54,12 +57,14 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const provider = useSettings((s) => s.provider);
   const apiKey = useSettings((s) => s.apiKey);
   const model = useSettings((s) => s.model);
-  const proxyUrl = useSettings((s) => s.proxyUrl);
+  const transport = useSettings((s) => s.transport);
+  const relayUrl = useSettings((s) => s.relayUrl);
   const rpmLimit = useSettings((s) => s.rpmLimit);
   const setProvider = useSettings((s) => s.setProvider);
   const setApiKey = useSettings((s) => s.setApiKey);
   const setModel = useSettings((s) => s.setModel);
-  const setProxyUrl = useSettings((s) => s.setProxyUrl);
+  const setTransport = useSettings((s) => s.setTransport);
+  const setRelayUrl = useSettings((s) => s.setRelayUrl);
   const setRpmLimit = useSettings((s) => s.setRpmLimit);
   const setCustomContextWindow = useSettings((s) => s.setCustomContextWindow);
   const setCustomMaxOutputTokens = useSettings((s) => s.setCustomMaxOutputTokens);
@@ -77,7 +82,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [inputKey, setInputKey] = React.useState('');
   const [inputModel, setInputModel] = React.useState('');
-  const [inputProxyUrl, setInputProxyUrl] = React.useState('');
+  const [inputRelayUrl, setInputRelayUrl] = React.useState(RELAY_URL_DEFAULT);
+  const [inputTransport, setInputTransport] = React.useState<LLMTransport>('direct');
   const [inputRpmLimit, setInputRpmLimit] = React.useState('');
   const [inputBaseUrl, setInputBaseUrl] = React.useState('');
   const [showKey, setShowKey] = React.useState(false);
@@ -97,14 +103,15 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     if (open) {
       setInputKey(apiKey || '');
       setInputModel(model || '');
-      setInputProxyUrl(proxyUrl || '');
+      setInputRelayUrl(relayUrl || RELAY_URL_DEFAULT);
+      setInputTransport(transport);
       setInputRpmLimit(String(rpmLimit));
       setInputBaseUrl(baseUrl || '');
       setInputContextWindow(customContextWindow != null ? String(customContextWindow) : '');
       setInputMaxOutputTokens(customMaxOutputTokens != null ? String(customMaxOutputTokens) : '');
       setSaved(false);
     }
-  }, [open, apiKey, model, proxyUrl, rpmLimit, customContextWindow, customMaxOutputTokens, baseUrl]);
+  }, [open, apiKey, model, transport, relayUrl, rpmLimit, customContextWindow, customMaxOutputTokens, baseUrl]);
 
   // Update model input when provider changes
   React.useEffect(() => {
@@ -132,14 +139,13 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const handleSave = () => {
     const trimmedKey = inputKey.trim();
     const trimmedModel = inputModel.trim();
-    const trimmedProxyUrl = inputProxyUrl.trim();
+    const trimmedRelayUrl = inputRelayUrl.trim();
 
-    // Validate endpoints before persisting — a malformed proxy/base URL would
-    // otherwise be saved silently and break every later request.
-    if (trimmedProxyUrl) {
-      const proxyCheck = validateProxyUrl(trimmedProxyUrl);
-      if (!proxyCheck.valid) {
-        setFormError(proxyCheck.error || t.settings.invalidProxyUrl);
+    // Validate the relay endpoint only when it is actually used.
+    if (inputTransport === 'relay') {
+      const relayCheck = validateRelayUrl(trimmedRelayUrl);
+      if (!relayCheck.valid) {
+        setFormError(relayCheck.error || t.settings.invalidRelayUrl);
         return;
       }
     }
@@ -164,9 +170,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setModel(null);
     }
 
-    // An empty proxy field means "use the bundled proxy", not "keep whatever
-    // was typed before" — the previous behaviour silently ignored clearing it.
-    setProxyUrl(trimmedProxyUrl || PROXY_URL_DEFAULT);
+    setTransport(inputTransport);
+    setRelayUrl(trimmedRelayUrl || RELAY_URL_DEFAULT);
 
     const parsedRpm = parseInt(inputRpmLimit, 10);
     if (!isNaN(parsedRpm) && parsedRpm > 0) {
@@ -201,7 +206,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
     setInputKey('');
     setInputModel('');
-    setInputProxyUrl('');
+    setInputRelayUrl(RELAY_URL_DEFAULT);
+    setInputTransport('direct');
     setInputRpmLimit('');
     setInputBaseUrl('');
     setInputContextWindow('');
@@ -215,36 +221,38 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
   const handleTestConnection = async () => {
     const trimmedKey = inputKey.trim();
-    const trimmedProxy = inputProxyUrl.trim();
+    const trimmedRelayUrl = inputRelayUrl.trim();
     const trimmedModel = inputModel.trim() || LLM_PROVIDERS[provider]?.defaultModel || '';
-    if (!trimmedKey) return;
+    // In relay mode the key may live in the relay's env (LLM_API_KEY), so a
+    // placeholder is enough for the request to reach the relay.
+    const effectiveKey = trimmedKey || (inputTransport === 'relay' ? 'env' : '');
 
-    // Previously an empty proxy URL made this button a silent no-op.
-    if (!trimmedProxy) {
-      setTestConnection({ loading: false, success: false, error: t.settings.proxyRequiredForTest });
+    if (!effectiveKey) {
+      setTestConnection({ loading: false, success: false, error: 'Сначала укажите API-ключ.' });
       return;
     }
-    const proxyCheck = validateProxyUrl(trimmedProxy);
-    if (!proxyCheck.valid) {
-      setTestConnection({ loading: false, success: false, error: proxyCheck.error || t.settings.invalidProxyUrl });
-      return;
+
+    if (inputTransport === 'relay') {
+      const relayCheck = validateRelayUrl(trimmedRelayUrl);
+      if (!relayCheck.valid) {
+        setTestConnection({ loading: false, success: false, error: relayCheck.error || t.settings.invalidRelayUrl });
+        return;
+      }
     }
 
     setTestConnection({ loading: true, success: false, error: null });
 
-    // FIX: Use AbortController with signal passed to fetch() for REAL timeout.
-    // Also use skipProxyRetry to tell the worker not to retry 429s server-side
-    // (prevents 12+ seconds of hidden retries before the client gets a response).
-    // Combined: the test connection fails fast with a clear error message.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
 
     try {
       const client = createLLMClient({
         provider,
-        apiKey: trimmedKey,
+        apiKey: effectiveKey,
         model: trimmedModel,
-        proxyUrl: trimmedProxy,
+        transport: inputTransport,
+        relayUrl: trimmedRelayUrl,
+        baseUrl: provider === 'custom' ? (inputBaseUrl.trim() || undefined) : undefined,
       });
       await client.chatCompletion({
         messages: [
@@ -252,7 +260,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
         ],
         max_tokens: 10,
         signal: controller.signal, // Real fetch cancellation on timeout
-        skipProxyRetry: true, // Tell proxy to skip server-side 429 retries
       });
       clearTimeout(timeoutId);
       setTestConnection({ loading: false, success: true, error: null });
@@ -260,21 +267,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       clearTimeout(timeoutId);
       let msg = err instanceof Error ? err.message : String(err);
 
-      // Handle AbortError (timeout)
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        msg = 'Таймаут — сервер не ответил за 15 секунд. Проверьте URL прокси и доступность API.';
-      } else if (controller.signal.aborted) {
-        msg = 'Таймаут — сервер не ответил за 15 секунд. Проверьте URL прокси и доступность API.';
-      }
-
-      // Make 429 error more user-friendly
-      if (msg.includes('429') || msg.includes('лимит запросов')) {
-        msg = 'Лимит запросов (429). Провайдер временно отклоняет запросы. Подождите 1-2 минуты и попробуйте снова. Если проблема повторяется — проверьте лимиты вашего API-ключа в консоли провайдера.';
-      }
-
-      // Make proxy errors more user-friendly
-      if (msg.includes('ошибка прокси') && !msg.includes('429')) {
-        msg = 'Прокси вернул ошибку. Проверьте URL прокси в расширенных настройках и попробуйте снова.';
+      if (controller.signal.aborted) {
+        msg = inputTransport === 'relay'
+          ? 'Таймаут — локальный релей не ответил за 20 секунд. Проверьте, что `node relay/relay.mjs` запущен.'
+          : 'Таймаут — провайдер не ответил за 20 секунд. Проверьте интернет и доступность API.';
       }
 
       setTestConnection({ loading: false, success: false, error: msg });
@@ -290,9 +286,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const keyFormatWarning = inputKey.trim()
     ? validateApiKey(provider, inputKey.trim()).error ?? null
     : null;
-  const proxyWarning = inputProxyUrl.trim()
-    ? validateProxyUrl(inputProxyUrl.trim()).error ?? null
+  const relayWarning = inputTransport === 'relay' && inputRelayUrl.trim()
+    ? validateRelayUrl(inputRelayUrl.trim()).error ?? null
     : null;
+  const corsSupport = PROVIDER_BROWSER_CORS[provider];
   const baseUrlWarning = provider === 'custom' && inputBaseUrl.trim()
     ? normalizeCustomBaseUrl(inputBaseUrl.trim()).error ?? null
     : null;
@@ -331,6 +328,54 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 <Zap className="h-3 w-3" />
                 {t.settings.freeTierAvailable}
               </p>
+            )}
+          </div>
+
+          {/* Transport: direct browser calls or a local relay */}
+          <div className="space-y-2">
+            <Label htmlFor="transport" className="flex items-center gap-2">
+              <Server className="h-4 w-4" />
+              {t.settings.transport}
+            </Label>
+            <Select value={inputTransport} onValueChange={(v) => setInputTransport(v as LLMTransport)}>
+              <SelectTrigger id="transport">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="direct">{t.settings.transportDirect}</SelectItem>
+                <SelectItem value="relay">{t.settings.transportRelay}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-sm text-muted-foreground">{t.settings.transportHint}</p>
+
+            {inputTransport === 'direct' && corsSupport !== 'yes' && (
+              <Alert className="bg-severity-warning/10 border-severity-warning/30">
+                <AlertDescription className="text-severity-warning text-sm">
+                  {(corsSupport === 'no' ? t.settings.corsBlocked : t.settings.corsUnknown)
+                    .replace('{provider}', currentProvider?.name || '')}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {inputTransport === 'relay' && (
+              <div className="space-y-2 pt-1">
+                <Label htmlFor="relay-url" className="flex items-center gap-2 text-sm">
+                  <Server className="h-3 w-3" />
+                  {t.settings.relayUrl}
+                </Label>
+                <Input
+                  id="relay-url"
+                  type="url"
+                  placeholder={RELAY_URL_DEFAULT}
+                  value={inputRelayUrl}
+                  onChange={(e) => setInputRelayUrl(e.target.value)}
+                  className="text-sm h-8"
+                />
+                <p className="text-sm text-muted-foreground">{t.settings.relayUrlHint}</p>
+                {relayWarning && (
+                  <p className="text-sm text-severity-critical">{relayWarning}</p>
+                )}
+              </div>
             )}
           </div>
 
@@ -404,10 +449,17 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 )}
               </Button>
             </div>
-            {!inputKey.trim() && (
+            {!inputKey.trim() && inputTransport === 'direct' && (
               <Alert className="bg-severity-critical/10 border-severity-critical/30">
                 <AlertDescription className="text-severity-critical text-sm">
                   API-ключ обязателен для запуска аудита. Без ключа запросы к LLM вернут ошибку 400.
+                </AlertDescription>
+              </Alert>
+            )}
+            {!inputKey.trim() && inputTransport === 'relay' && (
+              <Alert className="bg-muted border-border">
+                <AlertDescription className="text-muted-foreground text-sm">
+                  {t.settings.relayKeyOptional}
                 </AlertDescription>
               </Alert>
             )}
@@ -454,37 +506,6 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
             {showAdvanced && (
               <div className="px-3 pb-3 space-y-4">
-                {/* Proxy URL */}
-                <div className="space-y-2">
-                  <Label htmlFor="proxy-url" className="flex items-center gap-2 text-sm">
-                    <Server className="h-3 w-3" />
-                    {t.settings.proxyUrl}
-                  </Label>
-                  <Input
-                    id="proxy-url"
-                    type="url"
-                    placeholder="https://audit-proxy.your-subdomain.workers.dev"
-                    value={inputProxyUrl}
-                    onChange={(e) => setInputProxyUrl(e.target.value)}
-                    className="text-sm h-8"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    {t.settings.proxyUrlHintAdvanced}
-                  </p>
-                  {proxyWarning && (
-                    <p className="text-sm text-severity-critical">
-                      {proxyWarning}
-                    </p>
-                  )}
-                  {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
-                    <Alert className="bg-severity-warning/10 border-severity-warning/30">
-                      <AlertDescription className="text-severity-warning text-sm">
-                        {t.settings.proxyUrlPlaceholder}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </div>
-
                 {/* Base URL for Custom Provider */}
                 {provider === 'custom' && (
                   <div className="space-y-2">
@@ -609,7 +630,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             </p>
           </div>
 
-          {/* Test Connection Button — fails fast (15s timeout, no retries) */}
+          {/* Test Connection Button — fails fast (20s timeout) */}
           <div className="space-y-2">
             {formError && (
               <p className="text-sm text-severity-critical">{formError}</p>
@@ -618,7 +639,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
               variant="outline"
               className="w-full"
               onClick={handleTestConnection}
-              disabled={!inputKey.trim() || testConnection.loading}
+              disabled={(!inputKey.trim() && inputTransport !== 'relay') || testConnection.loading}
             >
               {testConnection.loading ? (
                 <>
@@ -640,7 +661,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
             </Button>
             {testConnection.loading && (
               <p className="text-sm text-muted-foreground text-center">
-                Проверяем подключение (таймаут 15 сек)...
+                Проверяем подключение (таймаут 20 сек)...
               </p>
             )}
             {testConnection.error && (
