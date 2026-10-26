@@ -215,7 +215,7 @@ With `LLM_API_KEY` (or `LLM_API_KEY_<PROVIDER>`) in the environment, the relay f
 
 Any static host works — the build output is plain files in `out/`:
 
-- **GitHub Pages**: `.github/workflows/deploy.yml` builds, tests and deploys on every push to `main`. Enable it once in _Settings → Pages → Source: GitHub Actions_. The site appears at `https://<user>.github.io/<repo>/`, no custom domain.
+- **GitHub Pages**: `.github/workflows/deploy.yml` builds, tests and deploys on every push to `main`. Enable it once in _Settings → Pages → Source: GitHub Actions_. The site appears at `https://<user>.github.io/<repo>/`, no custom domain. The workflow sets `NEXT_BASE_PATH=/<repo>` for the Pages build, because a project site is served one directory below the domain root; local builds and the relay stay at `/`. A run that failed before Pages was enabled has to be re-run (Actions → the run → "Re-run failed jobs") — the 404 means no deployment was ever created, not that the setting is wrong.
 - **Netlify / Vercel (free)**: build command `npm run build`, publish directory `out`. Their free `*.netlify.app` / `*.vercel.app` subdomains need no domain registration.
 - **Any static hosting** (S3, nginx, `python -m http.server`): upload `out/`.
 
