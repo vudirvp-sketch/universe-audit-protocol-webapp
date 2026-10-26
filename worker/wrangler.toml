@@ -30,3 +30,16 @@ PROVIDER_TIMEOUT_MS = "300000"
 # Once upstream sends headers, the HTTP connection is established and CF will
 # not kill the Worker. 300s is a safety net for unresponsive upstreams.
 PROVIDER_STREAMING_TIMEOUT_MS = "300000"
+
+# SECURITY (v9 proxy): browser origins allowed to call this proxy.
+# When unset, the built-in list is used (the production Pages domain, previews
+# of the same project, and localhost:3000 for `npm run dev`).
+# If you host the app on your own domain, list it here, comma-separated.
+# ALLOWED_ORIGINS = "https://universe-audit-protocol.pages.dev,https://audit.example.com"
+
+# SECURITY (v9 proxy): hostnames allowed for provider = "custom".
+# The proxy refuses all other hosts, so it cannot be abused as an open relay.
+# Leave empty to disable custom endpoints on this proxy (recommended default);
+# users who need a custom endpoint should deploy their own proxy and list the
+# exact hostname here, comma-separated, e.g. "api.example.com".
+ALLOWED_CUSTOM_HOSTS = ""

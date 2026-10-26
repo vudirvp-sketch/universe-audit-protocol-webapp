@@ -30,8 +30,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server } from 'lucide-react';
-import { useSettings, isProxyUrlPlaceholder } from '@/hooks/useSettings';
+import { Settings, Eye, EyeOff, Key, Check, Trash2, Sparkles, Zap, Globe, ChevronDown, ChevronRight, Server, ShieldCheck } from 'lucide-react';
+import { useSettings, isProxyUrlPlaceholder, PROXY_URL_DEFAULT } from '@/hooks/useSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   LLM_PROVIDERS,
@@ -40,6 +40,9 @@ import {
   createLLMClient,
   PREFERRED_MODELS,
   getModelCapabilities,
+  validateApiKey,
+  validateProxyUrl,
+  normalizeCustomBaseUrl,
 } from '@/lib/llm-client';
 import { t } from '@/lib/i18n/ru';
 
@@ -66,6 +69,8 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const customContextWindow = useSettings((s) => s.customContextWindow);
   const customMaxOutputTokens = useSettings((s) => s.customMaxOutputTokens);
   const customSupportsJSONMode = useSettings((s) => s.customSupportsJSONMode);
+  const keyMemoryOnly = useSettings((s) => s.keyMemoryOnly);
+  const setKeyMemoryOnly = useSettings((s) => s.setKeyMemoryOnly);
   const clearSettings = useSettings((s) => s.clearSettings);
 
   const isMobile = useIsMobile();
@@ -78,6 +83,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const [showKey, setShowKey] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
+  const [formError, setFormError] = React.useState<string | null>(null);
   const [inputContextWindow, setInputContextWindow] = React.useState('');
   const [inputMaxOutputTokens, setInputMaxOutputTokens] = React.useState('');
   const [testConnection, setTestConnection] = React.useState<{ loading: boolean; success: boolean; error: string | null }>({
@@ -128,6 +134,24 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     const trimmedModel = inputModel.trim();
     const trimmedProxyUrl = inputProxyUrl.trim();
 
+    // Validate endpoints before persisting — a malformed proxy/base URL would
+    // otherwise be saved silently and break every later request.
+    if (trimmedProxyUrl) {
+      const proxyCheck = validateProxyUrl(trimmedProxyUrl);
+      if (!proxyCheck.valid) {
+        setFormError(proxyCheck.error || t.settings.invalidProxyUrl);
+        return;
+      }
+    }
+    if (provider === 'custom' && inputBaseUrl.trim()) {
+      const baseCheck = normalizeCustomBaseUrl(inputBaseUrl.trim());
+      if (!baseCheck.valid) {
+        setFormError(baseCheck.error || t.settings.invalidBaseUrl);
+        return;
+      }
+    }
+    setFormError(null);
+
     if (trimmedKey) {
       setApiKey(trimmedKey);
     } else {
@@ -140,9 +164,9 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
       setModel(null);
     }
 
-    if (trimmedProxyUrl) {
-      setProxyUrl(trimmedProxyUrl);
-    }
+    // An empty proxy field means "use the bundled proxy", not "keep whatever
+    // was typed before" — the previous behaviour silently ignored clearing it.
+    setProxyUrl(trimmedProxyUrl || PROXY_URL_DEFAULT);
 
     const parsedRpm = parseInt(inputRpmLimit, 10);
     if (!isNaN(parsedRpm) && parsedRpm > 0) {
@@ -171,6 +195,10 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   };
 
   const handleClear = () => {
+    const confirmed = typeof window === 'undefined'
+      || window.confirm(t.settings.clearSettingsConfirm);
+    if (!confirmed) return;
+
     setInputKey('');
     setInputModel('');
     setInputProxyUrl('');
@@ -178,6 +206,7 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     setInputBaseUrl('');
     setInputContextWindow('');
     setInputMaxOutputTokens('');
+    setFormError(null);
     clearSettings();
     onSettingsChange?.({ provider: 'google', apiKey: null, model: null });
     setSaved(false);
@@ -188,7 +217,18 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
     const trimmedKey = inputKey.trim();
     const trimmedProxy = inputProxyUrl.trim();
     const trimmedModel = inputModel.trim() || LLM_PROVIDERS[provider]?.defaultModel || '';
-    if (!trimmedKey || !trimmedProxy) return;
+    if (!trimmedKey) return;
+
+    // Previously an empty proxy URL made this button a silent no-op.
+    if (!trimmedProxy) {
+      setTestConnection({ loading: false, success: false, error: t.settings.proxyRequiredForTest });
+      return;
+    }
+    const proxyCheck = validateProxyUrl(trimmedProxy);
+    if (!proxyCheck.valid) {
+      setTestConnection({ loading: false, success: false, error: proxyCheck.error || t.settings.invalidProxyUrl });
+      return;
+    }
 
     setTestConnection({ loading: true, success: false, error: null });
 
@@ -244,6 +284,18 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
   const hasKey = !!apiKey;
   const currentProvider = LLM_PROVIDERS[provider];
   const hasFreeTier = ['google', 'groq', 'huggingface', 'openrouter', 'together'].includes(provider);
+  const maskedKey = apiKey
+    ? (apiKey.length <= 8 ? '••••' : `••••${apiKey.slice(-4)}`)
+    : null;
+  const keyFormatWarning = inputKey.trim()
+    ? validateApiKey(provider, inputKey.trim()).error ?? null
+    : null;
+  const proxyWarning = inputProxyUrl.trim()
+    ? validateProxyUrl(inputProxyUrl.trim()).error ?? null
+    : null;
+  const baseUrlWarning = provider === 'custom' && inputBaseUrl.trim()
+    ? normalizeCustomBaseUrl(inputBaseUrl.trim()).error ?? null
+    : null;
 
   // The settings form body — shared between Dialog (desktop) and Sheet (mobile)
   const settingsForm = (
@@ -359,6 +411,30 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                 </AlertDescription>
               </Alert>
             )}
+            {keyFormatWarning && (
+              <p className="text-sm text-severity-warning">{keyFormatWarning}</p>
+            )}
+            {maskedKey && (
+              <p className="text-sm text-muted-foreground">
+                {t.settings.keyMasked.replace('{masked}', maskedKey)}
+              </p>
+            )}
+            <div className="rounded-lg border p-3 space-y-1">
+              <div className="flex items-start gap-2">
+                <input
+                  id="key-memory-only"
+                  type="checkbox"
+                  checked={keyMemoryOnly}
+                  onChange={(e) => setKeyMemoryOnly(e.target.checked)}
+                  className="mt-1 rounded border-gray-300"
+                />
+                <Label htmlFor="key-memory-only" className="text-sm flex items-center gap-2">
+                  <ShieldCheck className="h-3 w-3" />
+                  {t.settings.keyMemoryOnly}
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground">{t.settings.keyMemoryOnlyHint}</p>
+            </div>
           </div>
 
           {/* Advanced Settings (collapsible) */}
@@ -395,6 +471,11 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                   <p className="text-sm text-muted-foreground">
                     {t.settings.proxyUrlHintAdvanced}
                   </p>
+                  {proxyWarning && (
+                    <p className="text-sm text-severity-critical">
+                      {proxyWarning}
+                    </p>
+                  )}
                   {inputProxyUrl && isProxyUrlPlaceholder(inputProxyUrl) && (
                     <Alert className="bg-severity-warning/10 border-severity-warning/30">
                       <AlertDescription className="text-severity-warning text-sm">
@@ -422,6 +503,9 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
                     <p className="text-sm text-muted-foreground">
                       Базовый URL API для кастомного провайдера (без /chat/completions)
                     </p>
+                    {baseUrlWarning && (
+                      <p className="text-sm text-severity-warning">{baseUrlWarning}</p>
+                    )}
                   </div>
                 )}
 
@@ -527,6 +611,9 @@ export function SettingsDialog({ onSettingsChange }: SettingsDialogProps) {
 
           {/* Test Connection Button — fails fast (15s timeout, no retries) */}
           <div className="space-y-2">
+            {formError && (
+              <p className="text-sm text-severity-critical">{formError}</p>
+            )}
             <Button
               variant="outline"
               className="w-full"

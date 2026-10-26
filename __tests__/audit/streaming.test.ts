@@ -122,11 +122,11 @@ describe('extractDelta', () => {
     expect(result.text).toBe('claude text');
   });
 
-  it('extracts finish reason from Anthropic message_delta', () => {
+  it('extracts finish reason from Anthropic message_delta (normalized to OpenAI vocabulary)', () => {
     const event = '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{}}';
     const result = extractDelta('anthropic' as LLMProvider, event);
     expect(result.text).toBe('');
-    expect(result.finishReason).toBe('end_turn');
+    expect(result.finishReason).toBe('stop');
   });
 
   it('handles Anthropic message_stop', () => {
@@ -149,11 +149,11 @@ describe('extractDelta', () => {
     expect(result.text).toBe('gemini text');
   });
 
-  it('extracts finishReason from Gemini format', () => {
+  it('extracts finishReason from Gemini format (normalized to OpenAI vocabulary)', () => {
     const event = '{"candidates":[{"content":{"parts":[{"text":"last"}]},"finishReason":"STOP"}]}';
     const result = extractDelta('google' as LLMProvider, event);
     expect(result.text).toBe('last');
-    expect(result.finishReason).toBe('STOP');
+    expect(result.finishReason).toBe('stop');
   });
 
   it('handles empty candidates in Gemini format', () => {

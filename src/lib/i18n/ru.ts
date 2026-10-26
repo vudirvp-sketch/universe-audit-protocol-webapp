@@ -72,6 +72,9 @@ export const t = {
     fileUploaded: 'Файл загружен: {name} ({size} символов)',
     fileReadError: 'Ошибка чтения файла',
     fileTypeError: 'Поддерживаются только текстовые файлы .txt и .md',
+    fileTooLargeError: 'Файл слишком большой: максимум 512 КБ и 100 000 символов на артефакт',
+    fileEmptyError: 'Файл пустой — текст не добавлен',
+    fileEncodingError: 'Файл не в кодировке UTF-8 — пересохраните его в UTF-8 и попробуйте снова',
     // Guided mode framing — v16 §2 GUIDED MODE (optional)
     guidedTitle: 'Рамки аудита (необязательно)',
     guidedDescription:
@@ -109,6 +112,8 @@ export const t = {
     materialFallbackLabel: 'Материал {n}',
     addMaterial: 'Добавить артефакт',
     removeMaterial: 'Удалить артефакт',
+    storageError:
+      'Не удалось сохранить черновик в браузере: превышен лимит localStorage. Сократите материалы или очистите старые аудиты — после перезагрузки страницы последние изменения пропадут.',
   },
 
   // 5-блочный пайплайн v16
@@ -240,9 +245,18 @@ export const t = {
     testSuccess: 'Подключение успешно!',
     testFailed: 'Ошибка подключения',
     apiKeyConfigured: 'API ключ {provider} настроен',
+    keyMasked: 'Сохранённый ключ: {masked}',
+    keyStorage: 'Хранение ключа',
+    keyMemoryOnly: 'Не сохранять ключ на диск (только эта вкладка)',
+    keyMemoryOnlyHint:
+      'Ключ будет храниться в sessionStorage вкладки: перезагрузка страницы его сохранит, закрытие вкладки — удалит.',
+    clearSettingsConfirm: 'Удалить все настройки, включая API-ключ?',
+    proxyRequiredForTest: 'Сначала укажите URL прокси в расширенных настройках.',
+    invalidProxyUrl: 'URL прокси должен начинаться с https:// (http разрешён только для localhost).',
+    invalidBaseUrl: 'Base URL должен начинаться с https://, без query-параметров и логина/пароля.',
     howToGetKey: 'Как получить API ключ:',
     keySecurityNote:
-      'Ваш API ключ хранится локально в браузере и не передаётся третьим лицам.',
+      'Ключ хранится в этом браузере и отправляется только на CORS-прокси из «Расширенных настроек»; прокси пересылает его провайдеру и не сохраняет. Владелец прокси технически видит проходящий трафик — для полной приватности разверните свой прокси (см. worker/README.md) или включите «Не сохранять ключ на диск».',
     // Provider-specific instructions (Russian per Language Contract)
     providerInstructions: {
       google: {

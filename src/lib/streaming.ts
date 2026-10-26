@@ -95,6 +95,50 @@ export function* parseSSELines(chunk: string): Generator<string, void, unknown> 
 }
 
 // ============================================================================
+// FINISH-REASON NORMALIZATION
+// ============================================================================
+
+/**
+ * Normalize a provider-specific finish/stop reason to the OpenAI vocabulary
+ * used by the rest of the app ('stop' | 'length' | 'content_filter' | ...).
+ *
+ * This matters for the buffered path (llm-client.normalizeProviderResponse)
+ * and equally for streaming: Gemini sends 'MAX_TOKENS', Anthropic sends
+ * 'max_tokens', and a truncated answer must be recognizable as truncation.
+ */
+export function normalizeStreamingFinishReason(provider: LLMProvider, reason?: string): string | undefined {
+  if (!reason) return undefined;
+  const raw = String(reason);
+
+  if (provider === 'google') {
+    switch (raw) {
+      case 'STOP': return 'stop';
+      case 'MAX_TOKENS': return 'length';
+      case 'SAFETY':
+      case 'RECITATION':
+      case 'BLOCKLIST':
+      case 'PROHIBITED':
+      case 'SPII': return 'content_filter';
+      case 'MALFORMED_FUNCTION_CALL': return 'tool_call_error';
+      default: return raw.toLowerCase();
+    }
+  }
+
+  if (provider === 'anthropic') {
+    switch (raw) {
+      case 'end_turn':
+      case 'stop_sequence': return 'stop';
+      case 'max_tokens': return 'length';
+      case 'tool_use': return 'tool_calls';
+      default: return raw;
+    }
+  }
+
+  // OpenAI-compatible providers already use the target vocabulary.
+  return raw;
+}
+
+// ============================================================================
 // PROVIDER-SPECIFIC DELTA EXTRACTORS
 // ============================================================================
 
@@ -116,7 +160,7 @@ export function extractDelta(provider: LLMProvider, eventData: string): { text: 
           return { text: parsed.delta?.text || '' };
         }
         if (parsed.type === 'message_delta') {
-          return { text: '', finishReason: parsed.delta?.stop_reason };
+          return { text: '', finishReason: normalizeStreamingFinishReason(provider, parsed.delta?.stop_reason) };
         }
         if (parsed.type === 'message_stop') {
           return { text: '', finishReason: 'stop' };
@@ -135,7 +179,7 @@ export function extractDelta(provider: LLMProvider, eventData: string): { text: 
         const candidate = candidates[0];
         const parts = candidate?.content?.parts;
         const text = parts?.[0]?.text || '';
-        const finishReason = candidate?.finishReason || undefined;
+        const finishReason = normalizeStreamingFinishReason(provider, candidate?.finishReason);
         return { text, finishReason };
       }
 
@@ -154,7 +198,7 @@ export function extractDelta(provider: LLMProvider, eventData: string): { text: 
         }
         const choice = choices[0];
         const delta = choice?.delta?.content || '';
-        const finishReason = choice?.finish_reason || undefined;
+        const finishReason = normalizeStreamingFinishReason(provider, choice?.finish_reason);
         return { text: delta, finishReason };
       }
     }
@@ -332,7 +376,8 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
       const { done, value } = await reader.read();
 
       if (done) {
-        // Stream ended — process any remaining buffered data
+        // Flush the decoder, normalize line endings, and process the tail.
+        buffer = (buffer + decoder.decode()).replace(/\r\n/g, '\n');
         if (buffer.trim()) {
           for (const eventData of parseSSELines(buffer)) {
             const { text, finishReason: reason } = extractDelta(provider, eventData);
@@ -346,8 +391,10 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
         break;
       }
 
-      // Decode the chunk and add to buffer
-      buffer += decoder.decode(value, { stream: true });
+      // Decode the chunk and add to buffer.
+      // CRLF is normalized here so providers/proxies that separate SSE events
+      // with \r\n\r\n are parsed as events instead of one giant unterminated block.
+      buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n');
 
       // Process complete SSE events from the buffer
       // SSE events are separated by blank lines (\n\n)
@@ -367,13 +414,23 @@ export async function streamChatCompletion(config: StreamingConfig): Promise<str
       }
     }
   } finally {
+    // Always release the timer — previously an exception in the read loop left
+    // the 300s timeout armed and the reader locked.
+    clearTimeout(timeoutId);
     reader.releaseLock();
   }
 
-  // Final chunk — signal completion
-  onChunk({ text: accumulated, delta: '', done: true, finishReason: finishReason || 'stop' });
+  // Final chunk — signal completion.
+  // If text arrived but the provider never sent a finish event, the answer is
+  // NOT confirmed complete (SSE may have been cut): report 'incomplete' so the
+  // audit is marked partial instead of silently claiming success.
+  onChunk({
+    text: accumulated,
+    delta: '',
+    done: true,
+    finishReason: finishReason || (accumulated.length > 0 ? 'incomplete' : 'stop'),
+  });
 
-  clearTimeout(timeoutId);
   return accumulated;
 }
 

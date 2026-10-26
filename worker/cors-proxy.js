@@ -1,17 +1,35 @@
-// Cloudflare Worker: Provider-aware CORS proxy for LLM API calls
-// No storage. No API keys stored.
+// Cloudflare Worker: Provider-aware CORS proxy for LLM API calls.
+// No storage. The API key is only held in memory while a request is in flight.
 // Pass-through proxy with provider routing.
 //
-// v2: Added server-side 429 retry with exponential backoff (2 retries).
-// v3: Added X-No-Retry header support — test connections can skip retries
-//     for instant feedback instead of waiting through multiple retry cycles.
-// v4: Added rate limiting by IP, body size limit, targetUrl validation,
-//     explicit timeout with AbortController, health-check endpoint,
-//     improved error handling with user-friendly messages, masked API key logging.
-// v5: Fixed env variable handling — now reads config from wrangler.toml [vars]
-//     via the `env` parameter instead of hardcoded constants that shadowed them.
-//     Fixed PROVIDER_TIMEOUT_MS default (25s for free plan compatibility).
-//     Fixed MAX_BODY_SIZE_BYTES naming mismatch with wrangler.toml.
+// v2: server-side 429 retry with exponential backoff (2 retries).
+// v3: X-No-Retry header support — test connections can skip retries.
+// v4: rate limiting by IP, body size limit, targetUrl validation,
+//     explicit timeout with AbortController, health-check endpoint.
+// v5: read config from wrangler.toml [vars] via the `env` parameter.
+// v7: streaming idle timeout injects a graceful SSE error event.
+// v8: streaming passthrough preserves the upstream Content-Type.
+// v9 SECURITY HARDENING (this version):
+//   - CORS is no longer `*`: only allowlisted app origins are echoed back.
+//     Other origins are rejected before any provider request is made.
+//   - targetUrl is no longer "any https host": every request must target the
+//     provider it declares (`provider` → fixed host allowlist). Custom
+//     endpoints are allowed only for hosts explicitly listed in the
+//     ALLOWED_CUSTOM_HOSTS env var. This closes the open-relay / SSRF use of
+//     this Worker.
+//   - Body size is enforced on the actual received bytes, not only on the
+//     client-supplied Content-Length header.
+//   - Streaming stall timeout now fires even when the upstream sends nothing
+//     (previously the timeout flag was only noticed after a chunk arrived).
+//   - The API key is never written to logs in any form (was masked before).
+//   - Upstream hop-by-hop/encoding headers are not copied onto proxied
+//     responses; error bodies are returned with a clean Content-Type.
+//
+// Config via wrangler.toml [vars] (all optional):
+//   MAX_REQUESTS_PER_MINUTE, MAX_BODY_SIZE_BYTES,
+//   PROVIDER_TIMEOUT_MS, PROVIDER_STREAMING_TIMEOUT_MS,
+//   ALLOWED_ORIGINS (comma-separated browser origins),
+//   ALLOWED_CUSTOM_HOSTS (comma-separated hostnames for provider=custom).
 
 const PROVIDER_CONFIGS = {
   openai: {
@@ -53,7 +71,7 @@ const PROVIDER_CONFIGS = {
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
-          'anthropic-version': '2024-10-22',  // Updated from 2023-06-01 for claude-sonnet-4-6+ support (extended thinking, etc.)
+          'anthropic-version': '2024-10-22',  // required for claude-sonnet-4-6+ (extended thinking, etc.)
         },
         body: parsed.payload,
       };
@@ -62,7 +80,7 @@ const PROVIDER_CONFIGS = {
   google: {
     transformRequest: ({ body, apiKey }) => {
       const parsed = JSON.parse(body);
-      // Google passes API key in query string, not header
+      // Google passes the API key in the query string, not a header
       const url = new URL(parsed.targetUrl);
       url.searchParams.set('key', apiKey);
       return {
@@ -74,12 +92,38 @@ const PROVIDER_CONFIGS = {
   },
 };
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Z-AI-From, X-No-Retry, Accept, x-api-key, anthropic-version',
-  'Access-Control-Max-Age': '86400',
+/**
+ * Every known provider may only be called on its own API host.
+ * Anything else is rejected — the proxy is not a general-purpose relay.
+ */
+const PROVIDER_HOSTS = {
+  openai: ['api.openai.com'],
+  anthropic: ['api.anthropic.com'],
+  google: ['generativelanguage.googleapis.com'],
+  mistral: ['api.mistral.ai'],
+  deepseek: ['api.deepseek.com'],
+  qwen: ['dashscope.aliyuncs.com'],
+  kimi: ['api.moonshot.cn'],
+  groq: ['api.groq.com'],
+  openrouter: ['openrouter.ai'],
+  huggingface: ['api-inference.huggingface.co'],
+  together: ['api.together.xyz'],
+  xai: ['api.x.ai'],
+  zai: ['api.z.ai'],
 };
+
+// Browser origins allowed to call this proxy. Preview deployments
+// (<hash>.universe-audit-protocol.pages.dev) are matched by pattern when the
+// operator has not configured an explicit list.
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://universe-audit-protocol.pages.dev',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+];
+const PAGES_PREVIEW_ORIGIN_RE = /^https:\/\/[a-z0-9-]+\.universe-audit-protocol\.pages\.dev$/;
+
+const CORS_ALLOW_METHODS = 'POST, OPTIONS';
+const CORS_ALLOW_HEADERS = 'Content-Type, Accept, X-No-Retry';
 
 // Server-side retry configuration for transient errors (429 + 5xx)
 const MAX_429_RETRIES = 2;
@@ -93,30 +137,15 @@ const DEFAULT_MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB
 
 // Timeout for buffered (non-streaming) requests to provider.
 // Cloudflare Workers free plan has NO hard wall-clock timeout for HTTP requests.
-// The Worker stays alive as long as the client is connected. The 10ms CPU time
-// limit does NOT apply to I/O wait (fetch, stream reading) — proxy requests
-// are overwhelmingly I/O, not CPU. Setting this to 300s (5 minutes) allows
-// even the slowest free-tier models (e.g. nvidia/nemotron on OpenRouter) to
-// respond without the proxy killing the connection prematurely.
+// The 10ms CPU time limit does NOT apply to I/O wait (fetch, stream reading).
 const DEFAULT_PROVIDER_TIMEOUT_MS = 300_000;
 
-// Timeout for streaming requests before we consider the upstream unresponsive.
-// Same rationale as PROVIDER_TIMEOUT_MS — no hard wall-clock limit on free plan.
-// Once the upstream sends headers (200 OK + Content-Type: text/event-stream),
-// the HTTP connection is established and Cloudflare will not kill the Worker.
-// 300s gives streaming models ample time even with slow token generation.
+// Maximum time between two bytes of a streaming response. If the upstream goes
+// silent for this long, the proxy aborts it and (for SSE) injects an error event.
 const DEFAULT_STREAMING_TIMEOUT_MS = 300_000;
 
-// Known provider domains for targetUrl validation
-const KNOWN_PROVIDER_DOMAINS = [
-  'api.openai.com', 'api.anthropic.com', 'generativelanguage.googleapis.com',
-  'api.mistral.ai', 'api.deepseek.com', 'dashscope.aliyuncs.com',
-  'api.moonshot.cn', 'api.groq.com', 'openrouter.ai',
-  'api-inference.huggingface.co', 'api.together.xyz', 'api.x.ai', 'api.z.ai'
-];
-
 // Proxy version for health-check
-const PROXY_VERSION = 'v8';
+const PROXY_VERSION = 'v9';
 
 // Proxy start time for uptime calculation
 const PROXY_START_TIME = Date.now();
@@ -131,14 +160,56 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/** Parse a comma-separated env var into a trimmed, non-empty list. */
+function parseCsv(value) {
+  if (!value || typeof value !== 'string') return [];
+  return value.split(',').map(part => part.trim()).filter(Boolean);
+}
+
 /**
- * Mask an API key for safe logging: show first 4 and last 4 chars only.
- * Short keys (<12 chars) are fully masked.
+ * Resolve the value to echo in Access-Control-Allow-Origin.
+ * Returns null when the caller's origin is not allowlisted.
+ * A missing Origin header (curl, server-to-server, CI health checks) is not a
+ * browser context: it is passed through without CORS headers, but the target
+ * host allowlist still applies.
  */
-function maskApiKey(key) {
-  if (!key || typeof key !== 'string') return '***';
-  if (key.length < 12) return '***masked***';
-  return key.slice(0, 4) + '***' + key.slice(-4);
+function resolveAllowedOrigin(origin, env) {
+  if (!origin) return null;
+  const configured = parseCsv(env && env.ALLOWED_ORIGINS);
+  const allowlist = configured.length > 0 ? configured : DEFAULT_ALLOWED_ORIGINS;
+  if (allowlist.includes(origin)) return origin;
+  if (configured.length === 0 && PAGES_PREVIEW_ORIGIN_RE.test(origin)) return origin;
+  return null;
+}
+
+/**
+ * Build the CORS headers for a response. Never returns `*`.
+ */
+function corsHeaders(origin) {
+  const headers = {
+    'Vary': 'Origin',
+    'Access-Control-Allow-Methods': CORS_ALLOW_METHODS,
+    'Access-Control-Allow-Headers': CORS_ALLOW_HEADERS,
+    'Access-Control-Max-Age': '86400',
+  };
+  if (origin) headers['Access-Control-Allow-Origin'] = origin;
+  return headers;
+}
+
+/**
+ * Build a JSON response with CORS + no-store headers.
+ */
+function jsonResponse(status, payload, origin, extraHeaders) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      ...(extraHeaders || {}),
+      ...corsHeaders(origin),
+    },
+  });
 }
 
 /**
@@ -204,10 +275,19 @@ function pruneExpiredRateLimits() {
 }
 
 /**
- * Validate the targetUrl: must be https://, and domain must be a known
- * provider or any custom URL (user consciously entered it).
+ * Validate the targetUrl against the declared provider.
+ *
+ * Rules:
+ *  - must be https://
+ *  - must not contain credentials (user:pass@)
+ *  - must not use a non-default port
+ *  - for a known provider: hostname must be one of PROVIDER_HOSTS[provider]
+ *  - for provider=custom: hostname must be listed in ALLOWED_CUSTOM_HOSTS
+ *
+ * This is what keeps the Worker from being an open relay: a caller cannot make
+ * it POST to an arbitrary host, only to the API host of the provider it claims.
  */
-function validateTargetUrl(targetUrl) {
+function validateTargetUrl(targetUrl, provider, env) {
   if (!targetUrl || typeof targetUrl !== 'string') {
     return { valid: false, error: 'targetUrl is required' };
   }
@@ -216,30 +296,53 @@ function validateTargetUrl(targetUrl) {
     return { valid: false, error: 'targetUrl must start with https://' };
   }
 
+  let url;
   try {
-    const url = new URL(targetUrl);
-    const hostname = url.hostname;
-
-    // Check if it's a known provider domain
-    const isKnownProvider = KNOWN_PROVIDER_DOMAINS.some(domain => {
-      return hostname === domain || hostname.endsWith('.' + domain);
-    });
-
-    // For unknown domains, still allow (custom provider) — user knows what they're doing
-    if (!isKnownProvider) {
-      // Just log it — don't block
-      console.log(`[Proxy] Custom targetUrl domain: ${hostname}`);
-    }
-
-    return { valid: true };
+    url = new URL(targetUrl);
   } catch (e) {
-    return { valid: false, error: `Invalid targetUrl: ${e.message}` };
+    return { valid: false, error: 'Invalid targetUrl' };
   }
+
+  if (url.username || url.password) {
+    return { valid: false, error: 'targetUrl must not contain credentials' };
+  }
+  if (url.port && url.port !== '443') {
+    return { valid: false, error: 'targetUrl must use the default https port' };
+  }
+
+  const hostname = url.hostname.toLowerCase();
+
+  if (provider === 'custom' || !PROVIDER_HOSTS[provider]) {
+    const customHosts = parseCsv(env && env.ALLOWED_CUSTOM_HOSTS);
+    if (customHosts.includes(hostname)) {
+      return { valid: true };
+    }
+    return {
+      valid: false,
+      error:
+        'Custom provider endpoints are disabled on this proxy. ' +
+        'Deploy your own proxy (see worker/README.md) and set ALLOWED_CUSTOM_HOSTS ' +
+        'to the exact hostname, or pick a built-in provider.',
+    };
+  }
+
+  const allowedHosts = PROVIDER_HOSTS[provider];
+  if (!allowedHosts.includes(hostname)) {
+    return {
+      valid: false,
+      error: `targetUrl host "${hostname}" is not the API host of provider "${provider}"`,
+    };
+  }
+
+  return { valid: true };
 }
 
 /**
  * Attempt a fetch with automatic retry for 429 rate limits and 5xx transient errors.
  * Returns the final Response object (may still be 429/5xx if all retries exhausted).
+ *
+ * Retryable responses are re-wrapped with a clean Content-Type so that a decoded
+ * body is never paired with the upstream's Content-Encoding/Content-Length.
  */
 async function fetchWithRetry(url, options, max429Retries = MAX_429_RETRIES, max5xxRetries = MAX_5XX_RETRIES, provider = '') {
   let lastResponse = null;
@@ -266,18 +369,12 @@ async function fetchWithRetry(url, options, max429Retries = MAX_429_RETRIES, max
       // Read body to check if this is a model-not-found error disguised as 429
       const bodyText = await lastResponse.text();
       if (is429ModelNotFound(bodyText, provider)) {
-        return new Response(bodyText, {
-          status: 429,
-          headers: lastResponse.headers,
-        });
+        return cleanRetryResponse(lastResponse.status, bodyText);
       }
 
       // If 429 retries exhausted, return the 429 response
       if (attempt429 >= max429Retries) {
-        return new Response(bodyText, {
-          status: lastResponse.status,
-          headers: lastResponse.headers,
-        });
+        return cleanRetryResponse(lastResponse.status, bodyText);
       }
 
       // Determine wait time: prefer Retry-After header, fall back to backoff schedule
@@ -304,6 +401,17 @@ async function fetchWithRetry(url, options, max429Retries = MAX_429_RETRIES, max
     // --- Non-retryable status: return immediately ---
     return lastResponse;
   }
+}
+
+/**
+ * Re-wrap an already-consumed upstream response with a body only, dropping
+ * content-encoding/length headers that would no longer describe the bytes.
+ */
+function cleanRetryResponse(status, bodyText) {
+  return new Response(bodyText, {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+  });
 }
 
 /**
@@ -365,68 +473,66 @@ export default {
     const providerTimeoutMs = readEnvInt(env, 'PROVIDER_TIMEOUT_MS', DEFAULT_PROVIDER_TIMEOUT_MS);
     const streamingTimeoutMs = readEnvInt(env, 'PROVIDER_STREAMING_TIMEOUT_MS', DEFAULT_STREAMING_TIMEOUT_MS);
 
-    // Handle CORS preflight
+    const origin = request.headers.get('Origin') || '';
+    const allowedOrigin = resolveAllowedOrigin(origin, env);
+
+    // ── CORS preflight ──────────────────────────────────────────────
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: CORS_HEADERS });
+      // Reject preflights from origins that are not allowlisted.
+      if (origin && !allowedOrigin) {
+        return new Response(null, { status: 403 });
+      }
+      return new Response(null, { headers: corsHeaders(allowedOrigin) });
     }
 
-    // Health-check endpoint — GET /health
+    // ── Health-check endpoint — GET /health ─────────────────────────
     if (request.method === 'GET') {
       const url = new URL(request.url);
       if (url.pathname === '/health') {
         const uptime = Math.round((Date.now() - PROXY_START_TIME) / 1000);
-        return new Response(
-          JSON.stringify({
-            status: 'ok',
-            version: PROXY_VERSION,
-            uptime_seconds: uptime,
-            config: {
-              maxRequestsPerMinute,
-              maxBodySizeMB: Math.round(maxBodySize / (1024 * 1024)),
-              providerTimeoutMs,
-            },
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-        );
+        return jsonResponse(200, {
+          status: 'ok',
+          version: PROXY_VERSION,
+          uptime_seconds: uptime,
+        }, allowedOrigin);
       }
-      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
+      return new Response('Method not allowed', { status: 405, headers: corsHeaders(allowedOrigin) });
     }
 
     // Only allow POST
     if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405, headers: CORS_HEADERS });
+      return new Response('Method not allowed', { status: 405, headers: corsHeaders(allowedOrigin) });
+    }
+
+    // ── Origin check for actual requests ────────────────────────────
+    // Browser requests must come from an allowlisted app origin. Requests
+    // without an Origin header are not browser-initiated; they still face the
+    // provider host allowlist below.
+    if (origin && !allowedOrigin) {
+      return jsonResponse(403, {
+        error: 'origin_not_allowed',
+        message:
+          'Этот прокси не обслуживает запросы с вашего домена. ' +
+          'Добавьте его в ALLOWED_ORIGINS своего прокси (см. worker/README.md).',
+      }, null);
     }
 
     // ── Rate limiting by IP ──────────────────────────────────────────
     const clientIp = request.headers.get('CF-Connecting-IP') || 'unknown';
     if (!checkRateLimit(clientIp, maxRequestsPerMinute)) {
-      const retryAfter = 60; // seconds
-      return new Response(
-        JSON.stringify({
-          error: 'rate_limit',
-          message: 'Слишком много запросов. Подождите минуту и попробуйте снова.',
-        }),
-        {
-          status: 429,
-          headers: {
-            'Content-Type': 'application/json',
-            'Retry-After': String(retryAfter),
-            ...CORS_HEADERS,
-          },
-        }
-      );
+      return jsonResponse(429, {
+        error: 'rate_limit',
+        message: 'Слишком много запросов. Подождите минуту и попробуйте снова.',
+      }, allowedOrigin, { 'Retry-After': '60' });
     }
 
-    // ── Body size check ──────────────────────────────────────────────
+    // ── Body size check (header + actual bytes) ─────────────────────
     const contentLength = request.headers.get('content-length');
-    if (contentLength && parseInt(contentLength) > maxBodySize) {
-      return new Response(
-        JSON.stringify({
-          error: 'payload_too_large',
-          message: 'Слишком большой запрос (максимум 2MB). Текст будет разбит на части автоматически (chunking).',
-        }),
-        { status: 413, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-      );
+    if (contentLength && parseInt(contentLength, 10) > maxBodySize) {
+      return jsonResponse(413, {
+        error: 'payload_too_large',
+        message: 'Слишком большой запрос (максимум 2MB). Текст будет разбит на части автоматически (chunking).',
+      }, allowedOrigin);
     }
 
     // Check if client wants to skip server-side 429 retries (e.g. for test connections)
@@ -438,199 +544,209 @@ export default {
     const startTime = Date.now();
 
     try {
-      // Parse the proxy request body
-      const { provider, apiKey, targetUrl, payload } = await request.json();
+      // Read the body as text first so the real size can be enforced
+      // (Content-Length can be omitted or lie).
+      const rawBody = await request.text();
+      if (new TextEncoder().encode(rawBody).length > maxBodySize) {
+        return jsonResponse(413, {
+          error: 'payload_too_large',
+          message: 'Слишком большой запрос (максимум 2MB). Текст будет разбит на части автоматически (chunking).',
+        }, allowedOrigin);
+      }
 
+      let parsedBody;
+      try {
+        parsedBody = JSON.parse(rawBody);
+      } catch (_) {
+        return jsonResponse(400, { error: 'invalid_json', message: 'Тело запроса должно быть корректным JSON.' }, allowedOrigin);
+      }
+
+      const { provider, apiKey, targetUrl, payload } = parsedBody || {};
+
+      if (!provider || typeof provider !== 'string') {
+        return jsonResponse(400, { error: 'missing_provider', message: 'Поле provider обязательно.' }, allowedOrigin);
+      }
       if (!apiKey || !targetUrl || !payload) {
-        return new Response(
-          JSON.stringify({ error: 'Missing required fields: apiKey, targetUrl, payload' }),
-          { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-        );
+        return jsonResponse(400, { error: 'missing_fields', message: 'Missing required fields: apiKey, targetUrl, payload' }, allowedOrigin);
+      }
+      if (typeof targetUrl !== 'string' || typeof payload !== 'string') {
+        return jsonResponse(400, { error: 'invalid_fields', message: 'targetUrl и payload должны быть строками.' }, allowedOrigin);
       }
 
-      // ── Validate targetUrl ───────────────────────────────────────
-      const urlValidation = validateTargetUrl(targetUrl);
+      // Select provider config. `custom` talks to an OpenAI-compatible endpoint.
+      const isKnownProvider = provider === 'custom' || Boolean(PROVIDER_CONFIGS[provider]);
+      if (!isKnownProvider) {
+        return jsonResponse(400, {
+          error: 'unknown_provider',
+          message: `Провайдер «${provider}» не поддерживается этим прокси.`,
+        }, allowedOrigin);
+      }
+
+      // ── Validate targetUrl against the declared provider ─────────
+      const urlValidation = validateTargetUrl(targetUrl, provider, env);
       if (!urlValidation.valid) {
-        return new Response(
-          JSON.stringify({ error: 'invalid_target_url', message: urlValidation.error }),
-          { status: 400, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-        );
+        const isCustomDisabled = urlValidation.error.includes('Custom provider endpoints are disabled');
+        return jsonResponse(isCustomDisabled ? 403 : 400, {
+          error: isCustomDisabled ? 'custom_provider_disabled' : 'invalid_target_url',
+          message: urlValidation.error,
+        }, allowedOrigin);
       }
 
-      // Select provider config (default to openai-compatible)
       const config = PROVIDER_CONFIGS[provider] || PROVIDER_CONFIGS.openai;
+
       const transformed = config.transformRequest({
         body: JSON.stringify({ targetUrl, payload }),
         apiKey,
       });
 
       // ── Build fetch options with timeout ──────────────────────────
+      const controller = new AbortController();
       const fetchOptions = {
         method: 'POST',
         headers: transformed.headers,
         body: transformed.body,
+        signal: controller.signal,
       };
 
-      // For buffered (non-streaming) requests, add explicit timeout
-      // For streaming requests, no timeout — Worker stays alive while data flows
-      let controller = null;
-      if (!isStreaming) {
-        controller = new AbortController();
-        fetchOptions.signal = controller.signal;
-      }
-
-      // Forward to target — with or without retry based on X-No-Retry header
-      const max429Retries = skipRetry ? 0 : MAX_429_RETRIES;
-      const max5xxRetries = skipRetry ? 0 : MAX_5XX_RETRIES;
+      // Timeout: full response time for buffered requests, idle time between
+      // chunks for streaming ones. On expiry the upstream fetch is aborted.
+      let timeoutId = setTimeout(() => {
+        try { controller.abort(); } catch (_) { /* already aborted */ }
+      }, isStreaming ? streamingTimeoutMs : providerTimeoutMs);
 
       let response;
-      let timeoutId = null;
 
       try {
-        if (controller) {
-          timeoutId = setTimeout(() => controller.abort(), providerTimeoutMs);
-        }
-
-        response = await fetchWithRetry(transformed.targetUrl, fetchOptions, max429Retries, max5xxRetries, provider);
+        response = await fetchWithRetry(transformed.targetUrl, fetchOptions, skipRetry ? 0 : MAX_429_RETRIES, skipRetry ? 0 : MAX_5XX_RETRIES, provider);
       } catch (fetchError) {
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
 
         // Handle AbortError (timeout)
-        if (fetchError.name === 'AbortError') {
-          console.error(
-            `[Proxy Timeout] Provider ${provider} did not respond within ${providerTimeoutMs}ms — key: ${maskApiKey(apiKey)}`
-          );
-          return new Response(
-            JSON.stringify({
-              error: 'timeout',
-              message: `Провайдер не ответил за ${Math.round(providerTimeoutMs / 1000)} секунд. Попробуйте ещё раз или выберите другую модель.`,
-            }),
-            { status: 504, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-          );
+        if (fetchError && fetchError.name === 'AbortError') {
+          console.error(`[Proxy Timeout] Provider ${provider} did not respond within ${isStreaming ? streamingTimeoutMs : providerTimeoutMs}ms`);
+          return jsonResponse(504, {
+            error: 'timeout',
+            message: `Провайдер не ответил за ${Math.round(providerTimeoutMs / 1000)} секунд. Попробуйте ещё раз или выберите другую модель.`,
+          }, allowedOrigin);
         }
 
         // Handle DNS/Network errors (TypeError: fetch failed)
-        if (fetchError instanceof TypeError && fetchError.message.includes('fetch failed')) {
-          console.error(`[Proxy Network] Cannot connect to provider ${provider} — key: ${maskApiKey(apiKey)}`);
-          return new Response(
-            JSON.stringify({
-              error: 'network',
-              message: 'Не удалось подключиться к провайдеру. Проверьте URL API и доступность сервиса.',
-            }),
-            { status: 502, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-          );
+        if (fetchError instanceof TypeError) {
+          console.error(`[Proxy Network] Cannot connect to provider ${provider}`);
+          return jsonResponse(502, {
+            error: 'network',
+            message: 'Не удалось подключиться к провайдеру. Проверьте URL API и доступность сервиса.',
+          }, allowedOrigin);
         }
 
-        // Unknown fetch error
-        console.error(`[Proxy Error] ${fetchError.message} — provider: ${provider}, key: ${maskApiKey(apiKey)}`);
-        throw fetchError;
+        // Unknown fetch error — never echo internals (they can contain the key
+        // for query-string providers such as Google).
+        console.error(`[Proxy Error] provider=${provider} name=${fetchError && fetchError.name}`);
+        return jsonResponse(502, {
+          error: 'network',
+          message: 'Не удалось выполнить запрос к провайдеру. Попробуйте ещё раз.',
+        }, allowedOrigin);
       }
 
-      if (timeoutId) clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
       // ── Streaming passthrough ─────────────────────────────────────
       if (isStreaming && response.ok && response.body) {
         const elapsedMs = Date.now() - startTime;
-
-        // BUGFIX: Preserve upstream Content-Type instead of always forcing
-        // text/event-stream. Some providers return buffered JSON even with
-        // stream:true, and forcing text/event-stream causes the client-side
-        // SSE parser to fail (it tries to parse JSON as SSE → empty text).
         const upstreamContentType = response.headers.get('Content-Type') || '';
         const isActuallySSE = upstreamContentType.includes('text/event-stream');
 
-        console.log(`[Proxy Stream] ${provider} — streaming started in ${elapsedMs}ms (upstream CT: ${upstreamContentType || 'unknown'}) — key: ${maskApiKey(apiKey)}`);
+        console.log(`[Proxy Stream] ${provider} — streaming started in ${elapsedMs}ms (upstream CT: ${upstreamContentType || 'unknown'})`);
 
-        // v7 BUGFIX: Add streaming timeout so we can send a graceful error
-        // event if the upstream stops sending data. Cloudflare Workers free plan
-        // has NO hard wall-clock limit — the Worker stays alive while data flows.
-        // This timeout is a safety net for unresponsive upstreams, not a platform
-        // limit. When it fires, we inject an SSE error event into the stream.
-        let streamTimedOut = false;
-        const streamTimeoutId = setTimeout(() => {
-          streamTimedOut = true;
-          console.warn(`[Proxy Stream] Streaming timeout (${streamingTimeoutMs}ms) — upstream ${provider} did not finish — key: ${maskApiKey(apiKey)}`);
-        }, streamingTimeoutMs);
-
-        // Create a TransformStream to inject timeout error event
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
         const reader = response.body.getReader();
+        const encoder = new TextEncoder();
 
-        // Pipe the upstream response through our transform
-        // If timeout fires, inject an error SSE event
         (async () => {
+          let stalled = false;
           try {
             while (true) {
-              if (streamTimedOut) {
-                // Inject timeout error as SSE event before closing
-                const timeoutEvent = `event: error\ndata: ${JSON.stringify({
-                  error: 'stream_timeout',
-                  message: `Стриминг прерван: провайдер не ответил за ${Math.round(streamingTimeoutMs / 1000)} секунд. Попробуйте более быструю модель или уменьшите текст.`,
-                })}\n\n`;
-                await writer.write(new TextEncoder().encode(timeoutEvent));
+              // Race the read against the idle timeout so a silent upstream
+              // cannot hold the stream open forever.
+              let idleTimer;
+              const outcome = await Promise.race([
+                reader.read().then((result) => ({ kind: 'read', result })),
+                new Promise((resolve) => {
+                  idleTimer = setTimeout(() => resolve({ kind: 'timeout' }), streamingTimeoutMs);
+                }),
+              ]);
+              clearTimeout(idleTimer);
+
+              if (outcome.kind === 'timeout') {
+                stalled = true;
+                try { reader.cancel(); } catch (_) { /* ignore */ }
+                try { controller.abort(); } catch (_) { /* ignore */ }
                 break;
               }
-              const { done, value } = await reader.read();
+
+              const { done, value } = outcome.result;
               if (done) break;
               await writer.write(value);
             }
           } catch (pipeError) {
-            // Upstream stream was closed or errored
-            console.warn(`[Proxy Stream] Pipe error: ${pipeError.message || pipeError}`);
+            console.warn(`[Proxy Stream] Pipe error: ${pipeError && pipeError.message ? pipeError.message : pipeError}`);
           } finally {
-            clearTimeout(streamTimeoutId);
-            try { await writer.close(); } catch { /* already closed */ }
-            try { reader.releaseLock(); } catch { /* already released */ }
+            if (stalled && isActuallySSE) {
+              // Inject a graceful SSE error event the client can surface.
+              try {
+                const timeoutEvent = `event: error\ndata: ${JSON.stringify({
+                  error: 'stream_timeout',
+                  message: `Стриминг прерван: провайдер не ответил за ${Math.round(streamingTimeoutMs / 1000)} секунд. Попробуйте более быструю модель или уменьшите текст.`,
+                })}\n\n`;
+                await writer.write(encoder.encode(timeoutEvent));
+              } catch (_) { /* writer already closed */ }
+            }
+            try { await writer.close(); } catch (_) { /* already closed */ }
+            try { reader.releaseLock(); } catch (_) { /* already released */ }
           }
         })();
 
-        // Pass through the transformed ReadableStream
-        const streamHeaders = {
-          'Content-Type': isActuallySSE ? 'text/event-stream' : upstreamContentType || 'application/json',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-          ...CORS_HEADERS,
-        };
-
         return new Response(readable, {
           status: response.status,
-          headers: streamHeaders,
-        });
-      }
-
-      // ── Streaming request but upstream returned an error ──────────────
-      if (isStreaming && !response.ok) {
-        // For streaming requests that got an error, return the error immediately
-        // without buffering the full body. Error bodies are typically small.
-        const errorBody = await response.text();
-        const rewritten = rewrite429IfModelNotFound(response.status, errorBody, provider);
-
-        const elapsedMs = Date.now() - startTime;
-        console.warn(
-          `[Proxy Stream] ${provider} → ${rewritten.status} (upstream error) in ${elapsedMs}ms — key: ${maskApiKey(apiKey)}`
-        );
-
-        return new Response(rewritten.body, {
-          status: rewritten.status,
           headers: {
-            'Content-Type': 'application/json',
-            ...CORS_HEADERS,
+            'Content-Type': isActuallySSE ? 'text/event-stream' : upstreamContentType || 'application/json',
+            'Cache-Control': 'no-cache, no-store',
+            'X-Content-Type-Options': 'nosniff',
+            ...corsHeaders(allowedOrigin),
           },
         });
       }
 
-      // ── Buffered response (existing logic) ────────────────────────
-      // Return with CORS headers
+      // ── Streaming request but upstream returned an error ──────────
+      if (isStreaming && !response.ok) {
+        const errorBody = await response.text();
+        const rewritten = rewrite429IfModelNotFound(response.status, errorBody, provider);
+
+        console.warn(`[Proxy Stream] ${provider} → ${rewritten.status} (upstream error) in ${Date.now() - startTime}ms`);
+
+        return new Response(rewritten.body, {
+          status: rewritten.status,
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            ...corsHeaders(allowedOrigin),
+          },
+        });
+      }
+
+      // ── Buffered response ─────────────────────────────────────────
       const responseData = await response.text();
 
       // Rewrite 429 → 400 if the body indicates a missing/deprecated model
       const rewritten = rewrite429IfModelNotFound(response.status, responseData, provider);
 
-      // Build response headers — preserve content-type and add CORS
       const responseHeaders = {
         'Content-Type': response.headers.get('Content-Type') || 'application/json',
-        ...CORS_HEADERS,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        ...corsHeaders(allowedOrigin),
       };
 
       // If 429 or 5xx, add a helpful header so the client knows the proxy already retried
@@ -638,12 +754,9 @@ export default {
         responseHeaders['X-Proxy-Retried'] = String(skipRetry ? 0 : (rewritten.status === 429 ? MAX_429_RETRIES : MAX_5XX_RETRIES));
       }
 
-      // Logging
       const elapsedMs = Date.now() - startTime;
       const logLevel = rewritten.status >= 400 ? 'warn' : 'log';
-      console[logLevel](
-        `[Proxy] ${provider} → ${rewritten.status} in ${elapsedMs}ms — key: ${maskApiKey(apiKey)}`
-      );
+      console[logLevel](`[Proxy] ${provider} → ${rewritten.status} in ${elapsedMs}ms`);
 
       return new Response(rewritten.body, {
         status: rewritten.status,
@@ -651,15 +764,13 @@ export default {
       });
     } catch (error) {
       const elapsedMs = Date.now() - startTime;
-      console.error(`[Proxy Error] ${error.message} in ${elapsedMs}ms`);
-      return new Response(
-        JSON.stringify({
-          error: 'proxy_error',
-          message: 'Внутренняя ошибка прокси. Попробуйте ещё раз или проверьте настройки.',
-          details: String(error),
-        }),
-        { status: 500, headers: { 'Content-Type': 'application/json', ...CORS_HEADERS } }
-      );
+      // Log the type only — error messages from URL construction can contain
+      // the provider API key (Google puts it in the query string).
+      console.error(`[Proxy Error] ${error && error.name ? error.name : 'Error'} in ${elapsedMs}ms`);
+      return jsonResponse(500, {
+        error: 'proxy_error',
+        message: 'Внутренняя ошибка прокси. Попробуйте ещё раз или проверьте настройки.',
+      }, allowedOrigin);
     }
   },
 };

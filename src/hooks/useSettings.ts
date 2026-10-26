@@ -2,11 +2,39 @@
 // Uses Zustand persist middleware with skipHydration (same pattern as useAuditState)
 // to prevent React hydration mismatch in static-export Next.js apps.
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { LLM_PROVIDERS } from '@/lib/llm-client';
 import type { LLMProvider } from '@/lib/llm-client';
+import { createSafeStorage } from '@/lib/safe-storage';
 
 const SETTINGS_STORAGE_KEY = 'universe-audit-settings';
+// When the user opts into "do not persist the key", it lives only in the
+// current tab's sessionStorage (survives reload, dies with the tab) instead of
+// long-lived localStorage. localStorage never receives the key in that mode.
+const SESSION_KEY_STORAGE = 'universe-audit-session-api-key';
+
+function readSessionKey(): string | null {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+    return window.sessionStorage.getItem(SESSION_KEY_STORAGE);
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionKey(key: string | null): void {
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    if (key) {
+      window.sessionStorage.setItem(SESSION_KEY_STORAGE, key);
+    } else {
+      window.sessionStorage.removeItem(SESSION_KEY_STORAGE);
+    }
+  } catch {
+    // Storage may be unavailable (private mode, disabled cookies) — the key
+    // still works in memory for this page load.
+  }
+}
 
 // Provider-specific default RPM limits (requests per minute)
 const PROVIDER_RPM_DEFAULTS: Record<string, number> = {
@@ -40,6 +68,9 @@ export interface AppSettings {
   customSupportsJSONMode: boolean | null;
   // Audit feature flags
   referenceComparison: boolean;
+  // When true, the API key is kept in sessionStorage only (never written to
+  // the long-lived localStorage settings entry).
+  keyMemoryOnly: boolean;
   // UI state
   sidebarCollapsed: boolean;
 }
@@ -58,6 +89,7 @@ interface SettingsState extends AppSettings {
   setCustomMaxOutputTokens: (value: number | null) => void;
   setCustomSupportsJSONMode: (value: boolean | null) => void;
   setReferenceComparison: (value: boolean) => void;
+  setKeyMemoryOnly: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   clearSettings: () => void;
@@ -66,7 +98,7 @@ interface SettingsState extends AppSettings {
 // Default proxy URL — pre-configured CORS proxy for this app.
 // This proxy is already deployed and working. Do not change unless
 // you are self-hosting your own proxy.
-const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
+export const PROXY_URL_DEFAULT = 'https://universe-audit-proxy.vudirvp.workers.dev';
 const PROXY_URL_PLACEHOLDER = '<your-subdomain>';
 
 /** Check if the proxy URL is still the unconfigured placeholder */
@@ -93,8 +125,31 @@ const DEFAULT_SETTINGS: AppSettings = {
   customMaxOutputTokens: null,
   customSupportsJSONMode: null,
   referenceComparison: false,
+  keyMemoryOnly: false,
   sidebarCollapsed: false,
 };
+
+/**
+ * Build the object written to localStorage. In session-only mode the key is
+ * replaced by null — the real key is mirrored to sessionStorage by setApiKey
+ * and setKeyMemoryOnly. Exported for tests: this is the security boundary.
+ */
+export function selectPersistedSettings(state: AppSettings): AppSettings {
+  return {
+    provider: state.provider,
+    apiKey: state.keyMemoryOnly ? null : state.apiKey,
+    model: state.model,
+    proxyUrl: state.proxyUrl,
+    rpmLimit: state.rpmLimit,
+    baseUrl: state.baseUrl,
+    customContextWindow: state.customContextWindow,
+    customMaxOutputTokens: state.customMaxOutputTokens,
+    customSupportsJSONMode: state.customSupportsJSONMode,
+    referenceComparison: state.referenceComparison,
+    keyMemoryOnly: state.keyMemoryOnly,
+    sidebarCollapsed: state.sidebarCollapsed,
+  };
+}
 
 export const useSettings = create<SettingsState>()(
   persist(
@@ -112,6 +167,13 @@ export const useSettings = create<SettingsState>()(
 
       setApiKey: (apiKey: string | null) => {
         set({ apiKey });
+        // Mirror to sessionStorage in session-only mode; make sure a previous
+        // session copy cannot outlive a key change in normal mode.
+        if (get().keyMemoryOnly) {
+          writeSessionKey(apiKey);
+        } else {
+          writeSessionKey(null);
+        }
       },
 
       setModel: (model: string | null) => {
@@ -146,6 +208,17 @@ export const useSettings = create<SettingsState>()(
         set({ referenceComparison });
       },
 
+      setKeyMemoryOnly: (keyMemoryOnly: boolean) => {
+        const currentKey = get().apiKey;
+        if (keyMemoryOnly) {
+          // Keep the key usable in this tab without writing it to localStorage.
+          writeSessionKey(currentKey);
+        } else {
+          writeSessionKey(null);
+        }
+        set({ keyMemoryOnly });
+      },
+
       setSidebarCollapsed: (sidebarCollapsed: boolean) => {
         set({ sidebarCollapsed });
       },
@@ -155,6 +228,7 @@ export const useSettings = create<SettingsState>()(
       },
 
       clearSettings: () => {
+        writeSessionKey(null);
         set({ ...DEFAULT_SETTINGS, isLoaded: true });
       },
     }),
@@ -163,20 +237,14 @@ export const useSettings = create<SettingsState>()(
       // CRITICAL: skipHydration prevents React Error #185 (hydration mismatch).
       // Same pattern as useAuditState — rehydrate() is called in useEffect in page.tsx.
       skipHydration: true,
-      // Only persist AppSettings fields (not isLoaded or action functions)
-      partialize: (state) => ({
-        provider: state.provider,
-        apiKey: state.apiKey,
-        model: state.model,
-        proxyUrl: state.proxyUrl,
-        rpmLimit: state.rpmLimit,
-        baseUrl: state.baseUrl,
-        customContextWindow: state.customContextWindow,
-        customMaxOutputTokens: state.customMaxOutputTokens,
-        customSupportsJSONMode: state.customSupportsJSONMode,
-        referenceComparison: state.referenceComparison,
-        sidebarCollapsed: state.sidebarCollapsed,
-      }),
+      // Storage can throw (private mode, quota). A failed write must not escape
+      // every settings setter — the key and provider simply stay unsaved.
+      storage: createJSONStorage(() => createSafeStorage(
+        () => (typeof window === 'undefined' ? null : window.localStorage),
+      )),
+      // Only persist AppSettings fields (not isLoaded or action functions).
+      // selectPersistedSettings drops the API key in session-only mode.
+      partialize: (state) => selectPersistedSettings(state),
       // After rehydration, mark as loaded and apply defaults for missing fields
       onRehydrateStorage: () => {
         return (state) => {
@@ -201,6 +269,11 @@ export const useSettings = create<SettingsState>()(
             // If model is null, set from provider's defaultModel
             if (!state.model) {
               state.model = getDefaultModelForProvider(state.provider);
+            }
+            // Session-only key: localStorage intentionally has no key, restore
+            // it from sessionStorage for this tab.
+            if (state.keyMemoryOnly) {
+              state.apiKey = readSessionKey();
             }
             state.isLoaded = true;
           }

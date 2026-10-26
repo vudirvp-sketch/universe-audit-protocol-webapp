@@ -314,11 +314,28 @@ export const PREFERRED_MODELS: Record<LLMProvider, string[]> = {
  * Get the target API URL for a given provider and model.
  * The proxy uses this URL to forward the request.
  */
+/**
+ * Encode a model id used as a URL path.
+ * Slashes are meaningful for Hugging Face ids ("meta-llama/Llama-3..."), so
+ * segments are encoded separately and "."/".." segments are neutralized —
+ * this prevents path traversal while keeping legitimate ids working.
+ */
+function encodeModelPath(model: string): string {
+  return model
+    .split('/')
+    .map((segment) => (segment === '.' || segment === '..' ? '_' : encodeURIComponent(segment)))
+    .join('/');
+}
+
 export function getProviderUrl(provider: LLMProvider, model: string): string {
+  // Model names are user-controlled text. Encode them before interpolation so
+  // a name like "../../v1/files" cannot change the request path or host.
+  const safeModel = encodeURIComponent(model);
+  const safeModelPath = encodeModelPath(model);
   switch (provider) {
     case 'openai':      return 'https://api.openai.com/v1/chat/completions';
     case 'anthropic':   return 'https://api.anthropic.com/v1/messages';
-    case 'google':      return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    case 'google':      return `https://generativelanguage.googleapis.com/v1beta/models/${safeModel}:generateContent`;
     case 'deepseek':    return 'https://api.deepseek.com/v1/chat/completions';
     case 'groq':        return 'https://api.groq.com/openai/v1/chat/completions';
     case 'openrouter':  return 'https://openrouter.ai/api/v1/chat/completions';
@@ -327,10 +344,114 @@ export function getProviderUrl(provider: LLMProvider, model: string): string {
     case 'kimi':        return 'https://api.moonshot.cn/v1/chat/completions';
     case 'xai':         return 'https://api.x.ai/v1/chat/completions';
     case 'together':    return 'https://api.together.xyz/v1/chat/completions';
-    case 'huggingface': return `https://api-inference.huggingface.co/models/${model}`;
+    case 'huggingface': return `https://api-inference.huggingface.co/models/${safeModelPath}`;
     case 'zai':         return 'https://api.z.ai/v1/chat/completions';
     default:            return ''; // Custom provider URL entered by user
   }
+}
+
+// ============================================================================
+// URL VALIDATION (proxy + custom provider)
+// ============================================================================
+
+export interface UrlValidationResult {
+  valid: boolean;
+  /** Normalized URL without trailing slashes (present when valid) */
+  normalized?: string;
+  error?: string;
+}
+
+/** True for loopback hosts, where plain http is tolerated during development. */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+function validateEndpointUrl(raw: string, label: string): UrlValidationResult {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) {
+    return { valid: false, error: `${label} не задан` };
+  }
+  if (/\s/.test(trimmed)) {
+    return { valid: false, error: `${label} содержит пробелы` };
+  }
+
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    return { valid: false, error: `${label} — некорректный URL (нужен полный адрес с https://)` };
+  }
+
+  const isHttps = url.protocol === 'https:';
+  const isLocalHttp = url.protocol === 'http:' && isLoopbackHost(url.hostname);
+  if (!isHttps && !isLocalHttp) {
+    return { valid: false, error: `${label} должен начинаться с https:// (http разрешён только для localhost)` };
+  }
+  if (url.username || url.password) {
+    return { valid: false, error: `${label} не должен содержать логин/пароль в URL` };
+  }
+  if (url.search || url.hash) {
+    return { valid: false, error: `${label} не должен содержать query-параметры или якорь` };
+  }
+
+  return {
+    valid: true,
+    normalized: `${url.origin}${url.pathname}`.replace(/\/+$/, ''),
+  };
+}
+
+/**
+ * Validate the CORS proxy URL before sending anything to it.
+ * The client never posts the API key to a plain-http or malformed endpoint
+ * (loopback is allowed so `wrangler dev` works locally).
+ */
+export function validateProxyUrl(raw: string): UrlValidationResult {
+  return validateEndpointUrl(raw, 'URL прокси');
+}
+
+/**
+ * Validate and normalize a custom provider base URL.
+ * Returns e.g. "https://api.example.com/v1" with trailing slashes removed;
+ * the caller appends "/chat/completions".
+ */
+export function normalizeCustomBaseUrl(raw: string): UrlValidationResult {
+  return validateEndpointUrl(raw, 'Base URL провайдера');
+}
+
+/**
+ * Resolve the provider API URL for a request. Throws a user-facing error when
+ * a custom provider has no valid base URL.
+ */
+function resolveTargetUrl(provider: LLMProvider, model: string, baseUrl?: string): string {
+  if (provider === 'custom') {
+    const base = normalizeCustomBaseUrl(baseUrl || '');
+    if (!base.valid) {
+      throw new Error(base.error);
+    }
+    return `${base.normalized}/chat/completions`;
+  }
+  return getProviderUrl(provider, model);
+}
+
+/**
+ * Combine abort signals, with a fallback for browsers without AbortSignal.any
+ * (older Safari/Firefox) so a missing API cannot silently disable cancellation.
+ */
+function combineAbortSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined {
+  if (!a) return b;
+  if (!b) return a;
+  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as unknown as { any?: unknown }).any === 'function') {
+    return AbortSignal.any([a, b]);
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (a.aborted || b.aborted) {
+    controller.abort();
+    return controller.signal;
+  }
+  a.addEventListener('abort', abort, { once: true });
+  b.addEventListener('abort', abort, { once: true });
+  return controller.signal;
 }
 
 // ============================================================================
@@ -772,13 +893,8 @@ export function createLLMClient(
   async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResponse> {
     const effectiveModel = options.model || model;
 
-    // Determine target URL
-    let targetUrl: string;
-    if (config.provider === 'custom' && config.baseUrl) {
-      targetUrl = `${config.baseUrl}/chat/completions`;
-    } else {
-      targetUrl = getProviderUrl(config.provider, effectiveModel);
-    }
+    // Determine target URL (custom base URLs are validated here)
+    const targetUrl = resolveTargetUrl(config.provider, effectiveModel, config.baseUrl);
 
     if (!targetUrl) {
       throw new Error(`URL провайдера не задан для «${config.provider}». Укажите baseUrl в настройках.`);
@@ -813,12 +929,13 @@ export function createLLMClient(
       );
     }
 
-    // Determine proxy URL
+    // Determine proxy URL — validated so the key is never posted to a
+    // plain-http or malformed endpoint.
     const proxyUrl = config.proxyUrl || '';
-
-    if (!proxyUrl) {
+    const proxyValidation = validateProxyUrl(proxyUrl);
+    if (!proxyValidation.valid) {
       throw new Error(
-        'URL CORS-прокси не настроен. Укажите его в Настройки → Расширенные настройки → URL прокси.'
+        `${proxyValidation.error}. Укажите корректный URL в Настройки → Расширенные настройки → URL прокси.`
       );
     }
 
@@ -838,9 +955,7 @@ export function createLLMClient(
     // so the client timeout should match or slightly exceed the proxy timeout.
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300_000);
-    const signal = options.signal
-      ? AbortSignal.any([options.signal, controller.signal])
-      : controller.signal;
+    const signal = combineAbortSignals(options.signal, controller.signal);
 
     let response: Response;
     try {
@@ -869,9 +984,10 @@ export function createLLMClient(
       throw new Error(
         `Ошибка сети при обращении к прокси: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
       );
+    } finally {
+      // Always clear the timeout — an early throw used to leave it armed.
+      clearTimeout(timeoutId);
     }
-
-    clearTimeout(timeoutId);
 
     // ── 504 Gateway Timeout (from proxy) ─────────────────────────────────
     // Proxy timed out waiting for the provider to respond.
@@ -945,7 +1061,22 @@ export function createLLMClient(
     // ── Other non-OK responses ──────────────────────────────────────────
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${errorText}`);
+      // Surface the proxy's / provider's own message instead of raw JSON.
+      let detail = errorText;
+      try {
+        const parsed = JSON.parse(errorText) as {
+          message?: string;
+          error?: string | { message?: string };
+        };
+        detail = parsed.message
+          || (typeof parsed.error === 'string' ? parsed.error : parsed.error?.message)
+          || errorText;
+      } catch { /* not JSON — keep raw text */ }
+
+      if (response.status === 403) {
+        throw new Error(`Прокси отклонил запрос (403): ${detail}`);
+      }
+      throw new Error(`${providerConfig.name} ошибка прокси (${response.status}): ${detail}`);
     }
 
     // ── Success — parse and normalize ───────────────────────────────────
@@ -975,13 +1106,8 @@ export function createLLMClient(
       return buffered;
     }
 
-    // Determine target URL
-    let targetUrl: string;
-    if (config.provider === 'custom' && config.baseUrl) {
-      targetUrl = `${config.baseUrl}/chat/completions`;
-    } else {
-      targetUrl = getProviderUrl(config.provider, effectiveModel);
-    }
+    // Determine target URL (custom base URLs are validated here)
+    const targetUrl = resolveTargetUrl(config.provider, effectiveModel, config.baseUrl);
 
     if (!targetUrl) {
       throw new Error(`URL провайдера не задан для «${config.provider}». Укажите baseUrl в настройках.`);
@@ -1012,11 +1138,13 @@ export function createLLMClient(
     const { payload: streamingPayload, targetUrl: streamingTargetUrl } =
       enableStreamingInPayload(config.provider, rawPayload, targetUrl);
 
-    // Determine proxy URL
+    // Determine proxy URL — validated so the key is never posted to a
+    // plain-http or malformed endpoint.
     const proxyUrl = config.proxyUrl || '';
-    if (!proxyUrl) {
+    const proxyValidation = validateProxyUrl(proxyUrl);
+    if (!proxyValidation.valid) {
       throw new Error(
-        'URL CORS-прокси не настроен. Укажите его в Настройки → Расширенные настройки → URL прокси.'
+        `${proxyValidation.error}. Укажите корректный URL в Настройки → Расширенные настройки → URL прокси.`
       );
     }
 

@@ -54,3 +54,5 @@ wrangler.jsonc
 open-next.config.ts
 .dev.vars
 .open-next/
+# Wrangler local state (worker/)
+worker/.wrangler/

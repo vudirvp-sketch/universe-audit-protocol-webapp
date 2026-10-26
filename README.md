@@ -14,6 +14,29 @@ The canonical specification is [`UNIVERSE_AUDIT_PROTOCOL_ULTIMATE_v16`](./UNIVER
 
 The CORS proxy is pre-configured. You don't need to deploy anything.
 
+## Security and API key handling
+
+The app is a static site: there is no backend and no server-side provider secret. Your API key is entered in the browser and used for requests you start.
+
+Where the key lives:
+
+- **Default:** `localStorage` under `universe-audit-settings`, so it survives reloads and browser restarts. It is plaintext — anyone with access to the browser profile, a full-disk backup, or an extension with host permissions can read it.
+- **Session-only:** enable «Не сохранять ключ на диск» in Settings. The key is then written to `sessionStorage` only (survives a reload of the tab, dies when the tab closes) and the `localStorage` entry stores `apiKey: null`.
+
+Where the key travels:
+
+- The browser sends it to the CORS proxy configured in Settings → Advanced, which forwards it to the provider. With the bundled proxy (`universe-audit-proxy.vudirvp.workers.dev`) the proxy operator can technically observe traffic, so for maximum privacy deploy your own worker from [`worker/`](./worker) and point Settings at it.
+- The proxy does not store or log keys (v9 logs contain no key material in any form), and every response is `no-store`.
+- Before sending anything, the client validates the proxy URL (https only, except `localhost` for local development) and, for custom providers, the base URL. `http://` proxies are refused so a key cannot be posted in cleartext.
+
+Proxy hardening (v9):
+
+- **No open relay.** The worker accepts only the API host of the provider named in the request (`api.openai.com` for `openai`, etc.). Custom endpoints are disabled unless the host is listed in `ALLOWED_CUSTOM_HOSTS` (empty by default).
+- **Origin allowlist.** `Access-Control-Allow-Origin` is echoed only for allowlisted app origins (production Pages domain, Pages previews of the same project, `localhost:3000`); it is never `*`. A custom domain must be added to `ALLOWED_ORIGINS`.
+- **Real body-size limit**, enforced on received bytes rather than `Content-Length`; streaming stall timeout; no key in logs or error payloads.
+
+Residual risks worth knowing: a malicious browser extension or a compromise of the proxy deployment can still read the key while it is in use; disabling persistence (session-only mode) and using your own proxy are the two mitigations this app offers. Prompt-injected model output cannot exfiltrate the key: rendered report HTML is escaped and raw HTML from the model is not enabled.
+
 ## What it does
 
 The audit examines five coupled dimensions (v16 §3), each of which must be stated even when the material fails it:
@@ -181,9 +204,21 @@ npx vitest run __tests__/audit/export-utils.test.ts
 
 ```bash
 cd worker
-npm install
+npm ci
 npx wrangler login
 npx wrangler deploy
+```
+
+Security configuration lives in [`worker/wrangler.toml`](./worker/wrangler.toml) `[vars]`:
+
+- `ALLOWED_ORIGINS` — comma-separated browser origins allowed to call the proxy. Unset means the production Pages domain, its previews, and localhost:3000.
+- `ALLOWED_CUSTOM_HOSTS` — comma-separated hostnames for `provider: "custom"`. Empty (default) disables custom endpoints on this proxy.
+
+After deploying, verify the hardening:
+
+```bash
+curl -s https://<your-worker>.workers.dev/health           # expects "version":"v9"
+curl -si -X OPTIONS https://<your-worker>.workers.dev/ -H "Origin: https://evil.example"  # expects 403
 ```
 
 ### Deploying the Frontend (Cloudflare Pages)
