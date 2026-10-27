@@ -1,8 +1,7 @@
 # Local relay
 
-Local replacement for the Cloudflare Worker (`worker/cors-proxy.js` v9).
 One process serves the Next.js static export **and** proxies LLM API calls, so
-no Cloudflare account, no `wrangler`, and no API key in the browser are needed.
+no third-party proxy, no hosting account, and no API key in the browser are needed.
 
 - ESM, **Node.js >= 18**, **zero dependencies**.
 - Binds `127.0.0.1` only.
@@ -196,7 +195,7 @@ This is a local developer tool: any process on the same machine (same user)
 can call it, and the key in the body route travels over loopback in plaintext.
 Run it on a trusted workstation.
 
-## 6. Differences from the Cloudflare Worker (v9)
+## 6. Deliberate non-features
 
 - No server-side 429/5xx retry loop and no per-IP rate limiting. The browser
   client already avoids retry cascades; if you need retries, add them in the
@@ -204,7 +203,6 @@ Run it on a trusted workstation.
 - Google auth is sent as the `x-goog-api-key` header instead of a `?key=`
   query parameter, so the key cannot leak through URLs or logs.
 - `custom` endpoints must be `https://` (no `http://localhost` endpoints).
-- Static export serving, `/api/health` and the CLI are new.
 
 ## 7. Tests
 

@@ -1,6 +1,6 @@
 /**
- * Contract tests for the local relay (relay/relay.mjs), the replacement for
- * the Cloudflare Worker (worker/cors-proxy.js v9).
+ * Contract tests for the local relay (relay/relay.mjs), the optional loopback
+ * server that serves the static export and proxies provider calls.
  *
  * The relay is exercised in-process: `createRelayHandler` returns an
  * http-style `(req, res)` handler, so the suite needs no listening port and

@@ -1,8 +1,7 @@
 /**
  * Local relay for the Universe Audit Protocol web app.
  *
- * Replaces the Cloudflare Worker (`worker/cors-proxy.js` v9) for the
- * "static export + local relay" deployment plan:
+ * Implements the "static export + local relay" deployment plan:
  *
  *   - serves the Next.js static export (`out/` by default),
  *   - proxies `POST /api/llm` to a pinned provider API host,

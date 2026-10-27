@@ -148,7 +148,7 @@ export function classifyLLMError(error: unknown): AuditError {
     };
   }
 
-  // 7. CORS / proxy errors — typically from the Cloudflare Worker
+  // 7. CORS / proxy errors — raised by the direct transport or the local relay
   // BUGFIX: Слово «прокси» появляется во многих сообщениях (таймаут прокси,
   // ошибка прокси 502, и т.д.), что приводило к ложной классификации как
   // fatal_cors_error (retryable: false). Теперь проверяем более точно:

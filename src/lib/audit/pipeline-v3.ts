@@ -8,7 +8,7 @@
  * which `extractAuditVerdict` parses into the qualitative verdict (no numeric score).
  *
  * v2 (F3): Blocks 2-5 are split into sub-requests (chunks) that each
- * complete within the 300s proxy timeout on Cloudflare Workers free plan.
+ * complete within the 300s per-request ceiling.
  * RPM-based delay between sub-requests avoids rate limits on free-tier models.
  */
 

@@ -1,0 +1,26 @@
+# Normalise line endings so a Windows checkout and a Linux CI runner agree.
+* text=auto eol=lf
+
+# Source and docs are text.
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.mjs   text eol=lf
+*.js    text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.svg   text eol=lf
+
+# Binary assets: never convert, never show a text diff.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.gif   binary
+*.mp4   binary
+*.woff  binary
+*.woff2 binary
+
+# The protocol document is a large UTF-8 markdown file; keep it stable in diffs.
+docs/protocol/*.md text eol=lf

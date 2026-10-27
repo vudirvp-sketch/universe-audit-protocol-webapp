@@ -5,11 +5,20 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual re-run from the Actions tab, without pushing an empty commit.
+  workflow_dispatch:
 
 # Least privilege: the build job only reads the repository. The deploy job
 # additionally gets the Pages scopes it needs below.
 permissions:
   contents: read
+
+# One Pages deployment at a time. Queued, not cancelled: two quick pushes must
+# not interleave their artifacts, and an in-flight production deploy is never
+# killed halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
   build:
