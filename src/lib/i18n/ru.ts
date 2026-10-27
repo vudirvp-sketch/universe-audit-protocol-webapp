@@ -381,6 +381,16 @@ export const t = {
     generating: 'Генерация ответа...',
     completed: 'Завершено',
     blockPrefix: 'БЛОК',
+    // Reading controls
+    jumpToLatest: 'К последнему тексту',
+    showFullConcept: 'Показать полностью',
+    hideFullConcept: 'Свернуть',
+    // A block whose answer was cut off by the output-token limit
+    truncated: 'обрезано',
+    truncatedHint:
+      'Ответ модели оборван лимитом вывода: конец раздела потерян. Увеличьте «Макс. выход» в настройках или сократите материал.',
+    // Machine-readable §27 block inside the report (collapsed by default)
+    machineBlock: 'Машинный блок §27 (JSON) — для программ, не для чтения',
     // Meta info
     tokens: 'Токены',
     time: 'Время',

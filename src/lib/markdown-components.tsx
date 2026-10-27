@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { CalloutBlock } from '@/components/audit/CalloutBlock';
+import { t } from '@/lib/i18n/ru';
 
 /**
  * Extract plain text content from React children (for callout detection).
@@ -48,9 +49,15 @@ function removeCalloutPrefix(children: React.ReactNode, prefixLength: number): R
 /**
  * Shared ReactMarkdown components override object.
  * - blockquote: renders GitHub-style callout blocks ([!NOTE], [!WARNING], etc.)
- * - pre: styled code block containers
+ * - pre: styled code block containers; the machine-readable §27 JSON block is
+ *   collapsed behind a summary (it is for programme consumption, and a 1 000 px
+ *   single-line JSON inside a 816 px reading column forces horizontal scrolling)
  * - code: inline code styling
  */
+
+/** The §27 machine block always carries the verdict object. */
+const MACHINE_JSON_MARKER = 'final_verdict';
+
 export const markdownComponents = {
   blockquote: ({ children, ...props }: React.ComponentPropsWithoutRef<'blockquote'> & { node?: unknown }) => {
     const textContent = extractTextFromChildren(children);
@@ -65,11 +72,31 @@ export const markdownComponents = {
     return <blockquote {...props}>{children}</blockquote>;
   },
 
-  pre: ({ children, ...props }: React.ComponentPropsWithoutRef<'pre'>) => (
-    <pre className="rounded-sm border bg-card p-4 overflow-x-auto text-sm" {...props}>
-      {children}
-    </pre>
-  ),
+  pre: ({ children, ...props }: React.ComponentPropsWithoutRef<'pre'>) => {
+    const textContent = extractTextFromChildren(children);
+
+    if (textContent.includes(MACHINE_JSON_MARKER)) {
+      return (
+        <details className="my-6 rounded-sm border border-border bg-card px-4 py-3">
+          <summary className="cursor-pointer text-sm text-muted-foreground">
+            {t.report.machineBlock}
+          </summary>
+          <pre
+            className="mt-3 max-h-96 overflow-auto font-mono text-xs leading-relaxed"
+            {...props}
+          >
+            {children}
+          </pre>
+        </details>
+      );
+    }
+
+    return (
+      <pre className="rounded-sm border border-border bg-card p-4 overflow-x-auto text-sm" {...props}>
+        {children}
+      </pre>
+    );
+  },
 
   code: ({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => {
     // If className contains a language (e.g., "language-tsx"), it's a fenced code block

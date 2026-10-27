@@ -25,19 +25,28 @@ interface BlockSectionHeaderProps {
 }
 
 /**
- * Шапка блока: липкая, одной линией. Номер блока — вторичным текстом,
- * название — обычным начертанием 600: это раздел документа, а не карточка.
+ * Шапка блока: липкая, одной линией, по ширине текстовой колонки.
+ *
+ * Номер блока — вторичным текстом, название — обычным начертанием 600:
+ * это раздел документа, а не карточка. Название переносится, а не обрезается:
+ * это смысловой заголовок, а не метаданные.
+ *
+ * `top-[57px]` — высота верхней панели (h-14 + hairline). Смещение задано
+ * числом, а не классом `top-14`, иначе заголовок на 1 px заезжает под панель.
  */
 export function BlockSectionHeader({ blockNumber, label, result, isStreaming }: BlockSectionHeaderProps) {
   const status = getBlockStatus(result, isStreaming);
   const elapsedMs = result?.meta?.elapsedMs;
+  const truncated = result?.meta?.completionStatus === 'partial';
 
   return (
-    <header className="sticky top-14 z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-3 border-y bg-background">
-      <div className="flex items-baseline justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <StatusIndicator status={status} label={STATUS_LABEL[status]} />
-          <h2 className="truncate text-xl font-semibold">
+    <header className="sticky top-[57px] z-10 border-y border-border bg-background py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <div className="flex min-w-0 items-baseline gap-3">
+          <span className="translate-y-[-1px]">
+            <StatusIndicator status={status} label={STATUS_LABEL[status]} />
+          </span>
+          <h2 className="text-lg font-semibold leading-snug text-balance md:text-xl">
             <span className="font-normal text-muted-foreground">
               {t.report.blockPrefix} {blockNumber}.
             </span>{' '}
@@ -47,9 +56,18 @@ export function BlockSectionHeader({ blockNumber, label, result, isStreaming }: 
         <div className="shrink-0 text-sm tabular-nums text-muted-foreground">
           {isStreaming ? (
             t.report.streaming
-          ) : typeof elapsedMs === 'number' && elapsedMs > 0 ? (
-            `${(elapsedMs / 1000).toFixed(1)} с`
-          ) : null}
+          ) : (
+            <span className="flex items-baseline gap-2">
+              {typeof elapsedMs === 'number' && elapsedMs > 0 && (
+                <span>{(elapsedMs / 1000).toFixed(1)} с</span>
+              )}
+              {truncated && (
+                <span className="text-severity-warning" title={t.report.truncatedHint}>
+                  {t.report.truncated}
+                </span>
+              )}
+            </span>
+          )}
         </div>
       </div>
     </header>

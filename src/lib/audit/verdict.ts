@@ -46,6 +46,18 @@ const MARKDOWN_BAND_MARKERS: Record<VerdictBandKey, string[]> = {
 
 const CONFIDENCE_MARKERS = ['УВЕРЕННОСТЬ', 'CONFIDENCE'];
 
+/**
+ * Canonical §26.S value tokens. Used as a sanity filter when a band is recognised
+ * only by its human label in prose — a table row or a protocol marker needs no
+ * such guard, because the structure itself already says "this is the verdict".
+ */
+const BAND_VALUE_TOKENS = new Set([
+  'weak', 'developing', 'coherent', 'strong',
+  'narrow', 'focused', 'broad', 'highly generative',
+  'diffuse', 'emerging', 'distinct', 'highly distinct',
+  'fragile', 'viable', 'robust', 'unusually generative',
+]);
+
 // ============================================================
 // §22 — capability frontier buckets
 // ============================================================
@@ -221,7 +233,9 @@ function buildVerdictFromMarkdown(text: string): AuditVerdict | null {
 
   const bands: VerdictBand[] = [];
   for (const spec of BAND_SPECS) {
-    const value = findMarkdownBand(lines, MARKDOWN_BAND_MARKERS[spec.key]);
+    // Both the protocol marker (ОСНОВА МИРА) and the human label
+    // (Фундамент мира) name the same band — real answers use either.
+    const value = findMarkdownBand(lines, MARKDOWN_BAND_MARKERS[spec.key], [spec.label]);
     if (value) bands.push({ key: spec.key, label: spec.label, value });
   }
 
@@ -239,27 +253,91 @@ function buildVerdictFromMarkdown(text: string): AuditVerdict | null {
   };
 }
 
-/** Find `LABEL: value` in the markdown and normalize the value. */
-function findMarkdownBand(lines: string[], markers: string[]): string | null {
+/**
+ * Find one band in the markdown and normalize its value.
+ *
+ * Real model output is not a single canonical shape, so the same band may arrive as
+ *   `ОСНОВА МИРА: coherent`
+ *   `**ОСНОВА МИРА** — coherent`
+ *   `### ОСНОВА МИРА: coherent`
+ *   `| Фундамент мира | coherent |`
+ * All four are the same fact and all four must be readable; a wrong answer here is
+ * the "Вердикт не сформирован" screen over a report that does contain a verdict.
+ */
+function findMarkdownBand(lines: string[], markers: string[], labels: string[] = []): string | null {
   for (const line of lines) {
+    // Table row: `| label | value |` — labels are the human band names here.
+    const cells = splitTableRow(line);
+    if (cells) {
+      const key = normalizeName(cells[0]);
+      if (matchesName(key, markers) || matchesName(key, labels)) {
+        const value = normalizeBandValue(cells[1]);
+        if (value) return value;
+      }
+      continue;
+    }
+
     const cleaned = cleanMarkerLine(line);
     if (!cleaned) continue;
-    for (const marker of markers) {
-      const markerPattern = marker.split(/\s+/).map(escapeRegExp).join('\\s+');
-      const pattern = new RegExp(`^${markerPattern}\\s*[:：]\\s*(.+)$`, 'i');
-      const match = pattern.exec(cleaned);
+
+    for (const name of [...markers, ...labels]) {
+      const match = matchSeparatedValue(cleaned, name);
       if (!match) continue;
-      const value = normalizeBandValue(match[1]);
-      if (value) return value;
+      // A protocol marker written in capitals («ОСНОВА МИРА — …») is explicit: the
+      // model is naming the band, so its value is taken as written. A label in
+      // ordinary casing only counts when it carries a canonical §26.S token —
+      // otherwise normal prose («Общее состояние — сложная система») would
+      // fabricate a band that the model never stated.
+      if (match.uppercase || BAND_VALUE_TOKENS.has(match.value)) return match.value;
     }
   }
   return null;
 }
 
+/**
+ * Cells of a markdown table row, as `[label, value]`.
+ * Returns null for anything that is not a table row, including the `|---|---|`
+ * separator and the header row (whose first cell names no band).
+ */
+function splitTableRow(line: string): [string, string] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|')) return null;
+
+  const cells = stripMd(trimmed.replace(/^\|+/, '').replace(/\|+$/, ''))
+    .split('|')
+    .map(cell => cell.trim());
+  if (cells.length < 2) return null;
+
+  // The value is the first non-empty cell after the label (models leave gaps).
+  const value = cells[1] || cells.slice(1).find(cell => cell.length > 0) || '';
+  return [cells[0], value];
+}
+
+/** `NAME: value`, `NAME — value`, `NAME – value`, `NAME - value`. */
+function matchSeparatedValue(line: string, name: string): { value: string; uppercase: boolean } | null {
+  const namePattern = name.split(/\s+/).map(escapeRegExp).join('\\s+');
+  const pattern = new RegExp(`^(${namePattern})\\s*(?:[:：]|[—–]|-(?=\\s))\\s*(.+)$`, 'i');
+  const match = pattern.exec(line);
+  if (!match) return null;
+  const value = normalizeBandValue(match[2]);
+  if (!value) return null;
+  const written = match[1];
+  return { value, uppercase: written === written.toUpperCase() && /[A-ZА-ЯЁ]/.test(written) };
+}
+
+/** Comparison form of a band name: no markdown, no case, single spaces. */
+function normalizeName(raw: string): string {
+  return stripMd(raw).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function matchesName(normalizedLine: string, names: string[]): boolean {
+  return names.some(name => normalizeName(name) === normalizedLine);
+}
+
 /** Lowercase a band value, dropping prose after it and any markdown emphasis. */
 function normalizeBandValue(raw: string): string | null {
   const cleaned = stripMd(raw).replace(/^[\s"'«»(]+/, '').trim();
-  const head = cleaned.split(/[—–;,.(]/)[0].trim();
+  const head = cleaned.split(/[—–;,.(!?…]/)[0].trim();
   const value = head.toLowerCase().replace(/[.\s]+$/, '');
   if (!value) return null;
   if (!/^[a-zа-яё][a-zа-яё _-]{0,40}$/.test(value)) return null;

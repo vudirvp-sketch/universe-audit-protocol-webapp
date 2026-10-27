@@ -71,9 +71,10 @@ vi.mock('@/lib/audit/context-bridge', () => ({
 
 import { runAuditPipelineV3 } from '@/lib/audit/pipeline-v3';
 import { callLLMStreaming } from '@/lib/audit/llm-streaming';
+import type { ContinuationPolicy } from '@/lib/audit/llm-streaming';
 import { extractAuditVerdict } from '@/lib/audit/verdict';
 import type { LLMStreamingResult } from '@/lib/audit/llm-streaming';
-import type { LLMConfig, AuditInput } from '@/lib/audit/types-v3';
+import type { LLMConfig, AuditInput, PipelineLogEntry } from '@/lib/audit/types-v3';
 
 // ============================================================
 // Test helpers
@@ -103,7 +104,13 @@ const mockCallbacks = {
   onChunk: vi.fn(),
   onBlockComplete: vi.fn(),
   onError: vi.fn(),
+  onLog: vi.fn(),
 };
+
+/** All journal entries the pipeline emitted in the current test. */
+function loggedEntries(): PipelineLogEntry[] {
+  return mockCallbacks.onLog.mock.calls.map((call) => call[0] as PipelineLogEntry);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -386,5 +393,76 @@ describe('runAuditPipelineV3 — partial text recovery', () => {
     // Pipeline should still try to continue (retry logic)
     // and eventually complete or error
     expect(['done', 'error']).toContain(result.phase);
+  });
+});
+
+// ============================================================
+// Continuation of truncated chunks
+// ============================================================
+
+describe('runAuditPipelineV3 — continuation on truncation', () => {
+  it('enables continuation for every chunk and journals it in Russian', async () => {
+    const mockCallLLMStreaming = vi.mocked(callLLMStreaming);
+    const policies: ContinuationPolicy[] = [];
+
+    mockCallLLMStreaming.mockImplementation(async (options) => {
+      if (options.continuation) {
+        policies.push(options.continuation);
+        options.continuation.onContinue?.(1, 2);
+      }
+      return makeStreamingResult('Часть ответа');
+    });
+
+    const result = await runAuditPipelineV3(defaultInput, defaultLLMConfig, mockCallbacks);
+
+    expect(result.phase).toBe('done');
+    // Continuation is a property of the call, not an extra pipeline request.
+    // (This file mocks the prompt builders, so the layout is 1+2+1+1+1 = 6 calls.)
+    expect(mockCallLLMStreaming).toHaveBeenCalledTimes(6);
+    expect(policies).toHaveLength(6);
+    expect(typeof policies[0].pace).toBe('function');
+
+    const entry = loggedEntries().find((log) => log.kind === 'chunk:continue');
+    expect(entry).toMatchObject({ level: 'info', kind: 'chunk:continue', block: 1 });
+    expect(entry?.message).toMatch(
+      /^Блок 1(, часть \d+\/\d+)?: ответ обрезан — дописываю \(продолжение 1\/2\)$/,
+    );
+  });
+
+  it('keeps the block complete when the continuation ended with a normal stop', async () => {
+    const mockCallLLMStreaming = vi.mocked(callLLMStreaming);
+
+    mockCallLLMStreaming.mockImplementation(async (options) => {
+      options.continuation?.onContinue?.(1, 2);
+      // The wrapper reports the reason of the LAST request: the repair worked.
+      return { text: 'Полный ответ', usage: null, finishReason: 'stop' };
+    });
+
+    const result = await runAuditPipelineV3(defaultInput, defaultLLMConfig, mockCallbacks);
+
+    expect(result.block1?.meta.completionStatus).toBe('complete');
+    expect(result.block5?.meta.completionStatus).toBe('complete');
+    expect(loggedEntries().some((log) => log.kind === 'chunk:truncated')).toBe(false);
+  });
+
+  it('stays partial when the answer is still truncated after the continuations', async () => {
+    const mockCallLLMStreaming = vi.mocked(callLLMStreaming);
+
+    mockCallLLMStreaming.mockImplementation(async (options) => {
+      options.continuation?.onContinue?.(1, 2);
+      options.continuation?.onContinue?.(2, 2);
+      return { text: 'Обрезанный ответ', usage: null, finishReason: 'length' };
+    });
+
+    const result = await runAuditPipelineV3(defaultInput, defaultLLMConfig, mockCallbacks);
+    const kinds = loggedEntries().map((log) => log.kind);
+
+    expect(result.block1?.meta.completionStatus).toBe('partial');
+    expect(result.block5?.meta.completionStatus).toBe('partial');
+    // The journal must still say that the answer was cut off.
+    expect(kinds).toContain('chunk:truncated');
+    // 6 mocked chunks × 2 continuations each.
+    expect(loggedEntries().filter((log) => log.kind === 'chunk:continue')).toHaveLength(12);
+    expect(loggedEntries().find((log) => log.kind === 'block:done')?.level).toBe('warn');
   });
 });

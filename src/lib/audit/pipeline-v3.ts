@@ -354,11 +354,16 @@ async function executeChunkedBlock(
     }
 
     const prompt = subPrompts[i];
+    // Each sub-request is an independent call, so the ceiling is the model's own
+    // output cap — but a chunk must never get less than a whole section needs.
+    // The old rule divided the block budget by the number of chunks and added
+    // 2 048, which gave Block 2 only 6 144 tokens on an 8 192-token model: that
+    // artificial budget is what cut sections mid-sentence. Now a part gets at
+    // least 8 192 tokens (or the model cap, if lower) and never more than its
+    // fair share + 2 048 headroom, so larger-cap models do not multiply cost.
+    const fairShare = Math.ceil(resolveBlockMaxTokens(blockNumber, modelCaps) / subPrompts.length);
     const maxTokens = subPrompts.length > 1
-      ? Math.min(
-          Math.floor(resolveBlockMaxTokens(blockNumber, modelCaps) / subPrompts.length) + 2048, // slight overhead per chunk
-          modelCaps.maxOutputTokens
-        )
+      ? Math.min(modelCaps.maxOutputTokens, Math.max(fairShare + 2048, 8192))
       : resolveBlockMaxTokens(blockNumber, modelCaps);
     const temperature = BLOCK_TEMPERATURES[blockNumber];
 
@@ -395,6 +400,21 @@ async function executeChunkedBlock(
           abortSignal,
           responseFormat: 'markdown',
           temperature,
+          // A chunk that hits the output-token limit loses everything after the
+          // cut — including the §26.S/§27 verdict at the very end of Block 5.
+          // Ask the model to continue from the cut instead of shipping a stump.
+          continuation: {
+            onContinue: (attempt, maxAttempts) => {
+              emitLog(
+                'info',
+                'chunk:continue',
+                `${chunkLabel}: ответ обрезан — дописываю (продолжение ${attempt}/${maxAttempts})`,
+                blockNumber,
+              );
+            },
+            // Free tiers count every continuation as a request: keep RPM pacing.
+            pace: () => abortAwareSleep(rpmDelayMs, abortSignal),
+          },
         }),
         () => accumulatedText,
         blockNumber,

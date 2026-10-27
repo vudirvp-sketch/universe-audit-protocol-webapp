@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Local relay for the Universe Audit Protocol web app.
  *

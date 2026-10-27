@@ -291,6 +291,150 @@ describe('extractAuditVerdict — closing statement', () => {
 });
 
 // ============================================================
+// Tolerant §26.S parsing — the shapes real models actually emit
+// ============================================================
+
+describe('extractAuditVerdict — real §26.S formats', () => {
+  it('parses bands from a markdown table keyed by human labels', () => {
+    const verdict = extractAuditVerdict(`## 26.S Итоговый вердикт
+
+| Показатель | Полоса |
+|---|---|
+| Фундамент мира | coherent |
+| Системная глубина | developing |
+| Ёмкость историй | highly generative |
+| Общее состояние | viable |
+`);
+
+    expect(verdict?.source).toBe('markdown');
+    expect(verdict?.bands).toEqual([
+      { key: 'world_foundation', label: 'Фундамент мира', value: 'coherent' },
+      { key: 'systemic_depth', label: 'Системная глубина', value: 'developing' },
+      { key: 'story_capacity', label: 'Ёмкость историй', value: 'highly generative' },
+      { key: 'overall_state', label: 'Общее состояние', value: 'viable' },
+    ]);
+  });
+
+  it('parses table rows keyed by the protocol markers', () => {
+    const verdict = extractAuditVerdict(`| Полоса | Значение |
+| --- | --- |
+| ОСНОВА МИРА | coherent |
+| ИДЕНТИЧНОСТЬ | distinct |
+`);
+
+    expect(verdict?.bands.map((band) => [band.key, band.value])).toEqual([
+      ['world_foundation', 'coherent'],
+      ['identity', 'distinct'],
+    ]);
+  });
+
+  it('parses bold labels with a dash separator of any kind', () => {
+    const verdict = extractAuditVerdict(`## S. Итоговый вердикт
+
+**ОСНОВА МИРА** — coherent
+**СИСТЕМНАЯ ГЛУБИНА** – developing
+**ЧЕЛОВЕЧЕСКАЯ ИНТЕГРАЦИЯ** - weak
+**УВЕРЕННОСТЬ** — mixed
+`);
+
+    expect(verdict?.source).toBe('markdown');
+    expect(verdict?.bands.map((band) => [band.key, band.value])).toEqual([
+      ['world_foundation', 'coherent'],
+      ['systemic_depth', 'developing'],
+      ['human_integration', 'weak'],
+    ]);
+    expect(verdict?.confidence).toBe('mixed');
+  });
+
+  it('parses bands written as headings with a colon', () => {
+    const verdict = extractAuditVerdict(`### ОПЫТНАЯ ИНТЕГРАЦИЯ: developing
+### ИДЕНТИЧНОСТЬ: distinct
+`);
+
+    expect(verdict?.bands.map((band) => [band.key, band.value])).toEqual([
+      ['experiential_integration', 'developing'],
+      ['identity', 'distinct'],
+    ]);
+  });
+
+  it('parses human labels in prose when they carry a canonical value', () => {
+    const verdict = extractAuditVerdict('Фундамент мира: coherent\nОбщее состояние — viable');
+
+    expect(verdict?.bands.map((band) => [band.key, band.value])).toEqual([
+      ['world_foundation', 'coherent'],
+      ['overall_state', 'viable'],
+    ]);
+  });
+
+  it('does not invent a band from ordinary prose', () => {
+    // A label-shaped sentence is not a verdict line.
+    expect(extractAuditVerdict('Общее состояние — сложная система из трёх контуров.')).toBeNull();
+    // A truncated label («Фундамент» instead of «Фундамент мира») is not a band either.
+    expect(extractAuditVerdict('| Фундамент | coherent |')).toBeNull();
+  });
+
+  it('drops trailing prose after the band value', () => {
+    const verdict = extractAuditVerdict(`| Фундамент мира | coherent — мир держится на одном столпе |
+ОСНОВА МИРА — developing, хотя причинность прослеживается местами
+`);
+
+    expect(verdict?.bands[0].value).toBe('coherent');
+  });
+
+  it('reads a real-world verdict block that mixes formats', () => {
+    const verdict = extractAuditVerdict(`## 26.S Итоговый вердикт
+
+| Показатель | Полоса |
+|---|---|
+| Фундамент мира | coherent |
+| Системная глубина | developing |
+
+**ЧЕЛОВЕЧЕСКАЯ ИНТЕГРАЦИЯ** — weak
+### ОПЫТНАЯ ИНТЕГРАЦИЯ: developing
+
+ЁМКОСТЬ ИСТОРИЙ: focused
+ИДЕНТИЧНОСТЬ — emerging
+ОБЩЕЕ СОСТОЯНИЕ: viable
+УВЕРЕННОСТЬ: mixed
+
+> **Что мир уже может** — держать цену памяти; не может — показать быт; правка — сцена возврата.
+`);
+
+    expect(verdict?.source).toBe('markdown');
+    expect(verdict?.bands).toHaveLength(7);
+    expect(verdict?.bands.map((band) => band.value)).toEqual([
+      'coherent',
+      'developing',
+      'weak',
+      'developing',
+      'focused',
+      'emerging',
+      'viable',
+    ]);
+    expect(verdict?.confidence).toBe('mixed');
+    expect(verdict?.closingStatement).toContain('держать цену памяти');
+  });
+
+  it('never throws on malformed tables or half-written bands', () => {
+    const inputs = [
+      '|',
+      '||',
+      '| | |',
+      '| Фундамент мира |',
+      '| Фундамент мира |  |',
+      '|---|---|\n|---|',
+      '**ОСНОВА МИРА** —',
+      'ОСНОВА МИРА: ',
+      '### :',
+      '| ОСНОВА МИРА | | coherent |',
+    ];
+    for (const input of inputs) {
+      expect(() => extractAuditVerdict(input)).not.toThrow();
+    }
+  });
+});
+
+// ============================================================
 // Robustness
 // ============================================================
 

@@ -28,6 +28,12 @@ vi.mock('@/lib/llm-client', () => ({
 
 import { callLLMStreaming } from '@/lib/audit/llm-streaming';
 import type { LLMStreamingOptions } from '@/lib/audit/llm-streaming';
+import {
+  DEFAULT_MAX_CONTINUATIONS,
+  buildContinuationPrompt,
+  isTruncatingFinishReason,
+  CONTINUATION_INSTRUCTION,
+} from '@/lib/audit/llm-streaming';
 import type { LLMConfig } from '@/lib/audit/types-v3';
 
 // ============================================================
@@ -66,6 +72,23 @@ function makeStreamResponse(content: string) {
     }],
     usage: { prompt_tokens: 50, completion_tokens: 100, total_tokens: 150 },
   };
+}
+
+function makeResponse(content: string, finishReason: string | null) {
+  const response = makeStreamResponse(content);
+  return {
+    ...response,
+    choices: [{
+      index: 0,
+      message: { role: 'assistant', content },
+      finish_reason: finishReason,
+    }],
+  };
+}
+
+/** A continuation answer long enough to be a real gain (> MIN_CONTINUATION_GAIN). */
+function longText(char: string, length = 300): string {
+  return char.repeat(length);
 }
 
 beforeEach(() => {
@@ -326,6 +349,218 @@ describe('callLLMStreaming — finish reason passthrough', () => {
     const result = await callLLMStreaming(makeOptions());
 
     expect(result.incomplete).toBeFalsy();
+  });
+});
+
+// ============================================================
+// Truncation vocabulary
+// ============================================================
+
+describe('isTruncatingFinishReason', () => {
+  it('recognises every provider truncation vocabulary', () => {
+    for (const reason of ['length', 'max_tokens', 'MAX_TOKENS', 'incomplete', 'aborted']) {
+      expect(isTruncatingFinishReason(reason)).toBe(true);
+    }
+  });
+
+  it('does not treat a normal or filtered stop as truncation', () => {
+    for (const reason of ['stop', 'content_filter', '', null, undefined]) {
+      expect(isTruncatingFinishReason(reason)).toBe(false);
+    }
+  });
+});
+
+// ============================================================
+// Continuation prompt
+// ============================================================
+
+describe('buildContinuationPrompt', () => {
+  const ORIGINAL = {
+    system: 'PROTOCOL CORE',
+    user: `Требования к ответу.
+## 26.S Итоговый вердикт
+ОСНОВА МИРА: weak / developing / coherent / strong
+
+МАТЕРИАЛ:
+ОГРОМНЫЙ ИСХОДНЫЙ ТЕКСТ, КОТОРЫЙ НЕ НУЖНО ПОВТОРЯТЬ`,
+  };
+
+  it('keeps the system prompt and the answer requirements, drops the source material', () => {
+    const prompt = buildContinuationPrompt(ORIGINAL, 'уже написанный хвост');
+
+    expect(prompt.system).toBe('PROTOCOL CORE');
+    expect(prompt.user).toContain(CONTINUATION_INSTRUCTION);
+    expect(prompt.user).toContain('ОСНОВА МИРА: weak / developing');
+    expect(prompt.user).not.toContain('ОГРОМНЫЙ ИСХОДНЫЙ ТЕКСТ');
+    expect(prompt.user).toContain('уже написанный хвост');
+  });
+
+  it('asks for the cut-off §26.S/§27 verdict and forbids repetition', () => {
+    const prompt = buildContinuationPrompt(ORIGINAL, 'хвост');
+
+    expect(prompt.user).toMatch(/не повторяй уже написанное/i);
+    expect(prompt.user).toContain('§26.S');
+    expect(prompt.user).toContain('§27');
+  });
+
+  it('bounds both echoed fragments instead of resending the whole request', () => {
+    const prompt = buildContinuationPrompt(
+      { system: 's', user: `требования ${'y'.repeat(50_000)}` },
+      'z'.repeat(50_000),
+    );
+
+    expect(prompt.user.length).toBeLessThan(12_000);
+    expect(prompt.user).toContain('z'.repeat(4_000));
+  });
+});
+
+// ============================================================
+// Continuation on truncation
+// ============================================================
+
+describe('callLLMStreaming — continuation', () => {
+  beforeEach(() => {
+    // Queued once-implementations must not leak between tests.
+    mockChatCompletionStream.mockReset();
+  });
+
+  it('is off by default: a truncated answer is returned as-is', async () => {
+    mockChatCompletionStream.mockResolvedValue(makeResponse('обрезанный ответ', 'length'));
+
+    const result = await callLLMStreaming(makeOptions());
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(1);
+    expect(result.text).toBe('обрезанный ответ');
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('fires on finish_reason=length and appends the continuation text', async () => {
+    mockChatCompletionStream
+      .mockResolvedValueOnce(makeResponse('## 26.S\n\nОСНОВА МИРА: cohe', 'length'))
+      .mockResolvedValueOnce(makeResponse('rent\nСИСТЕМНАЯ ГЛУБИНА: developing', 'stop'));
+
+    const result = await callLLMStreaming(makeOptions({ continuation: {} }));
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(2);
+    expect(result.text).toBe('## 26.S\n\nОСНОВА МИРА: coherent\nСИСТЕМНАЯ ГЛУБИНА: developing');
+    // The continuation ended normally, so the answer is no longer truncated.
+    expect(result.finishReason).toBe('stop');
+    expect(result.incomplete).toBeFalsy();
+  });
+
+  it('streams the continuation into the same onChunk stream', async () => {
+    const onChunk = vi.fn();
+    mockChatCompletionStream
+      .mockImplementationOnce(async (_options: unknown, onDelta: (text: string, delta: string) => void) => {
+        onDelta('первая часть', 'первая часть');
+        return makeResponse('первая часть', 'length');
+      })
+      .mockImplementationOnce(async (_options: unknown, onDelta: (text: string, delta: string) => void) => {
+        onDelta(' вторая часть', ' вторая часть');
+        return makeResponse(' вторая часть', 'stop');
+      });
+
+    const result = await callLLMStreaming(makeOptions({ onChunk, continuation: {} }));
+
+    expect(onChunk.mock.calls.map((call) => call[0])).toEqual(['первая часть', ' вторая часть']);
+    expect(result.text).toBe('первая часть вторая часть');
+  });
+
+  it('bounds the number of continuations', async () => {
+    let call = 0;
+    mockChatCompletionStream.mockImplementation(async () => {
+      call += 1;
+      // Different characters each time, so no overlap is stripped.
+      return makeResponse(longText(String(call)), 'length');
+    });
+    const onContinue = vi.fn();
+
+    const result = await callLLMStreaming(makeOptions({ continuation: { onContinue } }));
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(1 + DEFAULT_MAX_CONTINUATIONS);
+    expect(onContinue.mock.calls.map((call) => call[0])).toEqual([1, 2]);
+    expect(onContinue.mock.calls.every((call) => call[1] === DEFAULT_MAX_CONTINUATIONS)).toBe(true);
+    // Still truncated after every allowed continuation → honest partial result.
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('stops when a continuation adds almost nothing (no progress loop)', async () => {
+    mockChatCompletionStream
+      .mockResolvedValueOnce(makeResponse(longText('a'), 'length'))
+      .mockResolvedValueOnce(makeResponse('...', 'length'));
+
+    const result = await callLLMStreaming(makeOptions({ continuation: {} }));
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(2);
+    expect(result.finishReason).toBe('length');
+  });
+
+  it('respects the character cap', async () => {
+    mockChatCompletionStream.mockResolvedValue(makeResponse(longText('a', 500), 'length'));
+
+    const result = await callLLMStreaming(makeOptions({ continuation: { charCap: 500 } }));
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(1);
+    expect(result.text).toHaveLength(500);
+  });
+
+  it('paces before a continuation instead of hammering the provider', async () => {
+    const pace = vi.fn(async () => undefined);
+    mockChatCompletionStream
+      .mockResolvedValueOnce(makeResponse(longText('a'), 'length'))
+      .mockResolvedValueOnce(makeResponse(longText('b'), 'stop'));
+
+    await callLLMStreaming(makeOptions({ continuation: { pace } }));
+
+    expect(pace).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts while pacing instead of sending the continuation', async () => {
+    const controller = new AbortController();
+    mockChatCompletionStream.mockResolvedValue(makeResponse(longText('a'), 'length'));
+
+    await expect(
+      callLLMStreaming(makeOptions({
+        abortSignal: controller.signal,
+        continuation: { pace: async () => { controller.abort(); } },
+      })),
+    ).rejects.toThrow();
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(1);
+  });
+
+  it('repairs a stream that broke mid-answer', async () => {
+    mockChatCompletionStream
+      .mockImplementationOnce(async (_options: unknown, onDelta: (text: string, delta: string) => void) => {
+        onDelta('partial', 'partial');
+        throw new Error('Connection lost mid-stream');
+      })
+      .mockResolvedValueOnce(makeResponse(' continuation', 'stop'));
+
+    const result = await callLLMStreaming(makeOptions({ continuation: {} }));
+
+    expect(result.text).toBe('partial continuation');
+    expect(result.finishReason).toBe('stop');
+    expect(result.incomplete).toBeFalsy();
+  });
+
+  it('does not continue an empty answer', async () => {
+    mockChatCompletionStream.mockResolvedValue(makeResponse('', 'length'));
+
+    const result = await callLLMStreaming(makeOptions({ continuation: {} }));
+
+    expect(mockChatCompletionStream).toHaveBeenCalledTimes(1);
+    expect(result.text).toBe('');
+  });
+
+  it('sums usage across the first answer and its continuation', async () => {
+    mockChatCompletionStream
+      .mockResolvedValueOnce(makeResponse(longText('a'), 'length'))
+      .mockResolvedValueOnce(makeResponse(longText('b'), 'stop'));
+
+    const result = await callLLMStreaming(makeOptions({ continuation: {} }));
+
+    expect(result.usage).toEqual({ prompt: 100, completion: 200, total: 300 });
   });
 });
 

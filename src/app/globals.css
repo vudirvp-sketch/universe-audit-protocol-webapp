@@ -205,7 +205,10 @@
   --tw-prose-pre-bg: var(--card);
   --tw-prose-th-borders: var(--input);
   --tw-prose-td-borders: var(--border);
-  max-width: 68ch;
+  /* The measure is owned by the page column (`max-w-[54rem]` in page.tsx):
+     a second max-width here made the text narrower than the section headers
+     that sit above it, which read as a broken layout on wide screens. */
+  max-width: none;
 }
 
 .report h1, .report h2, .report h3, .report h4 {

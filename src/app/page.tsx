@@ -62,6 +62,12 @@ function buildPipelineState(state: AuditStateV3): PipelineStateV3 {
 
 const DIMENSION_KEYS = ['world', 'systemic', 'human', 'experience', 'memory'] as const;
 
+/** Store update interval for streamed text (≈16 renders/s). */
+const STREAM_FLUSH_INTERVAL_MS = 60;
+
+/** Mirrors the separator the pipeline uses when it joins sub-request results. */
+const CHUNK_SEPARATOR = '\n\n---\n\n';
+
 export default function Home() {
   // =========================================================================
   // HYDRATION GUARD
@@ -110,6 +116,51 @@ export default function Home() {
   const pipelineStartedAt = useAuditStateV3(s => s.pipelineStartedAt);
 
   const [abortController, setAbortController] = React.useState<AbortController | null>(null);
+
+  // =========================================================================
+  // STREAM BUFFER
+  // =========================================================================
+  // SSE deltas arrive every few milliseconds. Writing each one straight into
+  // the store re-parses the whole markdown block dozens of times per second,
+  // which makes the growing text jitter and burns main-thread time. The buffer
+  // coalesces deltas into ~16 store updates per second: still visibly live,
+  // but cheap enough to keep the scroll smooth.
+  const streamBufferRef = React.useRef('');
+  const streamFlushTimerRef = React.useRef<number | null>(null);
+
+  const flushStreamingText = React.useCallback(() => {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+    const buffered = streamBufferRef.current;
+    streamBufferRef.current = '';
+    if (buffered) useAuditStateV3.getState().appendStreamingText(buffered);
+  }, []);
+
+  const queueStreamingText = React.useCallback(
+    (text: string) => {
+      if (!text) return;
+      streamBufferRef.current += text;
+      if (streamFlushTimerRef.current !== null) return;
+      streamFlushTimerRef.current = window.setTimeout(() => {
+        streamFlushTimerRef.current = null;
+        flushStreamingText();
+      }, STREAM_FLUSH_INTERVAL_MS);
+    },
+    [flushStreamingText],
+  );
+
+  const dropStreamBuffer = React.useCallback(() => {
+    if (streamFlushTimerRef.current !== null) {
+      window.clearTimeout(streamFlushTimerRef.current);
+      streamFlushTimerRef.current = null;
+    }
+    streamBufferRef.current = '';
+  }, []);
+
+  React.useEffect(() => dropStreamBuffer, [dropStreamBuffer]);
+
   const transport = useSettings((s) => s.transport);
   const relayUrl = useSettings((s) => s.relayUrl);
   const [relayUnavailable, setRelayUnavailable] = React.useState(false);
@@ -184,6 +235,7 @@ export default function Home() {
 
     const controller = new AbortController();
     setAbortController(controller);
+    dropStreamBuffer();
 
     const store = useAuditStateV3.getState();
     store.startAudit();
@@ -211,15 +263,26 @@ export default function Home() {
         },
         {
           onBlockStart: (blockNum, totalChunks, chunkIndex) => {
-            useAuditStateV3.getState().clearStreamingText();
+            // Everything received so far belongs to the block that is ending.
+            flushStreamingText();
+            const store = useAuditStateV3.getState();
+            if (!chunkIndex) {
+              store.clearStreamingText();
+            } else {
+              // A later chunk continues the same section: the text already on
+              // screen must stay. The pipeline joins chunks with the same
+              // separator, so the live view and the final result agree.
+              store.appendStreamingText(CHUNK_SEPARATOR);
+            }
             if (totalChunks !== undefined && chunkIndex !== undefined) {
-              useAuditStateV3.getState().setChunkProgress(totalChunks, chunkIndex);
+              store.setChunkProgress(totalChunks, chunkIndex);
             }
           },
           onChunk: (blockNum, text) => {
-            useAuditStateV3.getState().appendStreamingText(text);
+            queueStreamingText(text);
           },
           onBlockComplete: (blockNum, result) => {
+            flushStreamingText();
             useAuditStateV3.getState().setBlockResult(blockNum, result);
             if (blockNum === 1) {
               const ctx = extractOrientationContext(result.markdown);
@@ -227,6 +290,7 @@ export default function Home() {
             }
           },
           onError: (message) => {
+            dropStreamBuffer();
             useAuditStateV3.getState().setError(message);
           },
           onLog: (entry) => {
@@ -265,6 +329,10 @@ export default function Home() {
         useAuditStateV3.getState().setError(errorMessage);
       }
     } finally {
+      // A cancelled run already dropped its text; flushing would resurrect a
+      // fragment the user chose to abandon.
+      if (controller.signal.aborted) dropStreamBuffer();
+      else flushStreamingText();
       setAbortController(null);
     }
   };
@@ -505,21 +573,25 @@ export default function Home() {
               collapsed={sidebarCollapsed}
               onToggleCollapse={toggleSidebar}
             />
-            <main className="flex-1 min-w-0 py-6 px-4 md:px-8">
-              <PipelineStatusLine
-                entries={pipelineLog}
-                startedAt={pipelineStartedAt}
-                phase={phase}
-              />
-              <AuditReportViewV3
-                blocks={[...blocks]}
-                meta={meta}
-                currentBlock={currentBlock}
-                streamingText={streamingText}
-                phase={phase}
-                verdict={verdict}
-                orientationContext={orientationContext}
-              />
+            <main className="min-w-0 flex-1">
+              {/* Одна читаемая колонка по центру: до этого отчёт прижимался
+                  к рейлу, а справа оставалась пустая половина экрана. */}
+              <div className="mx-auto w-full max-w-[54rem] px-4 py-6 md:px-6 md:py-10">
+                <PipelineStatusLine
+                  entries={pipelineLog}
+                  startedAt={pipelineStartedAt}
+                  phase={phase}
+                />
+                <AuditReportViewV3
+                  blocks={[...blocks]}
+                  meta={meta}
+                  currentBlock={currentBlock}
+                  streamingText={streamingText}
+                  phase={phase}
+                  verdict={verdict}
+                  orientationContext={orientationContext}
+                />
+              </div>
             </main>
           </div>
         )}

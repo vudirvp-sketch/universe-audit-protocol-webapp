@@ -89,17 +89,20 @@ export function PipelineStatusLine({ entries, startedAt, phase }: PipelineStatus
       role="status"
       aria-live="polite"
     >
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-baseline gap-3 min-w-0">
         <span
           className={cn(
-            'inline-block h-2 w-2 rounded-full shrink-0',
+            'inline-block size-2 shrink-0 rounded-[1px] translate-y-[-1px]',
             isRunning ? 'bg-severity-streaming animate-pulse' : phase === 'error' ? 'bg-severity-critical' : 'bg-severity-success',
           )}
+          aria-hidden="true"
         />
-        <span className="font-mono tabular-nums text-muted-foreground shrink-0">
+        <span className="shrink-0 font-mono tabular-nums text-muted-foreground">
           {formatLogTime(elapsedMs)}
         </span>
-        <span className="min-w-0 flex-1 break-words">
+        {/* Одна строка вместо двух: время уже показывает «когда», поэтому
+            отдельная подпись «событие записано на…» только занимала высоту. */}
+        <span className="line-clamp-2 min-w-0 flex-1 break-words leading-snug">
           {last ? last.message : 'ожидание первого события…'}
         </span>
         {isRunning && quietSeconds >= 10 && (
@@ -108,12 +111,6 @@ export function PipelineStatusLine({ entries, startedAt, phase }: PipelineStatus
           </span>
         )}
       </div>
-      {last && (
-        <p className="mt-1 text-xs text-muted-foreground/70">
-          событие записано на{' '}
-          <span className="font-mono tabular-nums">{formatLogTime(last.at)}</span>
-        </p>
-      )}
     </div>
   );
 }

@@ -6,13 +6,19 @@ export const viewport = {
   colorScheme: "dark" as const,
 };
 
-// Фавикон — фирменный знак, а не эмодзи: тот же контур, что и в шапке.
+// Фавикон — фирменный знак, а не эмодзи: та же геометрия, что и в BrandMark.tsx
+// и public/logo.svg (рамка документа + три линейки убывающей длины).
 const FAVICON =
   "data:image/svg+xml," +
   encodeURIComponent(
-    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'>" +
-      "<rect x='1' y='1' width='28' height='28' rx='2' fill='#0a0f11' stroke='#8497a0' stroke-width='1'/>" +
-      "<path d='M23 7 L12.6 23 H5.7 L16.1 7 Z' fill='#d3dcdd'/>" +
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>" +
+      "<rect width='32' height='32' rx='4' fill='#0a0f11'/>" +
+      "<rect x='4' y='4' width='24' height='24' rx='3' fill='none' stroke='#8497a0' stroke-width='1.5'/>" +
+      "<g fill='#d3dcdd'>" +
+      "<rect x='9' y='10' width='14' height='2'/>" +
+      "<rect x='9' y='15' width='11' height='2'/>" +
+      "<rect x='9' y='20' width='8' height='2'/>" +
+      "</g>" +
       "</svg>",
   );
 

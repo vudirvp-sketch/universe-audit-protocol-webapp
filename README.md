@@ -105,23 +105,31 @@ The capability frontier (§22) is always reported: demonstrated / under-proven /
 
 - **Sequential execution**: All 5 blocks always run to completion (no gate blocking)
 - **Chunked requests**: Blocks 2–5 are split into sub-requests to stay within free-plan timeout limits
+- **Output budget per request**: a chunked sub-request asks for **at least 8 192 tokens** (or the model's cap, if lower) and never more than its fair share of the block budget + 2 048 headroom. The old rule divided the block budget by the number of chunks, giving Block 2 only 6 144 tokens on an 8 192-token model — an artificial limit that is what used to cut sections mid-sentence
+- **Continuation on truncation**: if a response still hits the output limit (`finish_reason=length`), the client asks the same model to continue from the cut — up to 2 continuations per sub-request, 32 000 characters total, RPM-paced and abortable. The missing tail (usually §26.S/§27, the verdict) is appended to the same report and to the same live stream
 - **RPM-aware delay**: Configurable delay between chunks (based on RPM limit setting, minimum 1 second)
 - **Single retry**: Transient errors (429, 502, 503) trigger one automatic retry with 5-second backoff
 - **Partial-text recovery**: If a streaming request fails after receiving some text, the partial text is preserved
-- **Non-blocking verdict extraction**: the machine-readable §27 JSON block is parsed after Block 5; if it is missing or invalid, the qualitative bands are recovered from the report markdown, so a verdict failure never breaks the audit
+- **Non-blocking verdict extraction**: the machine-readable §27 JSON block is parsed after Block 5; if it is missing or invalid, the qualitative bands are recovered from the report markdown (table rows, `LABEL: value`, `**LABEL** — value` and headings are all accepted), so a verdict failure never breaks the audit
 - **Block summaries as context**: each block emits a short weaknesses summary that is passed to the following blocks
 
 ### Why a run takes minutes — and how to watch it
 
-A full audit is **13 sequential requests** (Block 1: 1, Block 2: 4, Block 3: 3, Block 4: 3, Block 5: 2). Nothing runs in parallel, and between the sub-requests of one block the client pauses for `60 / RPM` seconds (minimum 1 s, e.g. 6 s at the default 10 RPM) so a free tier does not answer 429. A single request may legitimately stream for minutes; the client ceiling is 300 s per request.
+A full audit is **13 sequential requests** (Block 1: 1, Block 2: 4, Block 3: 3, Block 4: 3, Block 5: 2). Nothing runs in parallel, and between the sub-requests of one block the client pauses for `60 / RPM` seconds (minimum 1 s, e.g. 6 s at the default 10 RPM) so a free tier does not answer 429. A single request may legitimately stream for minutes; the client ceiling is 300 s per request. A cut answer can add up to **2 continuation requests per truncated sub-request**, so a run that repairs two sections costs 14–18 requests instead of 13 — the journal says `ответ обрезан — дописываю (продолжение 1/2)` each time.
 
 Because a quiet request and a dead request look identical, every boundary is reported in a timestamped **pipeline journal**:
 
 - a live status line above the report shows elapsed time, the last event, and a «тишина N с» warning when nothing has happened for 10+ seconds;
 - while a request is in flight, a heartbeat line appears every 10 s: `Блок 2, часть 1/4: ещё выполняется — 30 с, получено 120 символов`;
-- the Inspector («Журнал пайплайна») keeps the full list — run start with provider/model/RPM pause, each request with its `max_tokens`, its duration and character count, every rate-limit pause, truncation warnings, retries, block totals — with a copy button for bug reports.
+- the Inspector («Журнал пайплайна») keeps the full list — run start with provider/model/RPM pause, each request with its `max_tokens`, its duration and character count, every rate-limit pause, truncation warnings, continuations, retries, block totals — with a copy button for bug reports.
 
 «Отменить аудит» stops the run immediately: the aborted stream is not "recovered" as partial text, the pipeline unwinds, and the form returns without any background requests.
+
+### Reading the report
+
+The report is one centred document (about 76 characters per line): the status line, section headers and text share the same axis, and a header never slides under the top bar. While a section streams, the viewport follows the newest text **only if the reader is already at the bottom** — scrolling up detaches the follow, and the floating control «К последнему тексту» brings it back. A new run re-attaches it automatically.
+
+A block whose answer was still truncated after continuations is marked `обрезано` in its header (hover for the reason), so a partial section is never presented as a complete one. The long audited-concept header is expandable («Показать полностью»), and the machine-readable §27 JSON block is collapsed behind a summary — it is for tools, not for reading.
 
 ### Exports
 
@@ -269,9 +277,10 @@ The test suite covers:
 
 - **Export utilities**: protocol identity, verdict serialisation, five block markdowns, HTML escaping, absence of any score artefact
 - **Error handler**: all `AuditErrorType` classifications, retry logic, Russian messages, abort handling
-- **Streaming**: SSE line parsing, provider-specific delta extraction (OpenAI, Anthropic, Google), finish-reason normalisation, truncated streams
+- **Streaming**: SSE line parsing, provider-specific delta extraction (OpenAI, Anthropic, Google), finish-reason normalisation, truncated streams, continuation on `length` (bounded count, no-progress guard, abort)
 - **Context bridge / prompts**: orientation extraction, deterministic audit mode, material fencing
-- **Pipeline**: sequential block execution, chunking, partial-text recovery
+- **Pipeline**: sequential block execution, chunking, partial-text recovery, continuation journal, partial/complete status
+- **Verdict extraction**: §27 JSON, markdown fallback in table / `LABEL: value` / `**LABEL** — value` / heading forms, no-fabrication guard for prose
 - **Local relay**: static serving, provider-host pinning, auth injection, Origin/Host guards, env-key override, body limits, no key in logs
 - **Client security**: relay URL validation, provider auth headers, key custody (session-only storage)
 
